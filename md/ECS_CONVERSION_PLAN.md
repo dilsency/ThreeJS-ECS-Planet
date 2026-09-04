@@ -1,0 +1,334 @@
+# ECS conversion plan — isometric planet / per-face gravity
+
+Scope study of how *this* project's per-face-gravity mechanic works today, plus a
+plan-of-approach for **re-implementing it as new ECS components in a fresh repo**
+seeded from the mature architecture of
+`ThreeJS-PWA-npm-Vite-Surface-Stable-Dithering` (the "main project").
+
+**Chosen approach (decided 2026-09-04): new repo, not in-place conversion.** This
+repo (`~/GitHub/ThreeJS/threejs`) is kept only as the **reference spec + asset
+source** — its rough procedural `main.js` is read to understand the behavior,
+never ported line-for-line. The new game is built by copying the main project,
+**stripping it down to a bare playable base** (removing entity components
+unrelated to a first-person walker — the dithering cubes, its custom shader,
+multiplayer, HUD-identity contexts), then adding the planet features **one new
+entity component at a time**, keeping the app runnable and verifiable at every
+step. See "Part 2" for the strip list and the increment cadence.
+
+This is a **project-specific** planning doc, now living in the new repo
+`ThreeJS-ECS-Planet` (in `md/`). The reference repo `~/GitHub/ThreeJS/threejs`
+remains the **spec + asset source** this is distilled from (its `main.js` line
+numbers below are signposts into that repo, not this one). The
+*general* write-up of the reorientable-gravity mechanic is a separate,
+project-agnostic doc in the shared notes folder —
+`~/Syncthing/🗣️ claude conversations/threejs/REORIENTABLE_GRAVITY_THREEJS.md`
+(currently a stub; this study is what will fill it in). Background reading for
+the target architecture, all in that shared folder:
+`PROJECT_STRUCTURE_THREEJS.md`, `ECS_DESIGN_PATTERNS_THREEJS.md`,
+`FIRST_PERSON_CAMERA_THREEJS.md`, `INPUT_DEVICES_AND_HANDLING_THREEJS.md`.
+
+> **Status: planning only — nothing built yet.** Line numbers below refer to this
+> reference repo's `main.js` as of this writing; the code is rough and shifts, so
+> treat them as signposts, not contracts.
+
+---
+
+## Part 1 — How it works today (scope study)
+
+### Project shape
+- **Single ~4236-line procedural `main.js`.** All module-level `var`/`const`
+  globals + free functions. No classes, no ECS.
+- **CDN / importmap** (`index.html` → `<script type="importmap">` pointing
+  `three` at jsdelivr `@0.168.0`; `main.js` is `type="module"`). No build step;
+  deployed raw to GitHub Pages. (Contrast the dithering project, which moved to
+  `npm install three` + Vite — see the shared `VITE_PWA_GITHUB_PAGES_THREEJS.md`.)
+- **The "player" is a two-node camera rig**, not an entity/mesh: `cameraPivot`
+  (an `Object3D`, holds position + yaw) parenting `camera` (holds pitch). Same
+  pivot rig as `FIRST_PERSON_CAMERA_THREEJS.md` — but here the **up-axis is not
+  fixed**, which is the whole point of this project.
+- **The planet is loaded, not generated.** `initTerrain()` loads
+  `./models/Icosahedron.obj` (20 triangular faces), `flatShading`, scaled ×20.
+  (`helper_generation_planet.js` and `js/app.js` are empty/dead.)
+
+### Per-frame heartbeat — `update()` (L1542)
+`requestAnimationFrame(update)` first, then in order: `precalculateHasPlanetSide`
+→ `precalculateCameraDirection` → `precalculateDistanceToFloor` →
+`updateCameraGravityPerpendiculars` (movement axes) → inline debug/manual keys →
+`checkControlsMovementMK` (read WASD/QE) → `updatePlayerStateGravity` →
+`updatePlayerVelocityByStateGravity` → `updateMovePlayerInDirectionOfVelocity` →
+`updateCameraLerp` (up-vector ease) → `checkControlsMouse` (look) →
+`updateUniforms` → `updateTextLog` → `renderer.render`.
+
+### The mechanic, in five moving parts
+
+**1. Faces → "sides".** At load, `generateTriangleData()` (L1004) walks the
+geometry's position/normal buffers, computes each triangle's centroid + face
+normal (`helper_mesh.js` `getFaceNormal`), and **buckets coplanar triangles into
+"sides" by a normal-hash** (`getHashIdFromFaceNormal`, L1069). Each side gets an
+entry in parallel hash-keyed maps: `terrainObjectFloorPlanes` (a `THREE.Plane`
+with the averaged normal), `terrainObjectCenterPoints` (Vector3),
+`terrainObjectSidesWithOuterWalls` (boundary prism planes for containment),
+`terrainObjectSidesWithTriangleIndeces`. **`indexSide` is the single global "which
+face am I on"** (a normal-hash key).
+
+**2. Which face is the player on?** `updateFindAndSetClosestGravity()` (L2580) —
+**not raycasting**: it iterates `terrainObjectCenterPoints` and picks the side
+whose center is nearest to `cameraPivot.position`. Throttled by *elapsed time*,
+with the interval swapped between **far (4.0s)** and **near (0.2s)** depending on
+gravity state. On a change it calls `setCurrentGravity(newKey)`.
+
+**3. Gravity direction = the face's plane normal**
+(`terrainObjectFloorPlanes[indexSide].normal`). That vector is the current "up".
+
+**4. Reorienting the camera up.** On a face change, `setCurrentGravity()` (L2430)
+picks an ease speed (fast — 8 frames — when leaping/falling to a side; otherwise
+scaled by distance via `rescale`) and calls `resetCameraUp()` (L2737), which
+saves the old up into `gravityDirectionLerpOld`, **snaps** `cameraPivot.up` /
+`camera.up` to the new normal (the "jarring" snap the HUD text admits to), and
+resets `gravityDirectionLerpCount = 0`. Then every frame `updateCameraLerp()`
+(L3973) eases `up` from the saved old direction toward the normal by
+`alpha = count / countMax`, copies it into `cameraPivot.up`/`camera.up`, and
+re-`lookAt`s. A second, delta-time-scaled path
+(`camera.quaternion.rotateTowards`) exists for the "unskew" experiments.
+
+**5. Movement relative to gravity.** `updateCameraGravityPerpendicularsWithSide()`
+(L2829): `right = normalize(cameraDirection × normal)`,
+`forward = normalize(normal × right)` — the walk axes, rebuilt each frame from
+the *current* normal (a no-side fallback uses `scene.up`). Then
+`updateMovePlayerInDirectionOfVelocity()` (L1744) moves `cameraPivot.position`:
+gravity pull via `playerVelocityFromGravity`; **Q/E along the face normal**
+(up/down); **W/S along `directionCameraGravityForward`**; **A/D along
+`cameraDirectionRight`**. Mouse look yaws with `rotateOnWorldAxis(normal, …)`
+around the current gravity normal (not world-Y), pitch on the camera.
+
+### The gravity state machine (`playerStateGravity`, L3110/3143/3273)
+Six states driving *how* gravity integrates and *which* ease/throttle is used:
+- `-1` unset · `0` falling toward planet center (far) · `1` falling toward the
+  nearest side/floor (entered hemisphere) · `2` on the ground (velocity zeroed) ·
+  `3` inside the planet (snap back to surface) · `4` leaping off a side edge
+  (don't re-pick the closest side) · `5` falling to floor after a leap (≈ state 1).
+
+Transitions (`updatePlayerStateGravityTrigger`) set the reorientation ease speed,
+flip the face-search throttle between far/near, zero velocity on landing, and
+snap out of the planet interior.
+
+### The messy bits (prune, don't port)
+- **Frame-rate dependent simulation.** Velocity accel, gravity addends, and
+  movement are fixed per-frame constants (`0.005`, `0.02`, `addScaledVector(…,1.0)`)
+  **not** multiplied by `clockDelta`; the up-ease is **frame-count** based
+  (`count/countMax`), not time-based. Only the `rotateTowards` unskew uses delta.
+- **Dead/legacy code**: `*OLD` functions, an early `return` hiding old
+  triangle-distance logic after L2652, commented-out throttle guards
+  (`throttleMoveGravity`, `throttleCameraLerp`).
+- **Helper bugs**: `helper_mesh.js` `getNormalTriangleData` only ever writes its
+  first vertex normal; `getSignOfPointInTriangle` has a dead second `return`.
+- **Empty files**: `js/app.js`, `helpers/helper_generation_planet.js`.
+- **HUD text ↔ keymap drift**: the on-screen help lists 1/2 as teleport/lookAt,
+  but the current keymap wires them to closest-gravity / perpendiculars.
+- **Two half-finished reorientation paths** (frame-lerp vs `rotateTowards`
+  quaternion) coexisting — the conversion should pick one.
+
+---
+
+## Part 2 — Plan of approach (procedural → ECS)
+
+The target is the main project's hand-rolled ECS (EntityManager / Entity /
+EntityComponent with `methodInitialize()` + `methodUpdate(timeElapsed,
+timeDelta)`), Context components for shared state, and the Input-vs-Logic split.
+See `ECS_DESIGN_PATTERNS_THREEJS.md` for all of it. This is a **two-phase**
+effort: stand up a bare playable base copied from the main project, *then* add the
+planet features one component at a time.
+
+### Phase 0 — seed a new repo from a stripped-down main project
+Don't upgrade this repo; **start the new game from the main project's
+architecture**, which already has npm+Vite+PWA+Pages, the ECS classes, the
+Input-vs-Logic split, lighting, and a first-person pivot rig.
+1. **Copy the main project into a new repo** (new remote/URL — the old
+   `dilsency/threejs` deploy is not carried over).
+2. **Strip it to a bare, still-playable first-person walker** — remove the entity
+   components unrelated to walking around a scene:
+   - **Strip:** the dithering gameplay (`TestCube`/`TestCubeHUD`, the fractal
+     dithering shader + textures), the HUD cube and its `ContextHUDLayout` /
+     `ContextLocalPlayerIdentity`, and all multiplayer components
+     (`PeerConnection*`, `PeerMeshFormation`, `PlayerNetworkSync`,
+     `RemotePlayerManager`). None relate to the planet game (at least initially).
+   - **Keep:** ECS classes, thin-`main.js` `init()`/loop shape, `ContextEngine`,
+     `ContextEnvironment`, the first-person `CameraController*` (+ Input/Touch),
+     the `PlayerController*` movement (+ Input/Touch), lighting
+     (`LightManager`/`DirectionalLight`), and the pointer-lock button.
+   - Confirm it still builds, deploys, and lets you **walk around flat ground** —
+     that's the base every planet component gets added onto.
+3. **Bring the planet assets over** from this reference repo:
+   `models/Icosahedron.obj` and any textures/materials the planet needs (fix the
+   `helper_mesh.js` bugs — `getNormalTriangleData` only writes its first vertex,
+   the dead `getSignOfPointInTriangle` `return` — when those helpers are ported).
+
+### Phase 1 — the target component design (added one at a time)
+The components to build on top of the bare base, in the cadence below. Names
+follow the main project's conventions:
+
+- **Engine context** — `EntityComponentContextEngine`: holds
+  renderer/scene/cameraPivot/camera/clock, looked up by everyone (don't hand-wire
+  through constructors — see the "no hard-wiring in main.js" rule).
+- **MainMenu / initialization** — a **separate pre-generation system** (see the
+  "Main menu / pre-generation setup" entry in `RECURRING_MECHANICS_THREEJS.md`).
+  - **`EntityComponentContextInitialization`** (a Context component): owns the
+    selectable **init sets** (`{planetRadius, spawnFaceIndex, spawnDistanceFromPlanet}`
+    presets) + the chosen one; exposes `getPlanetRadius()` / `getSpawnFaceIndex()` /
+    `getSpawnDistance()` once confirmed, plus `isConfirmed()` — which is the de-facto
+    phase gate (MainMenu → Playing).
+  - **`EntityComponentMainMenu`** (UI): while unconfirmed, shows the init-set choices;
+    on confirm, records the choice, triggers generation, and the game enters Playing
+    **unpaused**. Assumes nothing is generated yet.
+- **Planet entity** (generated on MainMenu confirm, parameterized by the init set)
+  - the mesh (loaded OBJ, sized by the init set's `planetRadius`), and
+  - **`EntityComponentContextPlanetFaces`** (a Context component): owns the
+    parsed per-face data — the normal-hash → {plane/normal, center, outer-walls,
+    triangle indices} maps — computed once at init from the geometry. Exposes
+    lookups: `getFaceNormal(faceId)`, `getFaceCenter(faceId)`,
+    `getNearestFace(position)`, `isWithinFace(position, faceId)`. This replaces
+    the global `terrainObject*` maps.
+- **Player entity** (the cameraPivot rig), with single-purpose siblings:
+  - **Input** (mouse+keyboard, and the touch/Joy-Con paths this repo already
+    dabbled in — note `helper_camera_rotation.js`'s `isJoyConL` math): raw state
+    only, behind one shape, per `INPUT_DEVICES_AND_HANDLING_THREEJS.md`. Selected
+    via the self-attaching-sibling pattern.
+  - **`EntityComponentPause`** (`isPaused`, per-player): starts **false** (the game
+    enters Playing *unpaused* after the MainMenu — "begins paused" is superseded by
+    "begins in MainMenu") and is the "this client is paused" master switch, toggled
+    in-game by a dedicated key (independent of the pointer-lock control). Pause-aware
+    components early-return in `methodUpdate()` on a pause check — player-owned ones
+    read their own entity's flag, autonomous world movers read the local player's.
+    The **pause menu** (shown when paused) holds the 3D-HUD position controls
+    (left/center/right) and, later, the multiplayer connect UI — these live *only*
+    here, not in the MainMenu. See the "Pause system" entry in
+    `RECURRING_MECHANICS_THREEJS.md`; multiplayer broadcast + remote-avatar
+    freeze/indicator + autonomous-mover sync are deferred.
+  - **`EntityComponentGravityState`**: the state machine (states −1..5),
+    distance-to-planet/floor, transition triggers. The "brain" that decides which
+    gravity regime we're in. Owns the throttle intervals.
+  - **`EntityComponentGravityOrientation`**: owns the *current* gravity up (a face
+    normal), performs the reorientation ease (old→new up), and applies it to
+    `cameraPivot.up`/`camera.up`. Reads `ContextPlanetFaces` + `GravityState`.
+    Because it is the **single writer** of `cameraPivot.up`/`camera.up`, the camera
+    controller and the movement component can both just *read* that up and stay
+    gravity-agnostic. **Pick one reorientation path** (the frame-lerp is simpler;
+    make it delta-time based — see decisions).
+  - **`EntityComponentPlayerMovementGravity`**: recompute the perpendicular basis
+    (`right`/`forward` from `cameraDirection × up`) and integrate velocity (input
+    + gravity) onto the pivot position. Reads the current up from
+    `GravityOrientation` and the input from the Input sibling.
+  - **`EntityComponentCameraControllerFirstPersonGravity`** — a **new** Logic
+    class, *not* a modification of the base first-person controller (keep that one
+    intact as the flat-ground baseline to A/B against). It **reuses the base's
+    Input siblings unchanged** (mouse/keyboard/touch, via the self-attaching-sibling
+    pattern); the only difference is the yaw axis —
+    `cameraPivot.rotateOnWorldAxis(cameraPivot.up, deltaX)` instead of
+    `rotateY(deltaX)` (pitch stays `camera.rotateX(deltaY)`). It yaws around
+    **whatever `cameraPivot.up` currently is** (maintained by `GravityOrientation`),
+    so it needs to know nothing about faces or gravity. This is the concrete
+    generalization of `FIRST_PERSON_CAMERA_THREEJS.md` and the heart of what
+    `REORIENTABLE_GRAVITY_THREEJS.md` will document.
+  - **Face selection** can live inside `GravityState` (it already gates the
+    throttle by state) or as its own component writing "current face" into
+    `GravityOrientation`.
+
+The per-frame ordering the loop currently hard-codes (perpendiculars → movement →
+up-ease → look) becomes the natural `methodUpdate()` order across these
+components; where one genuinely must precede another, make it explicit rather
+than relying on registration order.
+
+### Resolved design choices (2026-09-04)
+- **A new camera controller, not a modification** of the base first-person
+  controller — it keeps a known-good flat-ground baseline to A/B against, and the
+  gravity variant is a small new Logic class reusing the base's Input siblings (yaw
+  around `cameraPivot.up`; details in the component list above).
+- **Generation phase first, as its own verified gate** (increments 1–2) before any
+  gravity/camera/movement work.
+
+### Decisions to make during conversion (flag, don't silently port)
+- **Make simulation frame-rate independent**: multiply velocity/gravity/ease by
+  `timeDelta`. The up-ease should become time-based (seconds to reorient), not a
+  frame counter.
+- **Keep the normal-hash face bucketing?** It's clever but fragile. Consider
+  whether faces should be identified by geometry group / material index instead.
+- **Nearest-center search vs raycast** for "which face am I on" — raycast down the
+  current gravity is more robust near edges; the center-distance search is cheap
+  but can mispick on an icosahedron's narrow faces. **Reference resource:**
+  `~/GitHub/ThreeJS/ThreeJS-Test-CDN/helpers/helper_mesh.js` has a richer
+  collision toolkit than this repo's `helper_mesh.js` —
+  `getDoesPredictedPositionIntersectTriangle` / `getPredictedPositionIntersectTriangle`
+  (continuous collision), `getYCoordinateOfPointOnTriangle` (snap-to-surface),
+  `getDistanceToTriangle`, `getSignedVolumeTetrahedron` — worth borrowing from if we
+  go the raycast/collision route. (It is *not* a bug-fixed drop-in: it lacks
+  `getNormalTriangleData` entirely and shares the `getSignOfPointInTriangle`
+  dead-`return`; the two `helper_mesh` bugs are trivial to fix ourselves.)
+- **The reorientation snap** (`resetCameraUp` snaps then eases from old) is
+  visibly janky; decide whether to ease purely from the current up with no snap.
+- **One reorientation mechanism**, not two.
+
+### Increment cadence — one new entity component at a time
+Each step adds **one** new component to the running base and leaves the game
+playable and verifiable before the next. Read the reference `main.js` for the
+behavior each should reproduce; don't port its code.
+
+0. **Bare base** (Phase 0): stripped main project, walk around flat ground.
+1. **MainMenu + init sets.** Add `EntityComponentContextInitialization` (the
+   selectable `{planetRadius, spawnFaceIndex, spawnDistanceFromPlanet}` presets +
+   chosen/confirmed state) and `EntityComponentMainMenu` (GUI showing the init-set
+   choices while unconfirmed; on confirm, record the choice and flip to Playing
+   **unpaused**). No planet yet — verify the menu shows at start, you can pick a set,
+   and confirm hides it and drops you into the (flat, for now) playable base.
+   Testable on what's already here.
+2. **Load the planet — on MainMenu confirm.** Generate the `Icosahedron.obj` mesh,
+   sized by the init set's `planetRadius`, **triggered by confirm** (not at startup).
+   The OBJ load is **async** (parse after it arrives / a `ready` flag). No gravity
+   yet — verify: menu → pick a radius → confirm → a planet of that size appears and
+   you can walk near it. (Port `helper_mesh.js` cleaned up.)
+3. **`EntityComponentContextPlanetFaces` + spawn.** Parse the geometry into per-face
+   data (normal-hash buckets → normal/center/outer-walls) and expose the lookups
+   (`getFaceNormal`, `getFaceCenter`, `getNearestFace`, `isWithinFace`). Use the init
+   set's `spawnFaceIndex` + `spawnDistanceFromPlanet` to place the player (along that
+   face's normal). Verify the face data by visualizing centers + normals, and that
+   the player spawns where the chosen set says.
+
+   **⟵ Generation gate.** Steps 1–3 are the "MainMenu → generation" front: choose an
+   init set, generate a planet from it, spawn the player — and it's **fully testable
+   on the current base with no gravity yet**. Confirm this whole loop before touching
+   gameplay.
+4. **`EntityComponentPause` (in-game).** Add the pause flag (**starts false**), the
+   dedicated pause key, and `methodIsPaused()`. Wire the early-return into the
+   movement + camera components, and add the **pause menu** holding the 3D-HUD
+   position controls (its first occupants; the MainMenu does *not* have them).
+   Pausing frees the cursor. No "begins paused" — the MainMenu is the entry point.
+   **Every world component added after this respects pause from birth via the same
+   early-return.** See `RECURRING_MECHANICS_THREEJS.md`. (Multiplayer broadcast +
+   remote freeze/indicator + autonomous-mover sync deferred.)
+5. **`EntityComponentGravityOrientation`.** Given a *manually chosen* face, set
+   and ease `camera`/`cameraPivot` up toward its normal. Verify with a key that
+   cycles faces — the horizon should reorient smoothly. (Time-based ease.)
+6. **Gravity-aware camera yaw.** Add the **new**
+   `EntityComponentCameraControllerFirstPersonGravity` (reusing the base Input
+   siblings; the base fixed-up controller stays available to A/B against). Yaw
+   around `cameraPivot.up`, pitch on the camera. Verify look feels correct on a
+   tilted face.
+7. **`EntityComponentPlayerMovementGravity`.** Recompute the perpendicular basis
+   from `cameraDirection × up`; move WASD along it, Q/E along the face normal,
+   gravity pull along −up. Verify walking on a single face.
+8. **`EntityComponentGravityState`.** Add the state machine + `getNearestFace`
+   selection so the current face updates automatically as you walk/leap/fall —
+   this is what makes it a *game* rather than a manual demo. Verify crossing
+   between faces, leaping an edge, and falling from far.
+9. **Polish pass.** Frame-rate independence throughout, resolve the reorientation
+   snap/jank, ensure a single reorientation path, tune throttles.
+
+### Testing
+This repo has no test suite. Verify end-to-end in a real browser (and on a real
+touch device if the touch path is kept), per the sibling's practice — walk across
+several faces, leap an edge, fall from far, and confirm the camera up and
+movement axes stay correct on each face.
+
+### Feeds back into the shared docs
+Once the mechanic is understood/clean, distill the project-agnostic version into
+`REORIENTABLE_GRAVITY_THREEJS.md` (gravity as a per-surface up-vector propagated
+to camera + movement), cross-linking `FIRST_PERSON_CAMERA_THREEJS.md`.
