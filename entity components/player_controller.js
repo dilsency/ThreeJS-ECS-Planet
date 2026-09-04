@@ -1,6 +1,8 @@
 import * as THREE from "three";
 import {EntityComponent} from "../classes/ECS/entity_component.js";
+/*
 import {debugOverlaySetLine} from "./temp_debug_overlay.js"; // TEMPORARY - see that file's header comment
+*/
 
 // Double-tap timing/distance thresholds, and the max time+movement a touch
 // can have and still count as a single "tap" rather than a drag/long-press -
