@@ -2,7 +2,7 @@
 //  https://stackoverflow.com/a/10076029/32604643
 //  tl;dr: n stable
 
-// https://dilsency.github.io/ThreeJS-PWA-npm-Vite-Surface-Stable-Dithering/
+// https://dilsency.github.io/ThreeJS-ECS-Planet/
 
 // imports
 // base
