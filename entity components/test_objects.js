@@ -3,7 +3,9 @@
 import * as THREE from "three";
 // ECS
 import {EntityComponent} from "../classes/ECS/entity_component.js";
-import { createFractalMaterialFromSources, loadFractalShaderSources } from "../shaders/Simple_FractalDithering.js";
+
+// shaders
+//import { createFractalMaterialFromSources, loadFractalShaderSources } from "../shaders/Simple_FractalDithering.js";
 
 // Shader source and texture caching (see SHADER_SOURCE_AND_TEXTURE_CACHING.md):
 // every EntityComponentTestCube instance - world cubes, ground, cubeHUD, and
@@ -13,6 +15,8 @@ import { createFractalMaterialFromSources, loadFractalShaderSources } from "../s
 // Memoizing the in-flight Promise (not just the resolved value) means
 // several cubes initializing around the same time share one fetch/decode
 // instead of each kicking off their own.
+
+/*
 let cachedShaderSourcesPromise = null;
 function getCachedShaderSources()
 {
@@ -22,7 +26,9 @@ function getCachedShaderSources()
     }
     return cachedShaderSourcesPromise;
 }
+    */
 
+/*
 const cachedTexturePromises = new Map(); // textureFile -> Promise<THREE.Texture>
 function getCachedTexture(textureFile)
 {
@@ -47,6 +53,7 @@ function getCachedTexture(textureFile)
     }
     return cachedTexturePromises.get(textureFile);
 }
+    */
 
 //
 export class EntityComponentTestCube extends EntityComponent
@@ -142,6 +149,7 @@ export class EntityComponentTestCube extends EntityComponent
         //
             const geometry = new THREE.BoxGeometry( this.#size.x, this.#size.y, this.#size.z );
 
+            /*
             // Shared across every EntityComponentTestCube instance requesting
             // the same texture file / the shader source - see
             // SHADER_SOURCE_AND_TEXTURE_CACHING.md for why this doesn't cost
@@ -152,6 +160,8 @@ export class EntityComponentTestCube extends EntityComponent
             const { vertexShader, fragmentShader } = await getCachedShaderSources();
 
             const material = createFractalMaterialFromSources(vertexShader, fragmentShader, { map: texture, level: 3, shape: this.methodGetShape(), lighting: this.#lighting, debugNormals: this.#debugNormals, color1: this.methodGetColor1(), color2: this.methodGetColor2(), color1Texture: this.#color1Texture, color2BlendTexture: this.#color2BlendTexture });
+            */
+            const material = new THREE.MeshStandardMaterial({ color: this.methodGetColor1() });
 
             this.#cube = new THREE.Mesh(geometry, material);
             this.#cube.castShadow = true;

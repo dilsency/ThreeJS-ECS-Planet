@@ -21,11 +21,8 @@ import {EntityComponentButtonPointerLock} from "./entity components/test_objects
 import {EntityComponentDirectionalLight} from "./entity components/lighting.js";
 import {EntityComponentDirectionalLightHUD} from "./entity components/lighting.js";
 import {EntityComponentLightManager} from "./entity components/lighting.js";
-import {EntityComponentPeerConnection} from "./entity components/peer_connection.js";
-import {EntityComponentPeerConnectionUI} from "./entity components/peer_connection.js";
-import {EntityComponentPlayerNetworkSync} from "./entity components/player_network_sync.js";
-import {EntityComponentRemotePlayerManager} from "./entity components/remote_player_manager.js";
-import {EntityComponentPeerMeshFormation} from "./entity components/peer_mesh_formation.js";
+
+
 import {EntityComponentContextEngine} from "./entity components/context/context_engine.js";
 import {EntityComponentContextHUDLayout, HUDCubeHorizontalAlignmentEnum} from "./entity components/context/context_hud_layout.js";
 import {EntityComponentContextLocalPlayerIdentity} from "./entity components/context/context_local_player_identity.js";
