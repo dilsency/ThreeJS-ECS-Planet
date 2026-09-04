@@ -175,8 +175,10 @@ follow the main project's conventions:
   - **`EntityComponentContextInitialization`** (a Context component): owns the
     selectable **init sets** (`{planetRadius, spawnFaceIndex, spawnDistanceFromPlanet}`
     presets) + the chosen one; exposes `getPlanetRadius()` / `getSpawnFaceIndex()` /
-    `getSpawnDistance()` once confirmed, plus `isConfirmed()` — which is the de-facto
-    phase gate (MainMenu → Playing).
+    `getSpawnDistance()` once confirmed, plus `isConfirmed()` — the de-facto phase gate.
+    It's a **toggle**, not one-way: `methodConfirm()` → Playing, `methodReturnToMenu()` →
+    back to the menu (**re-enterable at runtime** — level select / "Quit to menu"), which
+    triggers world teardown (see "ECS teardown & deferred deletion").
   - **`EntityComponentMainMenu`** (UI): while unconfirmed, shows the init-set choices;
     on confirm, records the choice, triggers generation, and the game enters Playing
     **unpaused**. Assumes nothing is generated yet.
@@ -267,6 +269,59 @@ than relying on registration order.
   visibly janky; decide whether to ease purely from the current up with no snap.
 - **One reorientation mechanism**, not two.
 
+### ECS teardown & deferred deletion (foundational — the re-enterable MainMenu forces it)
+The MainMenu is **re-enterable at runtime** (navigate to *and* from it — level-select /
+"Quit to menu"). So `confirm` / `return-to-menu` **toggle** `ContextInitialization`'s
+`isConfirmed`, and returning must tear the current world down so a new one can be built.
+This base ECS has **no removal** (`methodRemoveEntity` / `methodRemoveComponent` don't
+exist) — so it needs building, and it's needed by multiplayer despawn later too, so it's
+foundational, not menu-only.
+
+**Two-phase (deferred) deletion — flag, then sweep.** Removing an entity/component
+*during* the update loop's iteration is a classic crash/skip bug, so split it:
+- **Every `EntityComponent` carries `#toBeDeleted`** (base class) +
+  `methodFlagForDeletion()` / `methodGetIsFlaggedForDeletion()`, plus `methodDispose()`
+  (default no-op; overridden by components that own scene objects).
+- **Phase 1 — flag:** a flagged component **early-returns in `methodUpdate()`** (inert)
+  and hides its mesh (`.visible = false`) — "hidden + un-interactible, instantly." This is
+  the *same early-return shape as pause*; `flaggedForDeletion` ≈ a permanent, invisible
+  pause.
+- **Phase 2 — sweep:** a manager pass at **end-of-frame** (outside the update iteration
+  — the decided starting point) removes flagged entities/components and calls
+  `methodDispose()`. Immediate for now; "until appropriate to actually remove it" leaves
+  room to gate it later (after a fade / a network ack).
+
+**Granularity — both base classes carry it.** `#toBeDeleted` +
+`methodFlagForDeletion()` / `methodGetIsFlaggedForDeletion()` live on **both the base
+`EntityComponent` and the base `Entity`**. Flag a *component* → just that component is
+swept; flag an *entity* → the whole entity and all its components go (the common case —
+"delete this whole player/planet"). The sweep treats a component as gone if either its
+own flag **or** its owning entity's flag is set.
+
+**Dispose must respect kept assets.** `methodDispose()` does `scene.remove(mesh)` +
+`.dispose()` on the geometry/material/textures it **owns** — but **never** on
+shared/cached resources; disposing those corrupts the next world that reuses them, and
+*not* disposing owned ones leaks GPU memory. Two resource tiers:
+- **Persistent (kept across menu↔world):** the async-**loaded geometry** + any shared
+  material. Loaded once; not re-fetched or disposed on teardown.
+- **Per-world (flagged + disposed):** the scene mesh instance, the player's world state,
+  the gravity components — created on enter-world, torn down on return-to-menu.
+
+**Generation is a generate/teardown pair, not a one-shot.** Keep the loaded geometry
+alive and **recompute the cheap face parse each world** (sub-ms for a 20-face
+icosahedron — a results-cache for it would be premature; revisit only if a world's
+generation ever profiles as slow). On return-to-menu, flag the per-world objects → they
+hide instantly (clean menu transition) → the sweep disposes them.
+
+**Multiplayer (deferred):** broadcast `toBeDeleted` as part of state sync; a receiving
+client flags its local copy (hidden + inert for everyone) and sweeps its own copies on
+its own schedule — the "something must disappear for all players mid-game" case, with no
+synchronized hard-delete required.
+
+> This deferred-deletion pattern is general ECS architecture (not planet-specific) — a
+> candidate to distill into the shared `ECS_DESIGN_PATTERNS_THREEJS.md` once it's built
+> and proven.
+
 ### Increment cadence — one new entity component at a time
 Each step adds **one** new component to the running base and leaves the game
 playable and verifiable before the next. Read the reference `main.js` for the
@@ -296,7 +351,18 @@ behavior each should reproduce; don't port its code.
    init set, generate a planet from it, spawn the player — and it's **fully testable
    on the current base with no gravity yet**. Confirm this whole loop before touching
    gameplay.
-4. **`EntityComponentPause` (in-game).** Add the pause flag (**starts false**), the
+4. **ECS teardown + deferred deletion — completes the menu↔world cycle.** Build the
+   removal the base ECS lacks: `#toBeDeleted` + `methodFlagForDeletion()` /
+   `methodGetIsFlaggedForDeletion()` on **both** `EntityComponent` and `Entity`; a
+   `methodDispose()` hook (default no-op; overridden to `scene.remove()` + `.dispose()`
+   the objects it *owns* — never the kept/shared geometry); `EntityManager.methodRemoveEntity`
+   / `Entity.methodRemoveComponent`; and an **end-of-frame sweep** that removes flagged
+   things and calls their `methodDispose()`. Wire `methodReturnToMenu()` to flag the
+   per-world objects → they hide + go inert instantly → the sweep disposes them. Verify
+   the full loop: menu → generate World A → return to menu (A gone, geometry kept) → pick
+   + generate World B → walk around it. See "ECS teardown & deferred deletion" above.
+   (Multiplayer broadcast of the flag is deferred.)
+5. **`EntityComponentPause` (in-game).** Add the pause flag (**starts false**), the
    dedicated pause key, and `methodIsPaused()`. Wire the early-return into the
    movement + camera components, and add the **pause menu** holding the 3D-HUD
    position controls (its first occupants; the MainMenu does *not* have them).
@@ -304,22 +370,22 @@ behavior each should reproduce; don't port its code.
    **Every world component added after this respects pause from birth via the same
    early-return.** See `RECURRING_MECHANICS_THREEJS.md`. (Multiplayer broadcast +
    remote freeze/indicator + autonomous-mover sync deferred.)
-5. **`EntityComponentGravityOrientation`.** Given a *manually chosen* face, set
+6. **`EntityComponentGravityOrientation`.** Given a *manually chosen* face, set
    and ease `camera`/`cameraPivot` up toward its normal. Verify with a key that
    cycles faces — the horizon should reorient smoothly. (Time-based ease.)
-6. **Gravity-aware camera yaw.** Add the **new**
+7. **Gravity-aware camera yaw.** Add the **new**
    `EntityComponentCameraControllerFirstPersonGravity` (reusing the base Input
    siblings; the base fixed-up controller stays available to A/B against). Yaw
    around `cameraPivot.up`, pitch on the camera. Verify look feels correct on a
    tilted face.
-7. **`EntityComponentPlayerMovementGravity`.** Recompute the perpendicular basis
+8. **`EntityComponentPlayerMovementGravity`.** Recompute the perpendicular basis
    from `cameraDirection × up`; move WASD along it, Q/E along the face normal,
    gravity pull along −up. Verify walking on a single face.
-8. **`EntityComponentGravityState`.** Add the state machine + `getNearestFace`
+9. **`EntityComponentGravityState`.** Add the state machine + `getNearestFace`
    selection so the current face updates automatically as you walk/leap/fall —
    this is what makes it a *game* rather than a manual demo. Verify crossing
    between faces, leaping an edge, and falling from far.
-9. **Polish pass.** Frame-rate independence throughout, resolve the reorientation
+10. **Polish pass.** Frame-rate independence throughout, resolve the reorientation
    snap/jank, ensure a single reorientation path, tune throttles.
 
 ### Testing
