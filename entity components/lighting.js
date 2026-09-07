@@ -16,7 +16,7 @@ export class EntityComponentDirectionalLight extends EntityComponent
 
     // #endregion bare minimum
 
-    // #region construct
+    // #region constructor
 
     constructor(params)
     {
@@ -24,7 +24,7 @@ export class EntityComponentDirectionalLight extends EntityComponent
         this.#params = params;
     }
 
-    // #endregion construct
+    // #endregion constructor
 
     // #region lifecycle
 

@@ -322,6 +322,60 @@ synchronized hard-delete required.
 > candidate to distill into the shared `ECS_DESIGN_PATTERNS_THREEJS.md` once it's built
 > and proven.
 
+### Cross-component events — how one component notifies others
+When a state change on one component must notify components on *other* entities
+(`confirm` / `return-to-menu` → MainMenu hides/shows; later generation builds/tears down),
+there are three approaches — **but note up front:** the only messaging pattern the dither
+project actually *uses* is **same-entity** (an entity broadcasts `update.position` within
+itself and its *own* components react); its cross-entity method is defined but unused. So
+no cross-entity option below is a proven convention here — choose with eyes open.
+
+**A. Co-locate sender + listener on one entity → same-entity messaging.** The proven
+dither pattern (`methodSendMessageWithinEntity`, listener registers on its *own* entity).
+Cleanest and most idiomatic — **but only when the state is genuinely private to that one
+consumer.** A real **Context** is multi-consumer shared state *by definition* (that's the
+whole Context-component pattern), so bolting a specific consumer (the MainMenu UI) onto it
+would destroy the independence the Context exists for. `ContextInitialization` is read by
+MainMenu, generation, *and* player-spawn — so it stays its own entity, and **A does not
+apply to it.** (A is only for state that isn't actually shared — e.g. a controller talking
+to its own siblings.)
+
+**B. Capability-targeted send** (`methodSendMessageToEntitiesWithComponent`). The
+project's *designed* cross-entity mechanism: the source addresses listeners **by
+capability** (component name) — matching this ECS's "address by capability" philosophy. The
+Context sends to `"EntityComponentMainMenu"`, and to each further listener component-type as
+it's added. Trade-off: the source names its consumers (a coupling) and is edited per new
+listener — though in a capability-addressed system that coupling is arguably intentional.
+
+**C. Hub via foreign registration.** The source broadcasts *within its own entity*
+(`methodSendMessageWithinEntity`) and foreign listeners reach in to register handlers on
+the source's entity. Blind sender, one send, no new entity. Trade-off: it **bends the
+"register on your own entity" convention** (a listener's behavior partly lives on another
+entity), it is **unproven** here, and it needs a handler-**unregister** on teardown (a
+per-world listener's handler outlives it — see the teardown step, increment 4).
+
+**Where this leaves us:** `ContextInitialization` is a legitimate multi-consumer Context,
+so it **stays a separate entity** (A is off the table for it — see the design check below).
+The real choice for notifying its consumers is **B vs C**: B is idiomatic to this ECS with
+mild, arguably-intended coupling; C is blind but unconventional with a lifecycle caveat.
+**Decided (2026-09-05): B, and implemented** — the Context broadcasts
+`initialization.confirmed` / `initialization.returnedToMenu` via
+`methodSendMessageToEntitiesWithComponent("EntityComponentMainMenu", …)`, and the MainMenu
+registers those two handlers on its **own** entity (→ `methodHide()` / `methodShow()`).
+Revisit only if the Context's per-listener naming grows annoying as more listeners
+subscribe. Whichever is chosen, **name messages for what happened, not what to do** (`"initialization.confirmed"`,
+not `"menu.hide"`) so each listener decides its own reaction — the shared
+`ECS_DESIGN_PATTERNS_THREEJS.md` "blind sender" principle.
+
+**Design check — should Context components be their own entities?** Yes. Keeping a Context
+as its own entity is *correct* precisely because it's multi-consumer shared state whose
+ownership is independent of any single consumer — that is the Context pattern's whole
+purpose, and it applies to `ContextInitialization` exactly as to `ContextEngine` /
+`ContextPlanetFaces`. So "should MainMenu and the init Context be one entity?" resolves to
+**no**; the earlier co-location idea was inconsistent with the Context principle and is
+retracted. Co-location (A) is right only for genuinely private, single-consumer state — the
+init state is not that.
+
 ### Increment cadence — one new entity component at a time
 Each step adds **one** new component to the running base and leaves the game
 playable and verifiable before the next. Read the reference `main.js` for the
@@ -356,8 +410,10 @@ behavior each should reproduce; don't port its code.
    `methodGetIsFlaggedForDeletion()` on **both** `EntityComponent` and `Entity`; a
    `methodDispose()` hook (default no-op; overridden to `scene.remove()` + `.dispose()`
    the objects it *owns* — never the kept/shared geometry); `EntityManager.methodRemoveEntity`
-   / `Entity.methodRemoveComponent`; and an **end-of-frame sweep** that removes flagged
-   things and calls their `methodDispose()`. Wire `methodReturnToMenu()` to flag the
+   / `Entity.methodRemoveComponent` (plus a **message-handler unregister**, which the ECS
+   also lacks — so a per-world listener's handler on a long-lived hub entity stops firing
+   after dispose; see "Cross-component events"); and an **end-of-frame sweep** that removes
+   flagged things and calls their `methodDispose()`. Wire `methodReturnToMenu()` to flag the
    per-world objects → they hide + go inert instantly → the sweep disposes them. Verify
    the full loop: menu → generate World A → return to menu (A gone, geometry kept) → pick
    + generate World B → walk around it. See "ECS teardown & deferred deletion" above.

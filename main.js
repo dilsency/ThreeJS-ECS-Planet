@@ -24,6 +24,10 @@ import {EntityComponentLightManager} from "./entity components/lighting.js";
 
 
 import {EntityComponentContextEngine} from "./entity components/context/context_engine.js";
+// main menu
+import {EntityComponentContextInitialization} from "./entity components/context/context_initialization.js";
+import {EntityComponentMainMenu} from "./entity components/ui/main_menu.js";
+//
 import {EntityComponentContextHUDLayout, HUDCubeHorizontalAlignmentEnum} from "./entity components/context/context_hud_layout.js";
 import {EntityComponentContextLocalPlayerIdentity} from "./entity components/context/context_local_player_identity.js";
 import {EntityComponentContextWorldLayout} from "./entity components/context/context_world_layout.js";
@@ -152,6 +156,14 @@ function init()
         //
         console.log("init engine context");
 
+        // this context component relates to the three.js bare minimums
+        // scene, renderer, camera, etc.
+        // it needs to be built before anything else
+
+        // this allows us to refer to those bare minimum variables...
+        // ...from any other component...
+        // ...and we don't have to pass them around as parameters
+
         //
         const entityEngineContext = new Entity(null);
         entityManager.methodAddEntity(entityEngineContext, "EngineContext");
@@ -196,6 +208,11 @@ function init()
         //
         console.log("init context components");
 
+        // main menu
+        const entityInitialization = new Entity(null);
+        entityManager.methodAddEntity(entityInitialization, "Initialization");
+        entityInitialization.methodAddComponentWithName("EntityComponentContextInitialization", new EntityComponentContextInitialization(null));
+
         //
         const entityLocalPlayerIdentity = new Entity(null);
         entityManager.methodAddEntity(entityLocalPlayerIdentity, "LocalPlayerIdentity");
@@ -222,6 +239,11 @@ function init()
     {
         //
         console.log("init Entities");
+
+        // main menu
+        const entityMainMenu = new Entity(null);
+        entityManager.methodAddEntity(entityMainMenu, "MainMenu");
+        entityMainMenu.methodAddComponentWithName("EntityComponentMainMenu", new EntityComponentMainMenu(null));
 
         // Built by initContextComponents() above, before this function ran -
         // see entity components/context/context_world_layout.js.
