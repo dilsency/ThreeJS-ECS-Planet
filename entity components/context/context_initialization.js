@@ -158,7 +158,14 @@ export class EntityComponentContextInitialization extends EntityComponent
         this.#isConfirmed = true;
 
         // use the message system to broadcast
+
+        // both to MainMenu
         this.methodSendMessageToEntitiesWithComponent("EntityComponentMainMenu", {
+            "invokableHandlerName": "initialization.confirmed",
+            "invokableHandlerValue": null
+        });
+        // and to WorldGenerator
+        this.methodSendMessageToEntitiesWithComponent("EntityComponentWorldGenerator", {
             "invokableHandlerName": "initialization.confirmed",
             "invokableHandlerValue": null
         });
@@ -172,7 +179,14 @@ export class EntityComponentContextInitialization extends EntityComponent
         this.#isConfirmed = false;
 
         // use the message system to broadcast
+
+        // both to MainMenu
         this.methodSendMessageToEntitiesWithComponent("EntityComponentMainMenu", {
+            "invokableHandlerName": "initialization.returnedToMenu",
+            "invokableHandlerValue": null
+        });
+        // and to WorldGenerator
+        this.methodSendMessageToEntitiesWithComponent("EntityComponentWorldGenerator", {
             "invokableHandlerName": "initialization.returnedToMenu",
             "invokableHandlerValue": null
         });

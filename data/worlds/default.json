@@ -1,0 +1,38 @@
+{
+    "name": "default",
+
+    "entities": [
+        {
+            "name": "sun",
+            "components": [
+                {
+                    "type": "EntityComponentDirectionalLight",
+                    "params": {
+                        "position": { "$vec3": { "x": 5, "y": 8, "z": 5 } },
+                        "target": { "$vec3": { "x": 0, "y": 0, "z": 0 } }
+                    }
+                },
+                {
+                    "type": "EntityComponentTestCube",
+                    "params": {
+                        "positionOffset": { "$vec3": { "x": 5, "y": 8, "z": 5 } },
+                        "color1": "#FFFF00"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "player",
+            "components": [
+                { "type": "EntityComponentCameraControllerFirstPerson" },
+                { "type": "EntityComponentPlayerController" }
+            ]
+        },
+        {
+            "name": "pointerLockButton",
+            "components": [
+                { "type": "EntityComponentButtonPointerLock" }
+            ]
+        }
+    ]
+}

@@ -11,6 +11,18 @@ import * as THREE from "three";
 import {EntityManager} from "./classes/ECS/entity_manager.js";
 import {Entity} from "./classes/ECS/entity.js";
 import {EntityComponent} from "./classes/ECS/entity_component.js";
+// context components , most important
+import {EntityComponentContextEngine} from "./entity components/context/context_engine.js";
+import {EntityComponentContextInitialization} from "./entity components/context/context_initialization.js";
+// generator components
+import {EntityComponentMainMenu} from "./entity components/ui/main_menu.js";
+import {EntityComponentWorldGenerator} from "./entity components/generation/world_generator.js";
+// context components , less important
+import {EntityComponentContextHUDLayout, HUDCubeHorizontalAlignmentEnum} from "./entity components/context/context_hud_layout.js";
+import {EntityComponentContextLocalPlayerIdentity} from "./entity components/context/context_local_player_identity.js";
+import {EntityComponentContextWorldLayout} from "./entity components/context/context_world_layout.js";
+import {EntityComponentContextPlayerInitialization} from "./entity components/context/context_player_initialization.js";
+import {EntityComponentContextEnvironment} from "./entity components/context/context_environment.js";
 // entity components
 import {EntityComponentCameraControllerFirstPerson} from "./entity components/camera_controller_first_person.js";
 import {EntityComponentPlayerController} from "./entity components/player_controller.js";
@@ -23,16 +35,6 @@ import {EntityComponentDirectionalLightHUD} from "./entity components/lighting.j
 import {EntityComponentLightManager} from "./entity components/lighting.js";
 
 
-import {EntityComponentContextEngine} from "./entity components/context/context_engine.js";
-// main menu
-import {EntityComponentContextInitialization} from "./entity components/context/context_initialization.js";
-import {EntityComponentMainMenu} from "./entity components/ui/main_menu.js";
-//
-import {EntityComponentContextHUDLayout, HUDCubeHorizontalAlignmentEnum} from "./entity components/context/context_hud_layout.js";
-import {EntityComponentContextLocalPlayerIdentity} from "./entity components/context/context_local_player_identity.js";
-import {EntityComponentContextWorldLayout} from "./entity components/context/context_world_layout.js";
-import {EntityComponentContextPlayerInitialization} from "./entity components/context/context_player_initialization.js";
-import {EntityComponentContextEnvironment} from "./entity components/context/context_environment.js";
 
 // bare minimum
 var scene;
@@ -245,6 +247,13 @@ function init()
         entityManager.methodAddEntity(entityMainMenu, "MainMenu");
         entityMainMenu.methodAddComponentWithName("EntityComponentMainMenu", new EntityComponentMainMenu(null));
 
+        // world generator
+        // this lets us NOT specify entities and entity-components below
+        // these will come from a .json file :)
+        const entityWorldGenerator = new Entity(null);
+        entityManager.methodAddEntity(entityWorldGenerator, "WorldGenerator");
+        entityWorldGenerator.methodAddComponentWithName("EntityComponentWorldGenerator", new EntityComponentWorldGenerator(null));
+
         // Built by initContextComponents() above, before this function ran -
         // see entity components/context/context_world_layout.js.
         // (EntityComponentContextLocalPlayerIdentity is no longer fetched
@@ -258,6 +267,8 @@ function init()
         // NAMING_CONVENTIONS.md's "A single consumer is fine, conditionally"
         // section.)
         const componentWorldLayout = entityManager.methodGetEntityByName("WorldLayout").methodGetComponent("EntityComponentContextWorldLayout");
+
+        /*
 
         //
         const entityA = new Entity(null);
@@ -336,7 +347,7 @@ function init()
         entityManager.methodAddEntity(entityLightHUD, "hudSun");
         entityLightHUD.methodAddComponentWithName("EntityComponentDirectionalLight", new EntityComponentDirectionalLightHUD({position:new THREE.Vector3(5,8,5),target:new THREE.Vector3(0,0,0),castShadow:false,}));
         entityLightHUD.methodAddComponentWithName("EntityComponentLightManager", new EntityComponentLightManager({
-            source:componentLightWorld,
+            source:null,//source:componentLightWorld,// we are making upcoming changes to world generation, so we null this for now
             // sourceReferencePoint is no longer passed here - EntityComponentLightManager
             // now fetches the world camera itself via methodGetCamera() (EngineContext)
             targetReferencePoint:componentCubeHUD, // HUD cube: the same offset is re-applied from here
@@ -344,6 +355,8 @@ function init()
             // side, not its far side — see EntityComponentLightManager's field comment.
             reverseDirection:true,
         }));
+
+        */
 
     }
 

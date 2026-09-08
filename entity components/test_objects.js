@@ -484,11 +484,11 @@ export class EntityComponentButtonPointerLock extends EntityComponent
     methodInitialize()
     {
         //
-        this.#params.document.addEventListener("pointerlockchange", this.methodOnPointerLockChange.bind(this), false);
-        this.#params.document.addEventListener("pointerlockerror", this.methodOnPointerLockError.bind(this), false);
+        document.addEventListener("pointerlockchange", this.methodOnPointerLockChange.bind(this), false);
+        document.addEventListener("pointerlockerror", this.methodOnPointerLockError.bind(this), false);
 
         //
-        this.#elementButton = this.#params.document.createElement("button");
+        this.#elementButton = document.createElement("button");
         this.#elementButton.innerText = "PointerLock";
         this.#elementButton.style.position = "fixed";
         this.#elementButton.style.bottom = "0";
@@ -497,7 +497,7 @@ export class EntityComponentButtonPointerLock extends EntityComponent
         this.#elementButton.style.width = "90px";
         this.#elementButton.style.fontSize = "11px";
         this.#elementButton.addEventListener("click", ((e) => this.methodOnClickButton(e)));
-        this.#params.document.body.appendChild(this.#elementButton);
+        document.body.appendChild(this.#elementButton);
     }
 
     methodUpdate(timeElapsed, timeDelta)
@@ -537,7 +537,7 @@ export class EntityComponentButtonPointerLock extends EntityComponent
 
     methodGetIsPointerLocked()
     {
-        const res = (this.#params.document.pointerLockElement == null || this.#params.document.pointerLockElement == undefined || this.#params.document.pointerLockElement !== this.methodGetRenderer().domElement);
+        const res = (document.pointerLockElement == null || document.pointerLockElement == undefined || document.pointerLockElement !== this.methodGetRenderer().domElement);
 
         return !res;
     }

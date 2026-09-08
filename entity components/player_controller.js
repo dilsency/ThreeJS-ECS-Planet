@@ -268,8 +268,15 @@ export class EntityComponentPlayerControllerInputTouch extends EntityComponent
 
 export class EntityComponentPlayerController extends EntityComponent
 {
+    // #region privates
     #params = null;
     #keys = null;
+    // #region privates
+
+    // #region unresolved privates
+    #cameraPivot = null;
+    // #endregion unresolved privates
+
     constructor(params)
     {
         super(params);
@@ -296,6 +303,15 @@ export class EntityComponentPlayerController extends EntityComponent
 
     methodUpdate()
     {
+        // #region precalculation
+        this.methodResolveCameraPivot();
+        // #endregion precalculation
+
+        // #region early return
+        // this.#cameraPivot begins UNRESOLVED; if we have not resolved it yet, we leave early
+        if(this.#cameraPivot == null){return;}
+        // #endregion early return
+
         const componentInstanceInput = this.methodGetComponent("EntityComponentPlayerControllerInput");
         // early return: no entity component instance
         if(componentInstanceInput == null){return;}
@@ -309,7 +325,7 @@ export class EntityComponentPlayerController extends EntityComponent
         // we modify this
         // and then .SetPosition in the end
         const positionResult = new THREE.Vector3();
-        positionResult.copy(this.#params.cameraPivot.position);
+        positionResult.copy(this.#cameraPivot.position);
         
         // we can use this index to determine if we should move in the first place
         // and also
@@ -320,7 +336,7 @@ export class EntityComponentPlayerController extends EntityComponent
         if(indexMovingOnForwardBackwardAxis != 0)
         {
             positionResult.addScaledVector(componentInstanceCameraControllerFirstPerson.directionForwardNonvertical, 0.05 * indexMovingOnForwardBackwardAxis);
-            //this.#params.cameraPivot.position.addScaledVector(componentInstanceCameraControllerFirstPerson.directionForwardNonvertical, 0.05 * indexMovingOnForwardBackwardAxis);
+            //this.#cameraPivot.position.addScaledVector(componentInstanceCameraControllerFirstPerson.directionForwardNonvertical, 0.05 * indexMovingOnForwardBackwardAxis);
         }
 
 
@@ -334,26 +350,26 @@ export class EntityComponentPlayerController extends EntityComponent
         if(indexMovingOnLeftRightAxis != 0)
         {
             positionResult.addScaledVector(componentInstanceCameraControllerFirstPerson.directionRightNonvertical, 0.05 * indexMovingOnLeftRightAxis);
-            //this.#params.cameraPivot.position.addScaledVector(componentInstanceCameraControllerFirstPerson.directionRightNonvertical, 0.05 * indexMovingOnLeftRightAxis);
+            //this.#cameraPivot.position.addScaledVector(componentInstanceCameraControllerFirstPerson.directionRightNonvertical, 0.05 * indexMovingOnLeftRightAxis);
         }
 
         //
         if(componentInstanceInput.keys.up == true)
         {
             positionResult.y += 0.05;
-            //this.#params.cameraPivot.position.y += 0.05;
+            //this.#cameraPivot.position.y += 0.05;
         }
         else if(componentInstanceInput.keys.down == true)
         {
             positionResult.y -= 0.05;
-            //this.#params.cameraPivot.position.y -= 0.05;
+            //this.#cameraPivot.position.y -= 0.05;
         }
 
 
         // early return: we don't do anything if we don't have anything
-        const isSameX = (this.#params.cameraPivot.position.x == positionResult.x);
-        const isSameY = (this.#params.cameraPivot.position.y == positionResult.y);
-        const isSameZ = (this.#params.cameraPivot.position.z == positionResult.z);
+        const isSameX = (this.#cameraPivot.position.x == positionResult.x);
+        const isSameY = (this.#cameraPivot.position.y == positionResult.y);
+        const isSameZ = (this.#cameraPivot.position.z == positionResult.z);
         if (isSameX && isSameY && isSameZ) { return; }
 
         // we simply set the position once, at the end
@@ -365,4 +381,26 @@ export class EntityComponentPlayerController extends EntityComponent
     }
 
     // #endregion lifecycle
+
+    // #region resolve methods
+    methodResolveCameraPivot()
+    {
+        // #region early return
+        // if we have already resolved cameraPivot...
+        // ...then we can skip this step
+        if(this.#cameraPivot != null){return;}
+        // #endregion early return
+
+        // add throttle here
+
+        // we know that EngineContext exists
+        // and that cameraPivot is in there
+        // so we can get it from there
+
+        // this "bubbles" up to the parent method in the base class EntityComponent in entity_component.js
+        // and the method there does the lookup of camera pivot via EngineContext for us
+        // just a shorthand, basically
+        this.#cameraPivot = this.methodGetCameraPivot();
+    }
+    // #endregion resolve methods
 }

@@ -148,7 +148,7 @@ but is no longer load-bearing for the HUD case.
 
 ## 4. Schema sketch
 
-### Prefab (`prefabs/<name>.json`)
+### Prefab (`data/prefabs/<name>.json`)
 ```jsonc
 {
   "prefab": "Player",
@@ -159,11 +159,10 @@ but is no longer load-bearing for the HUD case.
 }
 ```
 
-### World (`worlds/<name>.json`)
+### World (`data/worlds/<name>.json`)
 ```jsonc
 {
-  "world": "Default",
-  "planetSize": 1.0,
+  "name": "default",
   "entities": [
     { "name": "player", "prefab": "Player",
       "overrides": {
@@ -172,14 +171,18 @@ but is no longer load-bearing for the HUD case.
     },
     { "name": "sun", "components": [
       { "type": "EntityComponentDirectionalLight",
-        "params": { "position": {"$vec3":[5,8,5]}, "target": {"$vec3":[0,0,0]} } },
+        "params": { "position": {"$vec3":{"x":5,"y":8,"z":5}}, "target": {"$vec3":{"x":0,"y":0,"z":0}} } },
       { "type": "EntityComponentTestCube",
-        "params": { "color2": "0xffff00", "shape": 5 } }
+        "params": { "positionOffset": {"$vec3":{"x":5,"y":8,"z":5}}, "color1": "#ffff00" } }
     ]},
     { "name": "pointerLockButton",
       "components": [ { "type": "EntityComponentButtonPointerLock" } ] }
   ]
 }
+// The `player` entry above shows the step-2 prefab form; step 1's default.json
+// inlines its two components instead. Top-level `name` identifies the World (the
+// "world" is implied by the data/worlds/ folder). The visible cube colour is
+// `color1` (fed to MeshStandardMaterial) — `color2` is currently inert.
 ```
 
 ### Entity entry — three mutually-exclusive forms
@@ -203,10 +206,23 @@ but is no longer load-bearing for the HUD case.
 
 The world generator becomes the **loader**. It owns *mechanism*, never *content*:
 
-- **Component registry** — `{ typeName: class }`. One place; the only file that
-  imports every gameplay component class.
+> The *why* of the registry + hydration (turning JSON strings into classes, and JSON
+> values into live `THREE.*` types) is written up generally in the shared
+> `registry and hydration - turning strings into classes.md`. This section is the
+> ECS-Planet-specific loader.
+
+- **Component registry** — `{ typeName: class }`, in a **dedicated `registry.js`**
+  (not folded into the loader) — the single file that imports every gameplay component
+  class.
 - **Builder registry** — `{ builderName: fn(loaderContext) }` for code-hook entities.
-- **Param hydration** — walk a params object, replace tagged values (`$vec3`, etc.).
+- **Param hydration (loader-side)** — recursively walk a params object; a node with a
+  `$`-prefixed key is a reserved **tag**: `$vec3` → `new THREE.Vector3(x,y,z)` from a
+  `{x,y,z}` object; `$ref` → **passed through untouched** (the component resolves it,
+  not the loader); any other `$…` key → **throw**. Non-tag objects/arrays recurse.
+  Hydrating loader-side means components receive live `THREE.*` types, identical
+  whether built from code or JSON. **Colors need no tag** — authored as CSS-hex
+  strings (`"#ffff00"`) the component hands straight to `THREE.Color`. Tag set for now
+  is **just `$vec3`** (grow it when a later entity needs `$vec2`/etc.).
 - **Instantiate (single pass)** — for each World entity: either resolve prefab (if
   any) + merge overrides and instantiate its components (hydrate params,
   `new <class>(params)`, attach), or call its **builder** hook for computed entities;
@@ -229,7 +245,7 @@ adds the generator's component as a second capability-target alongside the exist
 
 ## 6. Two concrete steers
 
-- **Import the JSON, don't fetch it.** `import worldDefault from "./worlds/default.json"`
+- **Import the JSON, don't fetch it.** `import worldDefault from "./data/worlds/default.json"`
   — Vite bundles it: no async, no base-path handling. Fetching from `public/`
   reintroduces the exact `%BASE_URL%`/base-path pain already fought with the PWA
   manifest (see `GOTCHAS.md` / the manifest double-base note). Switch to runtime
@@ -259,23 +275,50 @@ Build the spine first, layer richness after. Each step builds & runs on its own.
    JSONs; MainMenu lists them; confirm loads the chosen one; return-to-menu tears it
    down (depends on increment-4 deferred deletion for real disposal).
 
+   **How worlds get imported (don't accumulate N imports in the generator):**
+   - **Worlds index module** — one file maps `name → imported JSON`; the generator
+     imports that map and loads the *chosen* world by name. Simple; every world is
+     bundled.
+   - **`import.meta.glob("../../data/worlds/*.json")`** (Vite) — auto-collects every
+     world file, no hand-listing. *Eager* = all bundled; *lazy* = each world is a
+     dynamic import fetched only when selected (preferable once there are many).
+
+   Either way the generator loads the single world `ContextInitialization` selects —
+   never a pile of hardcoded `import` lines. (Step 1's lone `default.json` import is
+   fine until then.)
+
 Later / only-if-needed: nested prefabs, component removal in overrides, runtime
 `fetch` for user-authored Worlds, hardening a subset of params into a stricter schema
 for a level editor.
 
 ---
 
-## 8. Open questions to settle before/while building
+## 8. Decisions & remaining open questions
 
-- **Param hydration surface:** confirm the loader-hydrated tag set (`$vec3`, `$vec2`,
-  `$color`) and whether colors stay `"0x..."` strings or move to `$color`. Note `$ref`
-  is **not** loader-hydrated — the loader passes it through untouched and the component
-  resolves it lazily (see Lazy dependency resolution).
-- **Registry location:** a dedicated `registry.js` (component + builder maps) vs.
-  folding it into the loader component. Leaning dedicated, so it's the single
-  import-everything file.
-- **Where `#listSpawnedEntities` lives:** on the generator/loader component (yes) —
-  confirm it's the authority teardown iterates, not the EntityManager.
-- **Merge depth:** shallow per-component params confirmed for v1?
-- **File location:** `worlds/` and `prefabs/` as bundled source imports (not
-  `public/`), confirmed by steer above.
+**Decided (2026-09-08):**
+- **Tag strategy: A — self-describing tags** (`{"$vec3":…}`), not a per-component
+  schema. Verbosity + a forgettable tag are acceptable; no schema to keep in sync.
+- **Hydration is loader-side**, recursive, and **throws on an unknown `$`-tag**.
+- **`$vec3` payload is a `{x,y,z}` object** (reads more three.js than `[x,y,z]`).
+- **Colors: no tag** — CSS-hex strings (`"#ffff00"`) passed to `THREE.Color` (so
+  `EntityComponentTestCube`'s color param accepts a string; note the visible colour is
+  `color1` → `MeshStandardMaterial`, `color2` is currently inert). This keeps the tag
+  set to **just `$vec3`** for now.
+- **All spatial triples are `$vec3`** — including `positionOffset`, which hydrates to a
+  `Vector3` the component reads `.x/.y/.z` off. One rule: any 3-number spatial value is
+  tagged.
+- **World file top-level key is `name`** (not `world`) — the "world" is implied by the
+  `data/worlds/` folder; uniform with each entity also having a `name`.
+- **`$`-prefix reserved** for hydration/resolution tags (data fields may not use it);
+  precedent in JSON Schema (`$ref`, `$schema`) and .NET serializers (`$ref`, `$type`).
+  `$ref` is component-resolved, not loader-hydrated.
+- **Registry: a dedicated `registry.js`** (kept separate from the loader), per the
+  general "keep files/components separate" preference.
+- **File location:** `data/worlds/` and `data/prefabs/` as **bundled source imports**
+  (not `public/`), per the §6 steer.
+- **`#listSpawnedEntities`** lives on the loader component and is the authority
+  teardown iterates (not the EntityManager).
+
+**Still open:**
+- **Merge depth** for prefab overrides: shallow per-component params for v1 (confirm
+  when we reach step 2 — no prefabs in step 1, so not blocking).
