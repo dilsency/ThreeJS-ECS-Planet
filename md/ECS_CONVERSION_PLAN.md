@@ -147,15 +147,20 @@ Input-vs-Logic split, lighting, and a first-person pivot rig.
    `dilsency/threejs` deploy is not carried over).
 2. **Strip it to a bare, still-playable first-person walker** — remove the entity
    components unrelated to walking around a scene:
-   - **Strip:** the dithering gameplay (`TestCube`/`TestCubeHUD`, the fractal
-     dithering shader + textures), the HUD cube and its `ContextHUDLayout` /
-     `ContextLocalPlayerIdentity`, and all multiplayer components
-     (`PeerConnection*`, `PeerMeshFormation`, `PlayerNetworkSync`,
+   - **Strip:** the fractal dithering shader + textures, and all multiplayer
+     components (`PeerConnection*`, `PeerMeshFormation`, `PlayerNetworkSync`,
      `RemotePlayerManager`). None relate to the planet game (at least initially).
    - **Keep:** ECS classes, thin-`main.js` `init()`/loop shape, `ContextEngine`,
      `ContextEnvironment`, the first-person `CameraController*` (+ Input/Touch),
      the `PlayerController*` movement (+ Input/Touch), lighting
-     (`LightManager`/`DirectionalLight`), and the pointer-lock button.
+     (`LightManager`/`DirectionalLight`), the pointer-lock button, and the **3D-HUD**
+     (`TestCubeHUD` cube + panel + `ContextHUDLayout`, self-looking-up
+     `ContextLocalPlayerIdentity`) — a reusable mechanic kept on purpose (see the
+     "HUD as a forward-facing 3D model" entry in `RECURRING_MECHANICS_THREEJS.md`).
+     The HUD is **World-scoped**: generated on confirm, destroyed on return-to-menu
+     (decision 2026-09-08 — *not* menu-persistent). See
+     `DATA_DRIVEN_WORLDS_AND_PREFABS.md` (the HUD is a `"builder"` entity of the World
+     load). `TestCube` is likewise kept (it's the world "sun" cube).
    - Confirm it still builds, deploys, and lets you **walk around flat ground** —
      that's the base every planet component gets added onto.
 3. **Bring the planet assets over** from this reference repo:
@@ -305,7 +310,9 @@ shared/cached resources; disposing those corrupts the next world that reuses the
 - **Persistent (kept across menu↔world):** the async-**loaded geometry** + any shared
   material. Loaded once; not re-fetched or disposed on teardown.
 - **Per-world (flagged + disposed):** the scene mesh instance, the player's world state,
-  the gravity components — created on enter-world, torn down on return-to-menu.
+  the gravity components, and the **3D-HUD entity** (cube + panel + light + layout) —
+  created on enter-world, torn down on return-to-menu. (The HUD is World-scoped, not
+  menu-persistent — decision 2026-09-08.)
 
 **Generation is a generate/teardown pair, not a one-shot.** Keep the loaded geometry
 alive and **recompute the cheap face parse each world** (sub-ms for a 20-face
@@ -393,7 +400,10 @@ behavior each should reproduce; don't port its code.
    sized by the init set's `planetRadius`, **triggered by confirm** (not at startup).
    The OBJ load is **async** (parse after it arrives / a `ready` flag). No gravity
    yet — verify: menu → pick a radius → confirm → a planet of that size appears and
-   you can walk near it. (Port `helper_mesh.js` cleaned up.)
+   you can walk near it. (Port `helper_mesh.js` cleaned up.) The generation trigger +
+   the **data-driven World loader** this and later increments build on are specified in
+   `DATA_DRIVEN_WORLDS_AND_PREFABS.md` — its staged **step 1** (registry + minimal flat
+   loader for the easy entities) is the spine of this increment.
 3. **`EntityComponentContextPlanetFaces` + spawn.** Parse the geometry into per-face
    data (normal-hash buckets → normal/center/outer-walls) and expose the lookups
    (`getFaceNormal`, `getFaceCenter`, `getNearestFace`, `isWithinFace`). Use the init
@@ -415,8 +425,9 @@ behavior each should reproduce; don't port its code.
    after dispose; see "Cross-component events"); and an **end-of-frame sweep** that removes
    flagged things and calls their `methodDispose()`. Wire `methodReturnToMenu()` to flag the
    per-world objects → they hide + go inert instantly → the sweep disposes them. Verify
-   the full loop: menu → generate World A → return to menu (A gone, geometry kept) → pick
-   + generate World B → walk around it. See "ECS teardown & deferred deletion" above.
+   the full loop: menu → generate World A → return to menu (A's planet **and HUD** gone,
+   geometry kept) → pick + generate World B → walk around it. See "ECS teardown &
+   deferred deletion" above.
    (Multiplayer broadcast of the flag is deferred.)
 5. **`EntityComponentPause` (in-game).** Add the pause flag (**starts false**), the
    dedicated pause key, and `methodIsPaused()`. Wire the early-return into the

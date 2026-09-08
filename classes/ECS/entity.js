@@ -223,6 +223,25 @@ export class Entity
 
     // #endregion adders
 
+    // #region entity manager passthrough
+
+    // Forwards to the EntityManager (this.#parent) so a component can spawn or
+    // remove whole entities at runtime - e.g. EntityComponentWorldGenerator
+    // creating the world on 'initialization.confirmed' and tearing it down on
+    // 'initialization.returnedToMenu'. The manager already owns both methods;
+    // Entity only ever forwarded LOOKUPS before (methodGetEntityByName etc.),
+    // never add/remove, so components had no way to reach them.
+    methodAddEntity(paramEntity, paramEntityName)
+    {
+        return this.#parent.methodAddEntity(paramEntity, paramEntityName);
+    }
+    methodRemoveEntity(paramEntity)
+    {
+        return this.#parent.methodRemoveEntity(paramEntity);
+    }
+
+    // #endregion entity manager passthrough
+
     // #region registers
 
     methodRegisterMessageHandlerWithinEntity(paramInvokableHandlerName, paramInvokableHandlerValue)

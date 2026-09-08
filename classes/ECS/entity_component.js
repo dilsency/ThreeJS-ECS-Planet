@@ -32,6 +32,21 @@ export class EntityComponent
     }
     methodGetParent(){return this.#parent;}
 
+    // Spawn/remove whole entities at runtime, forwarded through this
+    // component's Entity (this.#parent) to the EntityManager. Used by
+    // EntityComponentWorldGenerator to build the world on confirm and tear it
+    // down on return-to-menu; components could only look entities up before,
+    // never add/remove them. Create the Entity, add it (optionally named),
+    // then attach components to the reference you created.
+    methodAddEntity(paramEntity, paramEntityName)
+    {
+        return this.#parent.methodAddEntity(paramEntity, paramEntityName);
+    }
+    methodRemoveEntity(paramEntity)
+    {
+        return this.#parent.methodRemoveEntity(paramEntity);
+    }
+
     // getters - shorthand for bare-minimum Three.js state owned by the
     // "EngineContext" entity's EntityComponentContextEngine - see
     // BARE_MINIMUM_THREEJS_EXCEPTION_OR_NOT.md and NAMING_CONVENTIONS.md
