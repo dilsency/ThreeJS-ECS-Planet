@@ -40,7 +40,11 @@ export class Entity
 
     #invokableHandlers = null;
 
+    #toBeDeleted = false;
+
     #onlyOnce = null;
+
+    // #region construct
     constructor(params)
     {
         //
@@ -59,18 +63,9 @@ export class Entity
         //
         this.#onlyOnce = false;
     }
-
-    // #region lifecycle
-
-    methodInitialize()
-    {
-        //console.log("entity initialized (name: "+ this.#name +")");
-    }
-
-    // #endregion lifecycle
+    // #endregion construct
 
     // #region getters
-
     methodGetEntityByName(paramName)
     {
         return this.#parent.methodGetEntityByName(paramName);
@@ -125,6 +120,14 @@ export class Entity
         }
         return res;
     }
+
+    //
+    methodGetIsFlaggedForDeletion()
+    {
+        return this.#toBeDeleted;
+    }
+
+    //
     methodGetParent(){return this.#parent;}
     methodGetName(){return this.#name;}
     methodGetPosition(){return this.#position;}
@@ -134,7 +137,6 @@ export class Entity
     get Name(){return this.#name;}
     get Position(){return this.#position;}
     get Rotation(){return {rotationA: this.#rotationA, rotationB: rotationB};}
-
     // #endregion getters
 
     // #region setters
@@ -171,10 +173,13 @@ export class Entity
         });
     }
 
+    methodFlagForDeletion()
+    {
+        this.#toBeDeleted = true;
+    }
     // #endregion setters
 
     // #region adders
-
     methodAddComponent(paramComponent)
     {
         // add it at the correct index
@@ -220,7 +225,6 @@ export class Entity
         this.#components[paramComponent.constructor.name + "__" + paramComponentSuffix] = paramComponent;
         paramComponent.methodInitialize();
     }
-
     // #endregion adders
 
     // #region entity manager passthrough
@@ -239,11 +243,9 @@ export class Entity
     {
         return this.#parent.methodRemoveEntity(paramEntity);
     }
-
     // #endregion entity manager passthrough
 
     // #region registers
-
     methodRegisterMessageHandlerWithinEntity(paramInvokableHandlerName, paramInvokableHandlerValue)
     {
         //console.log("register invokable handler!");
@@ -262,11 +264,13 @@ export class Entity
         // so we can push
         this.#invokableHandlers[paramInvokableHandlerName].push(paramInvokableHandlerValue);
     }
-
     // #endregion registers
 
     // #region lifecycle
-
+    methodInitialize()
+    {
+        //console.log("entity initialized (name: "+ this.#name +")");
+    }
     methodUpdate(timeElapsed, timeDelta)
     {
         /*
@@ -279,7 +283,8 @@ export class Entity
         console.log(".#components :");
         console.log(this.#components);*/
 
-        for (const [key, value] of Object.entries(this.#components))
+        // JavaScript version of for-each loop, object not array
+        for (const [key, entityComponent] of Object.entries(this.#components))
         {
             /*console.log("key and value : ");
             console.log(key);
@@ -289,12 +294,19 @@ export class Entity
             console.log(value.methodUpdate);
 
             console.log("attempt : ");*/
-            value.methodUpdate(timeElapsed, timeDelta);
+            entityComponent.methodUpdate(timeElapsed, timeDelta);
         }
     }
+    methodDispose() {
+        // JavaScript version of for-each loop, object not array
+        for (const [key, entityComponent] of Object.entries(this.#components))
+        {
+            entityComponent.methodDispose();
+        }
+    }
+    // #endregion lifecycle
 
-    // ...
-
+    // #region broadcast
     methodSendMessageWithinEntity(paramMessage)
     {
         // early return: we need to have a handler that matches message
@@ -335,6 +347,5 @@ export class Entity
             iteratorEntity.methodSendMessageWithinEntity(paramMessage);
         }
     }
-
-    // #endregion lifecycle
+    // #endregion broadcast
 }

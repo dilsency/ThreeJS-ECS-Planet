@@ -30,7 +30,6 @@ export class EntityManager
     }
 
     // #region adders
-
     methodAddEntity(paramEntity, paramEntityName)
     {
         //
@@ -50,22 +49,18 @@ export class EntityManager
         // this doesn't seem entirely necessary, but what's the harm?
         paramEntity.methodInitialize();
     }
-
     // #endregion adders
 
     // #region removers
-
     methodRemoveEntity(paramEntity)
     {
         const index = this.#entities.indexOf(paramEntity);
         if(index === -1){return;}
         this.#entities.splice(index, 1);
     }
-
     // #endregion removers
 
     // #region getters
-
     methodGetEntityByIndex(index)
     {
         return this.#entities[index];
@@ -101,13 +96,13 @@ export class EntityManager
         }
         return result;
     }
-
     // #endregion getters
 
     // #region lifecycle
-
     methodUpdate(timeElapsed, timeDelta)
     {
+        // #region phase 1
+
         // array version
 
         // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/for...of
@@ -116,7 +111,6 @@ export class EntityManager
         {
             iteratorEntity.methodUpdate(timeElapsed, timeDelta);
         }
-
 
         // object version
 
@@ -134,18 +128,48 @@ export class EntityManager
         //{
         //    console.log(`${key}: ${value}`);
         //}
-    }
 
+        // #endregion phase 1
+
+        // #region phase 2
+        // we loop through all of our entities Again
+        // this so that we can check all entities that are flagged for deletion at the End
+        // and only then delete them; much safer that way
+        
+        var didDeleteAnEntity = false;
+        for(const iteratorEntity of this.#entities)
+        {
+            // early continue
+            if(!iteratorEntity.methodGetIsFlaggedForDeletion()){continue;}
+
+            //
+            didDeleteAnEntity = true;
+            iteratorEntity.methodDispose();
+        }
+
+        // if one or more entities were deleted ...
+        // ... we need to rebuild the entities list
+        if(didDeleteAnEntity)
+        {
+            // .filter() ...
+            // ... lets us splice ourselves a new list of entities
+            // where we can exclude entities that are flagged for deletion
+            // essentially deleting them, as the garbage collector can do the rest ...
+            // ... only to those who are no longer referred to
+            this.#entities = this.#entities.filter(
+                (iteratorEntity) => !iteratorEntity.methodGetIsFlaggedForDeletion()
+            );
+        }
+        // #region phase 2
+    }
     // #endregion lifecycle
 
     // #region "helpers" / generators
-
     methodGenerateName()
     {
         const name = ("entityName" + this.#idCounter);
         this.#idCounter++;
         return name;
     }
-
     // #endregion "helpers" / generators
 }

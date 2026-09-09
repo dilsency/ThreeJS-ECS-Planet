@@ -6,18 +6,34 @@ import {debugOverlaySetLine} from "./temp_debug_overlay.js"; // TEMPORARY - see 
 
 export class EntityComponentCameraControllerFirstPersonInput extends EntityComponent
 {
+    // #region privates
     #params = null;
     #keys = null;
     #mouseX = null;
     #mouseY = null;
+
+    // we need to store event listener handlers...
+    // ...in order to be able to dispose of them
+    #eventListenerHandlerOnKeyDown;
+    #eventListenerHandlerOnKeyUp;
+    #eventListenerHandlerOnMouseMove;
+    // #endregion privates
+
+    // #region construct
     constructor(params)
     {
         super(params);
         this.#params = params;
     }
+    // #endregion construct
+
+    // #region getters
     get keys() {return this.#keys;}
     get mouseX(){return this.#mouseX;}
     get mouseY(){return this.#mouseY;}
+    // #endregion getters
+
+    // #region lifecycle
     methodInitialize()
     {
         //
@@ -30,23 +46,41 @@ export class EntityComponentCameraControllerFirstPersonInput extends EntityCompo
             reset: false,
         };
 
-        // Attach listeners to document and window to be robust across dev/preview builds
-        const keyDownHandler = (e) => this.methodEventOnKeyDown(e);
-        const keyUpHandler = (e) => this.methodEventOnKeyUp(e);
-        const mouseMoveHandler = (e) => this.methodEventOnMouseMove(e);
+        // we need to store event listener handlers...
+        // ...in order to be able to dispose of them
+        this.#eventListenerHandlerOnKeyDown = (e) => this.methodOnKeyDown(e)
+        this.#eventListenerHandlerOnKeyUp = (e) => this.methodOnKeyUp(e);
+        this.#eventListenerHandlerOnMouseMove = (e) => this.methodOnMouseMove(e);
 
-        document.addEventListener('keydown', keyDownHandler, false);
-        document.addEventListener('keyup', keyUpHandler, false);
-        document.addEventListener('mousemove', mouseMoveHandler, false);
+        // attach those stored event listener handlers
+        document.addEventListener('keydown', this.#eventListenerHandlerOnKeyDown, false);
+        document.addEventListener('keyup', this.#eventListenerHandlerOnKeyUp, false);
+        document.addEventListener('mousemove', this.#eventListenerHandlerOnMouseMove, false);
 
         // Some environments deliver global keyboard events to window instead of document
         // (depending on focus). Listen on both to improve reliability in production builds.
-        window.addEventListener('keydown', keyDownHandler, false);
-        window.addEventListener('keyup', keyUpHandler, false);
-        window.addEventListener('mousemove', mouseMoveHandler, false);
+        window.addEventListener('keydown', this.#eventListenerHandlerOnKeyDown, false);
+        window.addEventListener('keyup', this.#eventListenerHandlerOnKeyUp, false);
+        window.addEventListener('mousemove', this.#eventListenerHandlerOnMouseMove, false);
     }
+    methodDispose()
+    {
+        // for event listeners on document/window, we need to store the function reference beforehand...
+        // ...so that we can remove exactly that function instance...
+        // ...whereas => or .bind(this) will erroneously create a NEW function instance
 
-    methodEventOnKeyDown(e)
+        document.removeEventListener('keydown', this.#eventListenerHandlerOnKeyDown, false);
+        document.removeEventListener('keyup', this.#eventListenerHandlerOnKeyUp, false);
+        document.removeEventListener('mousemove', this.#eventListenerHandlerOnMouseMove, false);
+
+        window.removeEventListener('keydown', this.#eventListenerHandlerOnKeyDown, false);
+        window.removeEventListener('keyup', this.#eventListenerHandlerOnKeyUp, false);
+        window.removeEventListener('mousemove', this.#eventListenerHandlerOnMouseMove, false);
+    }
+    // #endregion lifecycle
+
+    // #region event listener handlers
+    methodOnKeyDown(e)
     {
         switch (e.keyCode)
         {
@@ -67,7 +101,7 @@ export class EntityComponentCameraControllerFirstPersonInput extends EntityCompo
                 break;
         }
     }
-    methodEventOnKeyUp(e)
+    methodOnKeyUp(e)
     {
         switch (e.keyCode)
         {
@@ -88,17 +122,20 @@ export class EntityComponentCameraControllerFirstPersonInput extends EntityCompo
                 break;
         }
     }
-    methodEventOnMouseMove(e)
+    methodOnMouseMove(e)
     {
         this.#mouseX = e.movementX;
         this.#mouseY = e.movementY;
     }
+    // #region event listener handlers
 
+    // #region methods
     methodResetMouse()
     {
         this.#mouseX = 0;
         this.#mouseY = 0;
     }
+    // #endregion methods
 }
 
 // Touch equivalent of EntityComponentCameraControllerFirstPersonInput -
@@ -114,20 +151,36 @@ export class EntityComponentCameraControllerFirstPersonInput extends EntityCompo
 // in this first pass.
 export class EntityComponentCameraControllerFirstPersonInputTouch extends EntityComponent
 {
+    // #region privates
     #params = null;
     #keys = null;
     #mouseX = null;
     #mouseY = null;
     #lastTouchX = null;
     #lastTouchY = null;
+
+    // we need to store event listener handlers...
+    // ...in order to be able to dispose of them
+    #eventListenerHandlerOnTouchStart;
+    #eventListenerHandlerOnTouchMove;
+    #eventListenerHandlerOnTouchEnd;
+    // #endregion privates
+
+    // #region construct
     constructor(params)
     {
         super(params);
         this.#params = params;
     }
+    // #endregion construct
+
+    // #region getters
     get keys() {return this.#keys;}
     get mouseX(){return this.#mouseX;}
     get mouseY(){return this.#mouseY;}
+    // #endregion getters
+
+    // #region lifecycle
     methodInitialize()
     {
         //
@@ -141,6 +194,13 @@ export class EntityComponentCameraControllerFirstPersonInputTouch extends Entity
         };
         this.#mouseX = 0;
         this.#mouseY = 0;
+
+        // we need to store event listener handlers...
+        // ...in order to be able to dispose of them
+        this.#eventListenerHandlerOnTouchStart = (e) => this.methodOnTouchStart(e);
+        this.#eventListenerHandlerOnTouchMove = (e) => this.methodOnTouchMove(e);
+        this.#eventListenerHandlerOnTouchEnd = (e) => this.methodOnTouchEnd(e);
+
 
         // document only, deliberately NOT also window (unlike
         // EntityComponentCameraControllerFirstPersonInput's keydown/keyup
@@ -158,24 +218,38 @@ export class EntityComponentCameraControllerFirstPersonInputTouch extends Entity
         // discarding the real one before EntityComponentCameraControllerFirstPerson's
         // methodUpdate() ever gets a chance to read it.
         //
-        // {passive: false} so methodEventOnTouchMove() below can call
+        // {passive: false} so methodOnTouchMove() below can call
         // e.preventDefault() - touch listeners default to passive (unable
         // to preventDefault()) for scroll performance, and without this,
         // dragging to look around would also scroll/pinch-zoom the page
         // underneath it.
-        document.addEventListener('touchstart', (e) => this.methodEventOnTouchStart(e), {passive: false});
-        document.addEventListener('touchmove', (e) => this.methodEventOnTouchMove(e), {passive: false});
-        document.addEventListener('touchend', (e) => this.methodEventOnTouchEnd(e), {passive: false});
-        document.addEventListener('touchcancel', (e) => this.methodEventOnTouchEnd(e), {passive: false});
-    }
 
-    methodEventOnTouchStart(e)
+        // attach those stored event listener handlers
+        document.addEventListener('touchstart', this.#eventListenerHandlerOnTouchStart, {passive: false});
+        document.addEventListener('touchmove', this.#eventListenerHandlerOnTouchMove, {passive: false});
+        document.addEventListener('touchend', this.#eventListenerHandlerOnTouchEnd, {passive: false});
+        document.addEventListener('touchcancel', this.#eventListenerHandlerOnTouchEnd, {passive: false});
+    }
+    methodDispose()
+    {
+        // for event listeners on document/window, we need to store the function reference beforehand...
+        // ...so that we can remove exactly that function instance...
+        // ...whereas => or .bind(this) will erroneously create a NEW function instance
+        document.removeEventListener('touchstart', this.#eventListenerHandlerOnTouchStart, {passive: false});
+        document.removeEventListener('touchmove', this.#eventListenerHandlerOnTouchMove, {passive: false});
+        document.removeEventListener('touchend', this.#eventListenerHandlerOnTouchEnd, {passive: false});
+        document.removeEventListener('touchcancel', this.#eventListenerHandlerOnTouchEnd, {passive: false});
+    }
+    // #endregion lifecycle
+
+    // #region event listener handlers
+    methodOnTouchStart(e)
     {
         const touch = e.touches[0];
         debugOverlaySetLine("cam", `touchstart touches=${e.touches.length} id=${touch?.identifier} pos=${touch?.clientX},${touch?.clientY}`); // TEMPORARY
         if(touch == null){return;}
 
-        // Must preventDefault() here, not just in methodEventOnTouchMove()
+        // Must preventDefault() here, not just in methodOnTouchMove()
         // below - a held, stationary touch arms the browser's own
         // long-press gesture (context menu/text-selection callout) on a
         // timer, and once that fires mid-hold it silently stops delivering
@@ -189,7 +263,7 @@ export class EntityComponentCameraControllerFirstPersonInputTouch extends Entity
         this.#lastTouchY = touch.clientY;
     }
 
-    methodEventOnTouchMove(e)
+    methodOnTouchMove(e)
     {
         const touch = e.touches[0];
         if(touch == null){debugOverlaySetLine("cam", "move: no touch[0]"); return;} // TEMPORARY
@@ -199,7 +273,7 @@ export class EntityComponentCameraControllerFirstPersonInputTouch extends Entity
 
         // Delta since the last touchmove/touchstart - mirrors
         // e.movementX/e.movementY's "moved since last event" semantics for
-        // mouse (see EntityComponentCameraControllerFirstPersonInput.methodEventOnMouseMove()
+        // mouse (see EntityComponentCameraControllerFirstPersonInput.methodOnMouseMove()
         // above), just computed by hand since touch events carry absolute
         // coordinates, not a ready-made delta.
         this.#mouseX = touch.clientX - this.#lastTouchX;
@@ -211,7 +285,7 @@ export class EntityComponentCameraControllerFirstPersonInputTouch extends Entity
         debugOverlaySetLine("cam", `touches=${e.touches.length} id=${touch.identifier} dx=${this.#mouseX} dy=${this.#mouseY}`); // TEMPORARY
     }
 
-    methodEventOnTouchEnd(e)
+    methodOnTouchEnd(e)
     {
         // Clears tracking so the next touchstart doesn't diff against a
         // stale position left over from this now-ended touch.
@@ -219,12 +293,15 @@ export class EntityComponentCameraControllerFirstPersonInputTouch extends Entity
         this.#lastTouchY = null;
         debugOverlaySetLine("cam", `touchend touches=${e.touches.length} (cleared)`); // TEMPORARY
     }
+    // #endregion event listener handlers
 
+    // #region methods
     methodResetMouse()
     {
         this.#mouseX = 0;
         this.#mouseY = 0;
     }
+    // #endregion methods
 }
 
 export class EntityComponentCameraControllerFirstPerson extends EntityComponent

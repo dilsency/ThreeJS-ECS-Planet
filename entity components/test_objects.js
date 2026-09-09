@@ -58,8 +58,7 @@ function getCachedTexture(textureFile)
 //
 export class EntityComponentTestCube extends EntityComponent
 {
-    // #region bare minimum
-
+    // #region privates
     #params = null;
 
     //
@@ -78,11 +77,9 @@ export class EntityComponentTestCube extends EntityComponent
 
     //
     #nameLastLetterAsInt = null;
-
-    // #endregion bare minimum
+    // #endregion privates
 
     // #region construct
-
     constructor(params)
     {
         super(params);
@@ -134,11 +131,9 @@ export class EntityComponentTestCube extends EntityComponent
             this.#shape = params.shape;
         }
     }
-
     // #endregion construct
 
-     // #region lifecycle
-
+    // #region lifecycle
     async methodInitialize()
     {
         //
@@ -175,7 +170,6 @@ export class EntityComponentTestCube extends EntityComponent
             this.methodRegisterMessageHandlerWithinEntity('update.position', (paramMessage) =>{ this.methodHandleUpdatePosition(paramMessage); });
 
     }
-
     methodUpdate(timeElapsed, timeDelta)
     {
         // early return
@@ -185,7 +179,18 @@ export class EntityComponentTestCube extends EntityComponent
         //
         this.#cube.rotation.y += timeDelta * (this.#nameLastLetterAsInt % 2 == 0 ? 1 : -1);
     }
+    methodDispose()
+    {
+        // same as in methodInitialize, but in reverse
+        this.methodGetTargetScene().remove(this.#cube);
 
+        //
+        this.#cube.geometry.dispose();
+        this.#cube.material.dispose();
+
+        // remove pointer, so that it can be garbage collected
+        this.#cube = null;
+    }
     // #endregion lifecycle
 
     // #region getters

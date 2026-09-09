@@ -7,6 +7,7 @@ import {EntityComponent} from "../../classes/ECS/entity_component.js";
 
 // data : worlds
 import worldDefault from "../../data/worlds/default.json";
+import worldB from "../../data/worlds/worldB.json";
 
 // JSON loading
 import { hydrateParams } from "../../classes/loading-from-json/hydration.js";
@@ -19,11 +20,14 @@ export class EntityComponentWorldGenerator extends EntityComponent
     #listEntities = [];
     // #endregion privates
 
-    // #region lifecycle
+    // #region construct
     constructor(params)
     {
         super(params);
     }
+    // #endregion construct
+
+    // #region lifecycle
     methodInitialize()
     {
         // #region message system handler registration
@@ -145,8 +149,22 @@ export class EntityComponentWorldGenerator extends EntityComponent
     }
     methodTeardown(paramMessage)
     {
-        console.log("() methodTeardown");
-        console.log(paramMessage);
+        // here, we need to loop through all of our components
+        // and flag them all for deletion
+        // pretty simple, actually
+
+        // JavaScript version of a for-each loop
+        for(const iteratorEntity of this.#listEntities)
+        {
+            //
+            iteratorEntity.methodFlagForDeletion();
+        }
+
+        // with the knowledge that all of our entities will be deleted ...
+        // ... we can remove pointer, so that it can be garbage collected
+        this.#listEntities = [];
+        // it will be garbage collected even if it is = []; instead of = null;
+        // but we will re-use it again later, so we can let it be an empty list
     }
     // #endregion methods
 }

@@ -61,11 +61,19 @@ export class EntityComponentDirectionalLight extends EntityComponent
         this.methodGetTargetScene().add(this.#light);
         this.methodGetTargetScene().add(this.#light.target);
     }
-
-    methodUpdate(timeElapsed, timeDelta)
+    methodUpdate(timeElapsed, timeDelta) { }
+    methodDispose()
     {
-    }
+        // same as in methodInitialize, but reverse
+        this.methodGetTargetScene().remove(this.#light.target);
+        this.methodGetTargetScene().remove(this.#light);
 
+        // and then dispose the light itself
+        this.#light.dispose();
+
+        // remove pointer, so that it can be garbage collected
+        this.#light = null;
+    }
     // #endregion lifecycle
 
     // #region getters

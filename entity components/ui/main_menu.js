@@ -8,7 +8,8 @@ export class EntityComponentMainMenu extends EntityComponent
 {
     // #region privates
     #componentInitialization = null;
-    #elementContainer = null;
+    #elementTitle = null;
+    #elementButtonContainer = null;
     #listElementButtons = [];
     // #endregion privates
 
@@ -26,19 +27,32 @@ export class EntityComponentMainMenu extends EntityComponent
         // context component, get, once
         this.#componentInitialization = this.methodGetEntityByName("Initialization")?.methodGetComponent("EntityComponentContextInitialization");
 
+        //
+        this.#elementTitle = document.createElement("div");
+        this.#elementTitle.style.position = "fixed";
+        this.#elementTitle.style.top = "calc(50% - 45px - 45px - 10px)";
+        this.#elementTitle.style.bottom = "calc(50% - 45px)";
+        this.#elementTitle.style.left = "calc(50% - 90px)";
+        this.#elementTitle.style.right = "calc(50% - 90px)";
+        this.#elementTitle.style.minWidth = "90px";
+        this.#elementTitle.style.minHeight = "45px";
+        this.#elementTitle.innerText = "Pick your starting location";
+        document.body.appendChild(this.#elementTitle);
+
         // we create one containing parent for the buttons
         // easier to hide
-        this.#elementContainer = document.createElement("div");
-        this.#elementContainer.style.position = "fixed";
-        this.#elementContainer.style.display = "flex";
-        this.#elementContainer.style.flexFlow = "row nowrap";
-        this.#elementContainer.style.bottom = "30px";
-        this.#elementContainer.style.left = "calc(50% - 90px)";
-        this.#elementContainer.style.right = "calc(50% - 90px)";
-        this.#elementContainer.style.minWidth = "90px";
-        this.#elementContainer.style.minHeight = "45px";
-        this.#elementContainer.style.background = "red";
-        document.body.appendChild(this.#elementContainer);
+        this.#elementButtonContainer = document.createElement("div");
+        this.#elementButtonContainer.style.position = "fixed";
+        this.#elementButtonContainer.style.display = "flex";
+        this.#elementButtonContainer.style.flexFlow = "row nowrap";
+        this.#elementButtonContainer.style.top = "calc(50% - 45px)";
+        this.#elementButtonContainer.style.bottom = "calc(50% - 45px)";
+        this.#elementButtonContainer.style.left = "calc(50% - 90px)";
+        this.#elementButtonContainer.style.right = "calc(50% - 90px)";
+        this.#elementButtonContainer.style.minWidth = "90px";
+        this.#elementButtonContainer.style.minHeight = "45px";
+        this.#elementButtonContainer.style.background = "red";
+        document.body.appendChild(this.#elementButtonContainer);
 
         //
         var len = this.#componentInitialization.methodGetPresetCount();
@@ -65,7 +79,7 @@ export class EntityComponentMainMenu extends EntityComponent
             elementButton.addEventListener("click", ((e) => this.methodOnClickButton(e, iterationIndex)));
 
             //
-            this.#elementContainer.appendChild(elementButton);
+            this.#elementButtonContainer.appendChild(elementButton);
             this.#listElementButtons.push(elementButton);
         }
 
@@ -78,8 +92,12 @@ export class EntityComponentMainMenu extends EntityComponent
         );
         // #endregion message system handler registration
     }
-    methodUpdate()
+    methodUpdate(timeElapsed, timeDelta) { }
+    methodDispose()
     {
+        //
+        document.body.removeChild(this.#elementTitle);
+        document.body.removeChild(this.#elementButtonContainer);
     }
     // #endregion lifecycle
 
@@ -106,11 +124,13 @@ export class EntityComponentMainMenu extends EntityComponent
     }
     methodShow()
     {
-        this.#elementContainer.style.display = "flex";
+        this.#elementTitle.style.display = "block";
+        this.#elementButtonContainer.style.display = "flex";
     }
     methodHide()
     {
-        this.#elementContainer.style.display = "none";
+        this.#elementTitle.style.display = "none";
+        this.#elementButtonContainer.style.display = "none";
     }
     // #endregion methods
 }

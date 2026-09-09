@@ -32,9 +32,17 @@ export class EntityComponentButtonReturnToMainMenu extends EntityComponent
         this.#elementButton.addEventListener("click", ((e) => this.methodOnClickButton(e)));
         document.body.appendChild(this.#elementButton);
     }
+    methodUpdate(timeElapsed, timeDelta) { }
+    methodDispose()
+    {
+        // remove DOM element
+        document.body.removeChild(this.#elementButton);
+        // remove pointer, so that it can be garbage collected
+        this.#elementButton = null;
+    }
     // #endregion lifecycle
 
-    // #region event listeners
+    // #region event listener handlers
     methodOnClickButton(e)
     {
         // we need to get EntityComponentContextInitialization (context_initialization.js)
@@ -51,7 +59,7 @@ export class EntityComponentButtonReturnToMainMenu extends EntityComponent
         if(entityComponentContextInitialization == null){return;}
         entityComponentContextInitialization.methodReturnToMainMenu();
     }
-    // #endregion event listeners
+    // #endregion event listener handlers
 }
 
 //
@@ -59,9 +67,15 @@ export class EntityComponentButtonPointerLock extends EntityComponent
 {
     // #region privates
     #params = null;
+
     //
     #elementButton = null;
     #isVisibleButton = true;
+
+    // we need to store event listener handlers...
+    // ...in order to be able to dispose of them
+    #eventListenerHandlerOnPointerLockChange;
+    #eventListenerHandlerOnPointerLockError;
     // #endregion privates
 
     // #region construct
@@ -75,9 +89,14 @@ export class EntityComponentButtonPointerLock extends EntityComponent
      // #region lifecycle
     methodInitialize()
     {
-        //
-        document.addEventListener("pointerlockchange", this.methodOnPointerLockChange.bind(this), false);
-        document.addEventListener("pointerlockerror", this.methodOnPointerLockError.bind(this), false);
+        // we need to store event listener handlers...
+        // ...in order to be able to dispose of them
+        this.#eventListenerHandlerOnPointerLockChange = (e) => this.methodOnPointerLockChange(e)
+        this.#eventListenerHandlerOnPointerLockError = (e) => this.methodOnPointerLockError(e);
+
+        // attach those stored event listener handlers
+        document.addEventListener("pointerlockchange", this.#eventListenerHandlerOnPointerLockChange, false);
+        document.addEventListener("pointerlockerror", this.#eventListenerHandlerOnPointerLockError, false);
 
         //
         this.#elementButton = document.createElement("button");
@@ -91,9 +110,20 @@ export class EntityComponentButtonPointerLock extends EntityComponent
         this.#elementButton.addEventListener("click", ((e) => this.methodOnClickButton(e)));
         document.body.appendChild(this.#elementButton);
     }
-
-    methodUpdate(timeElapsed, timeDelta)
+    methodUpdate(timeElapsed, timeDelta) { }
+    methodDispose()
     {
+        // remove DOM element
+        document.body.removeChild(this.#elementButton);
+        // remove pointer, so that it can be garbage collected
+        this.#elementButton = null;
+
+        // for event listeners on document/window, we need to store the function reference beforehand...
+        // ...so that we can remove exactly that function instance...
+        // ...whereas => or .bind(this) will erroneously create a NEW function instance
+
+        document.removeEventListener("pointerlockchange", this.#eventListenerHandlerOnPointerLockChange, false);
+        document.removeEventListener("pointerlockerror", this.#eventListenerHandlerOnPointerLockError, false);
     }
     // #endregion lifecycle
 
@@ -110,7 +140,7 @@ export class EntityComponentButtonPointerLock extends EntityComponent
     }
     // #endregion getters
 
-    // #region event listeners
+    // #region event listener handlers
     async methodOnClickButton(e)
     {
         await this.methodGetRenderer().domElement.requestPointerLock();
@@ -134,7 +164,7 @@ export class EntityComponentButtonPointerLock extends EntityComponent
     {
         
     }
-    // #endregion event listeners
+    // #endregion event listener handlers
 
 
 }

@@ -17,11 +17,13 @@ import prefabSun from "../../data/prefabs/sun.json";
 
 // just for symmetry, let's do the same for worlds, even though it does not need to resolve at runtime
 import worldDefault  from "../../data/worlds/default.json";
+import worldB  from "../../data/worlds/worldB.json";
 
 // if we have the string-name for the world, we use that here
 export const worldRegistry = 
 {
     "Default": worldDefault,
+    "World B": worldB,
 }
 
 // if we have the string-name for the prefab, we use that here

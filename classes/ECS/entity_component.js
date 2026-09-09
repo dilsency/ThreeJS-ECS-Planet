@@ -9,6 +9,9 @@ export class EntityComponent
 {
     #params = null;
     #parent = null;
+
+    #toBeDeleted = false;
+
     constructor()
     {
         //
@@ -87,6 +90,11 @@ export class EntityComponent
     methodGetName(){return this.#parent.methodGetName();}
     methodGetPosition(){return this.#parent.methodGetPosition();}
 
+    //
+    methodGetIsFlaggedForDeletion()
+    {
+        return this.#toBeDeleted;
+    }
     // #endregion getters
 
     // #region setters
@@ -104,28 +112,30 @@ export class EntityComponent
         this.#parent.methodSetRotations(paramRotationA, paramRotationADelta, paramRotationB, paramRotationBDelta);
     }
 
+    //
+    methodFlagForDeletion()
+    {
+        this.#toBeDeleted = true;
+    }
     // #endregion setters
 
     // #region registers
-
     methodRegisterMessageHandlerWithinEntity(paramInvokableHandlerName, paramInvokableHandlerValue)
     {
         this.#parent.methodRegisterMessageHandlerWithinEntity(paramInvokableHandlerName, paramInvokableHandlerValue);
     }
-
     // #endregion registers
 
     // #region lifecycle
-
     methodInitialize()
     {
         //console.log("entity component initialized: base class");
     }
-
     methodUpdate(timeElapsed, timeDelta) { }
+    methodDispose() {}
+    // #endregion lifecycle
 
-    // ...
-
+    // #region broadcasting
     methodSendMessageWithinEntity(paramMessage)
     {
         this.#parent.methodSendMessageWithinEntity(paramMessage);
@@ -134,6 +144,5 @@ export class EntityComponent
     {
         this.#parent.methodSendMessageToEntitiesWithComponent(paramComponentName, paramMessage, paramEntityNameToExclude);
     }
-
-    // #endregion lifecycle
+    // #endregion broadcasting
 }
