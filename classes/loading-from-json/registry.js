@@ -8,7 +8,10 @@ import { EntityComponentTestCube, EntityComponentButtonPointerLock } from "../..
 import { EntityComponentCameraControllerFirstPerson } from "../../entity components/camera_controller_first_person.js";
 import { EntityComponentPlayerController } from "../../entity components/player_controller.js";
 
-// and then we export them
+// import prefabs (will this work?)
+import prefabPlayer from "../../data/prefabs/player.json";
+
+// if have the string-name for the entity-component, we get its actual class from here
 export const entityComponentRegistry =
 {
     "EntityComponentDirectionalLight": EntityComponentDirectionalLight,
@@ -17,6 +20,12 @@ export const entityComponentRegistry =
     "EntityComponentCameraControllerFirstPerson": EntityComponentCameraControllerFirstPerson,
     "EntityComponentPlayerController": EntityComponentPlayerController,
 };
+
+// if we have the string-name for the prefab instead, we use that here
+export const prefabRegistry =
+{
+    "Player": prefabPlayer,
+}
 
 // for more complicated entity-components
 // those that are evaluated at runtime

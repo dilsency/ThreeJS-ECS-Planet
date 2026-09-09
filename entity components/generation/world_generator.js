@@ -11,6 +11,7 @@ import worldDefault from "../../data/worlds/default.json";
 // JSON loading
 import { hydrateParams } from "../../classes/loading-from-json/hydration.js";
 import { entityComponentRegistry } from "../../classes/loading-from-json/registry.js";
+import { prefabRegistry } from "../../classes/loading-from-json/registry.js";
 
 export class EntityComponentWorldGenerator extends EntityComponent
 {
@@ -62,8 +63,34 @@ export class EntityComponentWorldGenerator extends EntityComponent
 
         // build entity-components
 
+        // at this point, we have two cases
+        // 1. the iterationEntity has a prefab : we get the components from the registry -> prefabs instead
+        // 2. the iterationEntity does NOT have a prefab : we get the components from .components
+
+        // to do this, we populate the same one list in two different ways, then loop through that
+
+        //
+        var listEntityComponents;
+
+        //
+        if(iterationEntity.prefab != null)
+        {
+            // we first grab the actual prefab
+            // then grab the .components from that prefab
+            // using registry -> prefabs
+            const prefab = prefabRegistry[iterationEntity.prefab];
+            // error handling / early return
+            if(prefab == null){throw new Error("unknown prefab: " + iterationEntity.prefab);}
+            //
+            listEntityComponents = prefab.components;
+        }
+        else {
+            // grab the .components property directly
+            listEntityComponents = iterationEntity.components;
+        }
+
         // javascript version of for-each/foreach loop
-        for(const iterationEntityComponent of iterationEntity.components)
+        for(const iterationEntityComponent of listEntityComponents)
         {
             // "extract method" pattern
             this.methodCreateAndAddNewEntityComponent(newEntity, iterationEntityComponent);

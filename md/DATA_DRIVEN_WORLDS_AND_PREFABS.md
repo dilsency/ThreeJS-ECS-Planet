@@ -265,8 +265,20 @@ Build the spine first, layer richness after. Each step builds & runs on its own.
    the **easy** entities (sun, player, button) — no prefabs, no `$ref`, no overrides,
    no HUD yet. Prove: confirm → loader reads the World → spawns the three entities →
    menu hides. *(This is the recommended increment-2 line.)*
-2. **Prefabs + overrides.** Extract `prefabs/player.json`; both Worlds reference it;
-   the second World overrides the player's spawn transform. Add the override merge.
+2. **Prefabs + overrides.** Extract `data/prefabs/player.json`; both Worlds reference
+   it; the second World overrides the player's spawn transform. Add the override merge.
+
+   **Two ways to avoid repeating entities across worlds:**
+   - **Prefab + overrides** — for entities that *vary per world*: define the component
+     set once in `data/prefabs/`, reference it by name, and specify only what differs
+     (e.g. the sun's per-world position). One line + the diff, not a re-definition.
+   - **Base / shared set** — for entities *identical in every world* (e.g. the
+     pointer-lock button): the generator spawns a common set automatically, so a world
+     file declares only what's *unique* to it and never lists the shared ones at all
+     ("base world merged with this world").
+
+   Rule of thumb: **varies per world → prefab + override; identical everywhere → base
+   set.**
 3. **Lazy self-resolution + the HUD builder hook.** Give components by-name deps
    (`LightManager.source` as a `$ref` the component resolves itself, per Lazy
    dependency resolution — no loader wiring). Fold the **HUD** in as a `"builder"`

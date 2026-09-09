@@ -23,9 +23,8 @@
         },
         {
             "name": "player",
+            "prefab": "Player",
             "components": [
-                { "type": "EntityComponentCameraControllerFirstPerson" },
-                { "type": "EntityComponentPlayerController" }
             ]
         },
         {
