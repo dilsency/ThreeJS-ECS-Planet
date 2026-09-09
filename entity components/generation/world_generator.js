@@ -47,7 +47,7 @@ export class EntityComponentWorldGenerator extends EntityComponent
         //
         console.log(worldDefault.entities);
 
-        // javascript version of for-each/foreach loop
+        // javascript version of for-each/foreach loop of an array, not object
         for(const iterationEntity of worldDefault.entities)
         {
             // "extract method" pattern
@@ -63,16 +63,14 @@ export class EntityComponentWorldGenerator extends EntityComponent
 
         // build entity-components
 
-        // at this point, we have two cases
-        // 1. the iterationEntity has a prefab : we get the components from the registry -> prefabs instead
-        // 2. the iterationEntity does NOT have a prefab : we get the components from .components
-
-        // to do this, we populate the same one list in two different ways, then loop through that
-
-        //
-        var listEntityComponents;
-
-        //
+        // reminder : .components represents an array, not an object
+        
+        // we FIRST need to get the list of entity-components that are attached to a prefab
+        // if iterationEntity is not a prefab (it will not have the .prefab property) ...
+        // ... or if the we are indeed a prefab but that prefab does not have any entity-components ...
+        // ...we will either way have an empty object/list
+        // otherwise our object/list will consist of the entity-components associated with that prefab
+        var listEntityComponentsPrefab = [];
         if(iterationEntity.prefab != null)
         {
             // we first grab the actual prefab
@@ -82,24 +80,27 @@ export class EntityComponentWorldGenerator extends EntityComponent
             // error handling / early return
             if(prefab == null){throw new Error("unknown prefab: " + iterationEntity.prefab);}
             //
-            listEntityComponents = prefab.components;
+            listEntityComponentsPrefab = prefab.components;
         }
-        else {
-            // grab the .components property directly
-            listEntityComponents = iterationEntity.components;
-        }
+        
+        // now, we create a merged list, using the JavaScript non-destructive "spread" operation
+        // from both the entity-components associated with a prefab (if any) ...
+        // ... and the .components property of the iterationEntity
+        // this is what allows our prefabs to have additional entity-components besides the one pre-defined
+        // (reminder that ?? is the operator for "if null then this instead")
+        const listEntityComponents = [ ...listEntityComponentsPrefab , ...(iterationEntity.components ?? []) ];
 
-        // javascript version of for-each/foreach loop
+        // javascript version of for-each/foreach loop of an array, not object
         for(const iterationEntityComponent of listEntityComponents)
         {
             // "extract method" pattern
-            this.methodCreateAndAddNewEntityComponent(newEntity, iterationEntityComponent);
+            this.methodCreateAndAddNewEntityComponent(newEntity, iterationEntityComponent, iterationEntity.overrideParams);
         }
 
         // then, we add our new entity to our list of entitites in the world
         this.#listEntities.push(newEntity);
     }
-    methodCreateAndAddNewEntityComponent(newEntity, iterationEntityComponent)
+    methodCreateAndAddNewEntityComponent(newEntity, iterationEntityComponent, iterationEntityOverrideParams)
     {
         // we need to evaluate the class of the component first
         // we use the registry.js to look-up the classes
@@ -109,11 +110,33 @@ export class EntityComponentWorldGenerator extends EntityComponent
         if(ClassOfComponent == null){throw new Error(`methodGenerate: unknown component type "${iterationEntityComponent.type}"`);}
         // #endregion early return
 
+        // reminder : .params represents an object, not an array
+
+        // before we hydrate our parameters
+        // we need to override them...
+        // IF we have the overrideParams property
+
+        // this can be written much more concise, but I wouldn't be able to read it as easily
+        const paramsBase = iterationEntityComponent.params ?? {};
+        var paramsOverride = {};
+        if(iterationEntityOverrideParams != null)
+        {
+            // we get the override parameters...
+            // ...by passing in the Class name of the entity-component
+            // because override parameters always start with that as the key
+            paramsOverride = iterationEntityOverrideParams[iterationEntityComponent.type];
+        }
+        // we need to "shallow copy" so that we do not make permanent unwanted alterations
+        // using the JavaScript non-destructive "spread" operation, this can be done
+        // we then get both the base parameters, and the override parameters, in the same list
+        // the order of the spread operation is important; the latter will override the former : "last write wins"
+        const paramsMerged = {...paramsBase, ...paramsOverride};
+
         // next...
         // ...we "hydrate" our parameters...
         // ...meaning we convert them from strings to their actual types
         // the "??" means "if left is null, then this instead"
-        const hydratedParams = hydrateParams(iterationEntityComponent.params ?? {});
+        const hydratedParams = hydrateParams(paramsMerged);
 
         // finally, we add the entity-component to our entity...
         // ...using the ClassOfComponent we evaluated earlier...

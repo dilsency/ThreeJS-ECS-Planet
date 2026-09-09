@@ -24,15 +24,18 @@ import {EntityComponentContextWorldLayout} from "./entity components/context/con
 import {EntityComponentContextPlayerInitialization} from "./entity components/context/context_player_initialization.js";
 import {EntityComponentContextEnvironment} from "./entity components/context/context_environment.js";
 // entity components
+/*
 import {EntityComponentCameraControllerFirstPerson} from "./entity components/camera_controller_first_person.js";
 import {EntityComponentPlayerController} from "./entity components/player_controller.js";
 import {EntityComponentTestCube} from "./entity components/test_objects.js";
 import {EntityComponentTestCubeHUD} from "./entity components/test_objects.js";
 import {EntityComponentBackgroundPlane} from "./entity components/test_objects.js";
-import {EntityComponentButtonPointerLock} from "./entity components/test_objects.js";
+import {EntityComponentButtonPointerLock} from "./entity components/ui/buttons.js";
+import {EntityComponentButtonReturnToMainMenu} from "./entity components/ui/buttons.js";
 import {EntityComponentDirectionalLight} from "./entity components/lighting.js";
 import {EntityComponentDirectionalLightHUD} from "./entity components/lighting.js";
 import {EntityComponentLightManager} from "./entity components/lighting.js";
+*/
 
 
 

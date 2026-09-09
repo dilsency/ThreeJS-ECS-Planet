@@ -165,7 +165,7 @@ but is no longer load-bearing for the HUD case.
   "name": "default",
   "entities": [
     { "name": "player", "prefab": "Player",
-      "overrides": {
+      "overrideParams": {
         "EntityComponentPlayerController": { "spawnFaceIndex": 0, "spawnOffsetVertical": 1.0 }
       }
     },
@@ -185,18 +185,27 @@ but is no longer load-bearing for the HUD case.
 // `color1` (fed to MeshStandardMaterial) — `color2` is currently inert.
 ```
 
-### Entity entry — three mutually-exclusive forms
-- **`"prefab": <name>` (+ optional `"overrides"`)** — instantiate the prefab's
-  component set, then deep-merge overrides on top (see merge rules below).
-- **`"components": [...]`** — inline component list (no prefab).
+### Entity entry — how its components are sourced
+Not mutually exclusive — an entry combines these:
+- **`"prefab": <name>`** — start from the prefab's component list.
+- **`"components": [...]`** — appended to the prefab's list (or used alone when there's
+  no prefab). This is how an instance *adds* components on top of a prefab. The two
+  lists are concatenated: `[ ...prefabComponents, ...entityComponents ]`.
+- **`"overrideParams": { <ComponentType>: { ...params } }`** — optional; param-level
+  overrides applied per component (see merge rules).
 - **`"builder": <name>`** — hand off to a registered code function (the escape hatch
   for computed/cross-wired entities).
 
-### Override / merge rules (to pin down before implementing)
-- Overrides are keyed by **component type name**; each maps to a params object.
-- Merge is a **shallow per-component param merge** (world params win over prefab
-  defaults) — start shallow; only go deep-merge if a real nested-param case appears.
-- Overriding a component the prefab doesn't have: **add it** (prefab set ∪ overrides).
+### Override / merge rules (as built)
+- **`overrideParams`** is keyed by **component type name**; each maps to a params
+  object, shallow-merged over that component's params before hydration:
+  `{ ...baseParams, ...overrideForType }` — **last write wins**, so the override
+  replaces a key wholesale (e.g. a whole `$vec3` `position`), unlisted keys are kept.
+  Shallow for v1; go deeper only if a real nested-param case appears.
+- **Adding a whole component** is done via the entry's own `components` (concatenated),
+  **not** via `overrideParams` (which only touches params). Because the ECS is
+  one-component-per-class, an added component of the *same type* as a prefab one is
+  attached after it and **overwrites** it; different types stack.
 - Removing a prefab component: out of scope for v1 (add a `"remove": [...]` list later
   only if needed).
 
@@ -330,7 +339,11 @@ for a level editor.
   (not `public/`), per the §6 steer.
 - **`#listSpawnedEntities`** lives on the loader component and is the authority
   teardown iterates (not the EntityManager).
+- **`overrideParams`** (not `overrides`) is the field name; merge is **shallow**
+  per-component params, last-write-wins. Whole-component additions go through the
+  entry's `components` (concatenated onto the prefab's), not `overrideParams`.
+  (Built + verified in step 2.)
 
 **Still open:**
-- **Merge depth** for prefab overrides: shallow per-component params for v1 (confirm
-  when we reach step 2 — no prefabs in step 1, so not blocking).
+- **Deep merge** for `overrideParams`: only if a real nested-param case appears
+  (shallow has sufficed so far).

@@ -1,24 +1,18 @@
 {
-    "name": "default",
+    "name": "Default",
 
     "entities": [
         {
             "name": "sun",
-            "components": [
+            "prefab": "Sun",
+            "overrideParams": {
+                "EntityComponentDirectionalLight":
                 {
-                    "type": "EntityComponentDirectionalLight",
-                    "params": {
-                        "position": { "$vec3": { "x": 5, "y": 8, "z": 5 } },
-                        "target": { "$vec3": { "x": 0, "y": 0, "z": 0 } }
-                    }
-                },
-                {
-                    "type": "EntityComponentTestCube",
-                    "params": {
-                        "positionOffset": { "$vec3": { "x": 5, "y": 8, "z": 5 } },
-                        "color1": "#FFFF00"
-                    }
+                    "position":
+                    { "$vec3": { "x": 5, "y": 8, "z": 5 } }
                 }
+            },
+            "components": [
             ]
         },
         {
@@ -28,9 +22,15 @@
             ]
         },
         {
-            "name": "pointerLockButton",
+            "name": "buttonPointerLock",
             "components": [
                 { "type": "EntityComponentButtonPointerLock" }
+            ]
+        },
+        {
+            "name": "buttonReturnToMainMenu",
+            "components": [
+                { "type": "EntityComponentButtonReturnToMainMenu" }
             ]
         }
     ]
