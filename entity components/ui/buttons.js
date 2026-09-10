@@ -49,11 +49,11 @@ export class EntityComponentButtonReturnToMainMenu extends EntityComponent
         // that context entity-component holds .methodReturnToMainMenu
 
         // inline version : harder to read
-        //this.methodGetEntityByName("Initialization")?.methodGetComponent("EntityComponentContextInitialization")?.methodReturnToMainMenu();
+        //this.methodGetEntityByName("InitializationContext")?.methodGetComponent("EntityComponentContextInitialization")?.methodReturnToMainMenu();
 
         // long version with returns; actually still hard to read
         // could also use .methodGetEnititiesByComponent or whatever
-        const entityInitialization = this.methodGetEntityByName("Initialization");
+        const entityInitialization = this.methodGetEntityByName("InitializationContext");
         if(entityInitialization == null){return;}
         const entityComponentContextInitialization = entityInitialization.methodGetComponent("EntityComponentContextInitialization");
         if(entityComponentContextInitialization == null){return;}

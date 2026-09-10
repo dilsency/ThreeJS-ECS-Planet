@@ -1,5 +1,6 @@
 {
-    "name": "Default",
+    "name": "World Default",
+    "backgroundColor": "#A06060",
 
     "entities": [
         {

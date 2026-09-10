@@ -3,68 +3,14 @@
 import * as THREE from "three";
 // ECS
 import {EntityComponent} from "../../classes/ECS/entity_component.js";
-
-class InitPreset {
-    // #region privates
-    #presetName = "Default";
-    #planetSize = 1.0;
-    #playerInitialPlanetFaceIndex = 0;
-    #playerInitialPlanetFaceOffsetVertical = 1.0;
-    #playerInitialPlanetFaceOffsetHorizontal = new THREE.Vector2(0.0, 0.0);
-    // #endregion privates
-
-
-    // #region constructor
-    constructor (args)
-    {
-        // #region early return
-        if(args == null){return;}
-        // #endregion early return
-
-        // #region body
-        if(args.presetName != undefined){
-            this.#presetName = args.presetName;
-        }
-        if(args.planetSize != undefined){
-            this.#planetSize = args.planetSize;
-        }
-        if(args.playerInitialPlanetFaceIndex != undefined){
-            this.#playerInitialPlanetFaceIndex = args.playerInitialPlanetFaceIndex;
-        }
-        if(args.playerInitialPlanetFaceOffsetVertical != undefined){
-            this.#playerInitialPlanetFaceOffsetVertical = args.playerInitialPlanetFaceOffsetVertical;
-        }
-        if(args.playerInitialPlanetFaceOffsetHorizontal != undefined){
-            this.#playerInitialPlanetFaceOffsetHorizontal = args.playerInitialPlanetFaceOffsetHorizontal;
-        }
-        // #endregion body
-    }
-    // #endregion constructor
-
-    // #region getters
-    methodGetPresetName(){
-        return this.#presetName;
-    }
-    methodGetPlanetSize(){
-        return this.#planetSize;
-    }
-    methodGetPlayerInitialPlanetFaceIndex(){
-        return this.#playerInitialPlanetFaceIndex;
-    }
-    methodGetPlayerInitialPlanetFaceOffsetVertical(){
-        return this.#playerInitialPlanetFaceOffsetVertical;
-    }
-    methodGetPlayerInitialPlanetFaceOffsetHorizontal(){
-        return this.#playerInitialPlanetFaceOffsetHorizontal;
-    }
-    // #endregion getters
-}
+import { worldPresetRegistry } from "../../classes/loading-from-json/registry.js";
 
 export class EntityComponentContextInitialization extends EntityComponent
 {
     // #region privates
     #listPresets = [];
     #indexPreset = 0;
+    #lengthPresets = 0;
     #isConfirmed = false;
     // #endregion privates
 
@@ -75,65 +21,64 @@ export class EntityComponentContextInitialization extends EntityComponent
         //
         this.#indexPreset = 0;
 
-        //
-        this.#listPresets = [];
-        this.#listPresets.push(new InitPreset({
-            "presetName": "Default",
-            "planetSize": 1.0,
-            "playerInitialPlanetFaceIndex": 0,
-            "playerInitialPlanetFaceOffsetVertical": 1.0,
-            "playerInitialPlanetFaceOffsetHorizontal": new THREE.Vector2(0.0, 0.0)
-        }));
-        this.#listPresets.push(new InitPreset({
-            "presetName": "Alternative",
-            "planetSize": 1.2,
-            "playerInitialPlanetFaceIndex": 1,
-            "playerInitialPlanetFaceOffsetVertical": 5.0,
-            "playerInitialPlanetFaceOffsetHorizontal": new THREE.Vector2(0.0, 0.0)
-        }));
-    }
+        // we want to get the presets from our existing registry and .json files
 
+        // worldPresetRegistry is an array, not a dictionary (unlike the other registries)
+        this.#listPresets = worldPresetRegistry;
+        //this.#listPresets = Object.values(worldPresetRegistry);
+        this.#lengthPresets = this.#listPresets.length;
+
+        //
+        console.log("this.#listPresets");
+        console.log("\t" + this.#listPresets);
+
+        //
+        console.log("this.#listPresets[0]");
+        console.log("\t" + this.#listPresets[0]);
+        //
+        console.log("this.methodGetCurrentPreset()");
+        console.log("\t" + this.methodGetCurrentPreset());
+        //
+        console.log("this.methodGetPresetName()");
+        console.log("\t" + this.methodGetPresetName());
+    }
     // #endregion lifecycle
 
     // #region getters
     methodGetPresetByIndex(indexPreset){
         // #region early return
         // out of range
-        if(indexPreset < 0 || indexPreset >= this.#listPresets.length){return null;}
+        if(indexPreset < 0 || indexPreset >= this.#lengthPresets){return null;}
         // #endregion early return
 
+        //
         return this.#listPresets[indexPreset];
     }
     methodGetPresetCount(){
-        return this.#listPresets.length;
+        return this.#lengthPresets;
     }
     methodGetIndexPreset(){
         return this.#indexPreset;
     }
     methodGetCurrentPreset(){
-        return this.#listPresets[this.#indexPreset];
+        //
+        return this.methodGetPresetByIndex(this.#indexPreset);
     }
     methodGetPresetName(){
-        return this.methodGetCurrentPreset().methodGetPresetName();
+        //
+        return this.methodGetPresetNameByIndex(this.#indexPreset);
     }
     methodGetPresetNameByIndex(indexPreset){
         var preset = this.methodGetPresetByIndex(indexPreset);
-        return (preset == null) ? "" : preset.methodGetPresetName();
+        // #region early return
+        if(preset == null){return;}
+        // #endregion early return
+
+        //
+        return preset.name;
     }
     methodGetIsConfirmed(){
         return this.#isConfirmed;
-    }
-    methodGetPlanetSize(){
-        return this.methodGetCurrentPreset().methodGetPlanetSize();
-    }
-    methodGetPlayerInitialPlanetFaceIndex(){
-        return this.methodGetCurrentPreset().methodGetPlayerInitialPlanetFaceIndex();
-    }
-    methodGetPlayerInitialPlanetFaceOffsetVertical(){
-        return this.methodGetCurrentPreset().methodGetPlayerInitialPlanetFaceOffsetVertical();
-    }
-    methodGetPlayerInitialPlanetFaceOffsetHorizontal(){
-        return this.methodGetCurrentPreset().methodGetPlayerInitialPlanetFaceOffsetHorizontal();
     }
     // #endregion getters
 
@@ -143,7 +88,7 @@ export class EntityComponentContextInitialization extends EntityComponent
         // you cannot change, if you have confirmed
         if(this.#isConfirmed){return;}
         // out of range
-        if(indexPreset < 0 || indexPreset >= this.#listPresets.length){return;}
+        if(indexPreset < 0 || indexPreset >= this.#lengthPresets){return;}
         // #endregion early return
 
         this.#indexPreset = indexPreset;

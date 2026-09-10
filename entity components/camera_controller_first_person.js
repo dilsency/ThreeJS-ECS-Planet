@@ -350,7 +350,7 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
         // EntityComponentContextEnvironment's touch-primary detection, but
         // main.js never needs to know that, or that there are two classes
         // to choose between at all.
-        const componentEnvironment = this.methodGetEntityByName("Environment")?.methodGetComponent("EntityComponentContextEnvironment");
+        const componentEnvironment = this.methodGetEntityByName("EnvironmentContext")?.methodGetComponent("EntityComponentContextEnvironment");
         const componentInput = componentEnvironment.methodGetIsTouchPrimary()
             ? new EntityComponentCameraControllerFirstPersonInputTouch()
             : new EntityComponentCameraControllerFirstPersonInput();
@@ -367,7 +367,7 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
         // bounds at all - EntityComponentContextPlayerInitialization owns
         // that). See NAMING_CONVENTIONS.md's "A single consumer is fine,
         // conditionally" section and TODO.md item 6's sub-item 6.
-        const componentPlayerInitialization = this.methodGetEntityByName("PlayerInitialization")?.methodGetComponent("EntityComponentContextPlayerInitialization");
+        const componentPlayerInitialization = this.methodGetEntityByName("PlayerInitializationContext")?.methodGetComponent("EntityComponentContextPlayerInitialization");
         const spawnPosition = componentPlayerInitialization.methodGetSpawnPosition();
         this.#cameraPivot.position.set(spawnPosition.x, 0, spawnPosition.z);
 

@@ -31,7 +31,7 @@ export class EntityComponentContextPlayerInitialization extends EntityComponent
         // Relies on EntityComponentContextWorldLayout already existing -
         // both are built by main.js's initContextComponents(), with
         // WorldLayout added first, before initEntityComponents() ever runs.
-        const componentWorldLayout = this.methodGetEntityByName("WorldLayout")?.methodGetComponent("EntityComponentContextWorldLayout");
+        const componentWorldLayout = this.methodGetEntityByName("WorldLayoutContext")?.methodGetComponent("EntityComponentContextWorldLayout");
         this.#spawnPosition = componentWorldLayout.methodGetRandomSpawnPositionXZ();
     }
 

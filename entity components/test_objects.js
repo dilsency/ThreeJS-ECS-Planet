@@ -321,7 +321,7 @@ export class EntityComponentTestCubeHUD extends EntityComponentTestCube
         // Resolved before super.methodInitialize() runs, since that's what
         // reads methodGetShape()/methodGetColor1()/methodGetColor2() to
         // build the material.
-        this.#componentLocalPlayerIdentity = this.methodGetEntityByName("LocalPlayerIdentity")?.methodGetComponent("EntityComponentContextLocalPlayerIdentity");
+        this.#componentLocalPlayerIdentity = this.methodGetEntityByName("LocalPlayerIdentityContext")?.methodGetComponent("EntityComponentContextLocalPlayerIdentity");
 
         await super.methodInitialize();
 

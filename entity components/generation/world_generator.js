@@ -5,18 +5,18 @@ import * as THREE from "three";
 import {Entity} from "../../classes/ECS/entity.js";
 import {EntityComponent} from "../../classes/ECS/entity_component.js";
 
-// data : worlds
-import worldDefault from "../../data/worlds/default.json";
-import worldB from "../../data/worlds/worldB.json";
-
 // JSON loading
 import { hydrateParams } from "../../classes/loading-from-json/hydration.js";
 import { entityComponentRegistry } from "../../classes/loading-from-json/registry.js";
 import { prefabRegistry } from "../../classes/loading-from-json/registry.js";
+import { worldRegistry } from "../../classes/loading-from-json/registry.js";
+import { worldPresetRegistry } from "../../classes/loading-from-json/registry.js";
 
 export class EntityComponentWorldGenerator extends EntityComponent
 {
     // #region privates
+    #componentInitialization = null;
+    #componentEngine = null;
     #listEntities = [];
     // #endregion privates
 
@@ -30,6 +30,10 @@ export class EntityComponentWorldGenerator extends EntityComponent
     // #region lifecycle
     methodInitialize()
     {
+        // context components, get, once
+        this.#componentInitialization = this.methodGetEntityByName("InitializationContext")?.methodGetComponent("EntityComponentContextInitialization");
+        this.#componentEngine = this.methodGetEntityByName("EngineContext")?.methodGetComponent("EntityComponentContextEngine");
+
         // #region message system handler registration
         this.methodRegisterMessageHandlerWithinEntity("initialization.confirmed",
             (paramMessage) => this.methodGenerate(paramMessage)
@@ -48,15 +52,63 @@ export class EntityComponentWorldGenerator extends EntityComponent
         console.log("() methodGenerate");
         console.log(paramMessage);
 
-        //
-        console.log(worldDefault.entities);
+        // we need to use the registry to get the current world
+        // previously, this was hard-coded
 
+        // we do this by FIRST getting the preset
+
+        //
+        const currentPreset = this.#componentInitialization.methodGetCurrentPreset();
+        console.log("currentPreset");
+        console.log("\t" + currentPreset);
+        console.log("currentPreset.name");
+        console.log("\t" + currentPreset.name);
+        console.log("currentPreset.world");
+        console.log("\t" + currentPreset.world);
+
+        // #region early return
+        if(currentPreset == null || currentPreset.world == null){return;}
+        // #endregion early return
+
+        // with the preset in hand, we have the string-name of the current world
+        // so we need to get that world
+
+        //
+        const currentWorld = worldRegistry[currentPreset.world];
+
+        //
+        console.log("currentWorld");
+        console.log("\t" + currentWorld);
+        //
+        console.log("currentWorld.name");
+        console.log("\t" + currentWorld.name);
+        //
+        console.log("Object.keys(currentWorld)");
+        console.log("\t" + Object.keys(currentWorld));
+        //
+        console.log("currentWorld.entities");
+        console.log("\t" + currentWorld.entities);
+
+        // #region early return
+        if(currentWorld == null || currentWorld.entities == null){return;}
+        // #endregion early return
+
+        // let's change the base/default background color accordingly
+        this.#componentEngine.methodSetSceneColorFromHex(currentWorld.backgroundColor);
+
+        // let's populate the world with our entities
+
+        //
         // javascript version of for-each/foreach loop of an array, not object
-        for(const iterationEntity of worldDefault.entities)
+        for(const iterationEntity of currentWorld.entities)
         {
             // "extract method" pattern
             this.methodCreateAndAddNewEntity(iterationEntity);
         }
+
+
+
+        
     }
     methodCreateAndAddNewEntity(iterationEntity)
     {
@@ -165,6 +217,9 @@ export class EntityComponentWorldGenerator extends EntityComponent
         this.#listEntities = [];
         // it will be garbage collected even if it is = []; instead of = null;
         // but we will re-use it again later, so we can let it be an empty list
+
+        // we also reset the background color
+        this.#componentEngine.methodResetSceneColor();
     }
     // #endregion methods
 }

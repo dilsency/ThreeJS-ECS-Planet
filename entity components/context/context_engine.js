@@ -1,4 +1,6 @@
 // imports
+// base
+import * as THREE from "three";
 // ECS
 import {EntityComponent} from "../../classes/ECS/entity_component.js";
 
@@ -25,8 +27,7 @@ import {EntityComponent} from "../../classes/ECS/entity_component.js";
 // true.
 export class EntityComponentContextEngine extends EntityComponent
 {
-    // #region bare minimum
-
+    // #region privates
     #params = null; // {scene, sceneHUD, renderer, camera, cameraPivot, cameraHUD}
 
     //
@@ -37,40 +38,45 @@ export class EntityComponentContextEngine extends EntityComponent
     #cameraPivot = null;
     #cameraHUD = null;
 
-    // #endregion bare minimum
+    //
+    #backgroundColorOriginal = null;
+    // #endregion privates
 
     // #region construct
-
     constructor(params)
     {
         super(params);
         this.#params = params;
     }
-
     // #endregion construct
 
     // #region lifecycle
-
     methodInitialize()
     {
+        //
         this.#scene = this.#params.scene;
         this.#sceneHUD = this.#params.sceneHUD;
         this.#renderer = this.#params.renderer;
         this.#camera = this.#params.camera;
         this.#cameraPivot = this.#params.cameraPivot;
         this.#cameraHUD = this.#params.cameraHUD;
-    }
 
+        //
+        this.#backgroundColorOriginal = this.#scene.background.clone();
+    }
     // #endregion lifecycle
 
     // #region getters
-
     methodGetScene(){return this.#scene;}
     methodGetSceneHUD(){return this.#sceneHUD;}
     methodGetRenderer(){return this.#renderer;}
     methodGetCamera(){return this.#camera;}
     methodGetCameraPivot(){return this.#cameraPivot;}
     methodGetCameraHUD(){return this.#cameraHUD;}
-
     // #endregion getters
+
+    // #region setters
+    methodResetSceneColor(){this.#scene.background = this.#backgroundColorOriginal.clone()};
+    methodSetSceneColorFromHex(backgroundColor){this.#scene.background = new THREE.Color(backgroundColor);}
+    // #endregion setters
 }

@@ -215,27 +215,27 @@ function init()
 
         // main menu
         const entityInitialization = new Entity(null);
-        entityManager.methodAddEntity(entityInitialization, "Initialization");
+        entityManager.methodAddEntity(entityInitialization, "InitializationContext");
         entityInitialization.methodAddComponentWithName("EntityComponentContextInitialization", new EntityComponentContextInitialization(null));
 
         //
         const entityLocalPlayerIdentity = new Entity(null);
-        entityManager.methodAddEntity(entityLocalPlayerIdentity, "LocalPlayerIdentity");
+        entityManager.methodAddEntity(entityLocalPlayerIdentity, "LocalPlayerIdentityContext");
         entityLocalPlayerIdentity.methodAddComponentWithName("EntityComponentContextLocalPlayerIdentity", new EntityComponentContextLocalPlayerIdentity(null));
 
         //
         const entityEnvironment = new Entity(null);
-        entityManager.methodAddEntity(entityEnvironment, "Environment");
+        entityManager.methodAddEntity(entityEnvironment, "EnvironmentContext");
         entityEnvironment.methodAddComponentWithName("EntityComponentContextEnvironment", new EntityComponentContextEnvironment(null));
 
         //
         const entityWorldLayout = new Entity(null);
-        entityManager.methodAddEntity(entityWorldLayout, "WorldLayout");
+        entityManager.methodAddEntity(entityWorldLayout, "WorldLayoutContext");
         entityWorldLayout.methodAddComponentWithName("EntityComponentContextWorldLayout", new EntityComponentContextWorldLayout(null));
 
         //
         const entityPlayerInitialization = new Entity(null);
-        entityManager.methodAddEntity(entityPlayerInitialization, "PlayerInitialization");
+        entityManager.methodAddEntity(entityPlayerInitialization, "PlayerInitializationContext");
         entityPlayerInitialization.methodAddComponentWithName("EntityComponentContextPlayerInitialization", new EntityComponentContextPlayerInitialization(null));
     }
 
@@ -257,6 +257,8 @@ function init()
         entityManager.methodAddEntity(entityWorldGenerator, "WorldGenerator");
         entityWorldGenerator.methodAddComponentWithName("EntityComponentWorldGenerator", new EntityComponentWorldGenerator(null));
 
+        /*
+        
         // Built by initContextComponents() above, before this function ran -
         // see entity components/context/context_world_layout.js.
         // (EntityComponentContextLocalPlayerIdentity is no longer fetched
@@ -269,9 +271,8 @@ function init()
         // see entity components/context/context_player_initialization.js and
         // NAMING_CONVENTIONS.md's "A single consumer is fine, conditionally"
         // section.)
-        const componentWorldLayout = entityManager.methodGetEntityByName("WorldLayout").methodGetComponent("EntityComponentContextWorldLayout");
+        const componentWorldLayout = entityManager.methodGetEntityByName("WorldLayoutContext").methodGetComponent("EntityComponentContextWorldLayout");
 
-        /*
 
         //
         const entityA = new Entity(null);

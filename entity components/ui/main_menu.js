@@ -25,7 +25,7 @@ export class EntityComponentMainMenu extends EntityComponent
     methodInitialize()
     {
         // context component, get, once
-        this.#componentInitialization = this.methodGetEntityByName("Initialization")?.methodGetComponent("EntityComponentContextInitialization");
+        this.#componentInitialization = this.methodGetEntityByName("InitializationContext")?.methodGetComponent("EntityComponentContextInitialization");
 
         //
         this.#elementTitle = document.createElement("div");
@@ -56,7 +56,12 @@ export class EntityComponentMainMenu extends EntityComponent
 
         //
         var len = this.#componentInitialization.methodGetPresetCount();
-        console.log(len);
+        
+        //
+        console.log("number of presets to loop through");
+        console.log("\t" + len);
+
+        //
         for(var i = 0; i < len; i++)
         {
             //
@@ -65,6 +70,10 @@ export class EntityComponentMainMenu extends EntityComponent
             //
             var presetName = this.#componentInitialization.methodGetPresetNameByIndex(i);
             elementButton.innerText = presetName;
+
+        //
+        console.log("preset name at index: " + i);
+        console.log("\t" + presetName);
 
             //
             elementButton.style.width = "90px";

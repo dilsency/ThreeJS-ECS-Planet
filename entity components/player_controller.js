@@ -294,7 +294,7 @@ export class EntityComponentPlayerController extends EntityComponent
         // self-attaching sibling components" section). Which concrete class
         // gets attached depends on EntityComponentContextEnvironment's
         // touch-primary detection, but main.js never needs to know that.
-        const componentEnvironment = this.methodGetEntityByName("Environment")?.methodGetComponent("EntityComponentContextEnvironment");
+        const componentEnvironment = this.methodGetEntityByName("EnvironmentContext")?.methodGetComponent("EntityComponentContextEnvironment");
         const componentInput = componentEnvironment.methodGetIsTouchPrimary()
             ? new EntityComponentPlayerControllerInputTouch()
             : new EntityComponentPlayerControllerInput();
