@@ -306,6 +306,7 @@ export class EntityComponentCameraControllerFirstPersonInputTouch extends Entity
 
 export class EntityComponentCameraControllerFirstPerson extends EntityComponent
 {
+    // #region privates
     // scene/camera/cameraPivot used to be constructor params - now resolved
     // once (see methodInitialize()) via EngineContext (see
     // BARE_MINIMUM_THREEJS_EXCEPTION_OR_NOT.md) and cached here, since this
@@ -317,14 +318,26 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
     #scene = null;
     #camera = null;
     #cameraPivot = null;
+    
+    // we accumulate the pitch (up-down rotation)
+    // we do this to stop overshooting at 90 degrees
+    #pitch = 0;
+
+    //
     #directionForward = null;
     #directionForwardNonvertical = null;
     #directionRight = null;
     #directionRightNonvertical = null;
+    // #endregion privates
+
+    // #region construct
     constructor(params)
     {
         super(params);
     }
+    // #endregion construct
+
+    // #region getters
     get directionForward(){return this.#directionForward;}
     get directionForwardNonvertical(){return this.#directionForwardNonvertical;}
     get directionRightNonvertical(){return this.#directionRightNonvertical;}
@@ -341,6 +354,9 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
     methodGetPosition(){return this.#cameraPivot.position;}
     methodGetCameraPivotQuaternion(){return this.#cameraPivot.quaternion;}
     methodGetCameraQuaternion(){return this.#camera.quaternion;}
+    // #endregion getters
+
+    // #region lifecycle
     methodInitialize()
     {
         // Self-attaches its own Input sibling instead of receiving it from
@@ -397,10 +413,7 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
         if(componentInstanceInput.keys.reset == true)
         {
             //
-            this.#camera.rotation.set(0,0,0);
-            this.#cameraPivot.rotation.set(0,0,0);
-            // update perpendiculars
-            this.methodUpdatePerpendiculars();
+            this.#methodResetCameraRotation();
             //
             return;
         }
@@ -421,8 +434,15 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
         // early return: we don't do anything if we don't have anything
         if(speedX == 0 && speedY == 0){return;}
 
+        // pitch (up-down rotation)
+        //this.#camera.rotateX(speedY);
+        // we first accumulate the pitch (up-down rotation)
+        // and then we clamp it, to prevent overshooting
+        this.#pitch = THREE.MathUtils.clamp(this.#pitch + speedY, -Math.PI / 2, Math.PI / 2);
+        // then we apply it
+        this.#camera.rotation.x = this.#pitch;
+
         //
-        this.#camera.rotateX(speedY);
         this.#cameraPivot.rotateY(speedX);
 
 
@@ -441,7 +461,9 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
         // update perpendiculars
         this.methodUpdatePerpendiculars();
     }
+    // #endregion lifecycle
 
+    // #region methods public
     methodUpdatePerpendiculars()
     {
         // we use the cross product
@@ -462,9 +484,21 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
         this.#directionRight.crossVectors(this.#scene.up, this.#directionForward);
         this.#directionRightNonvertical.crossVectors(this.#scene.up, this.#directionForwardNonvertical);
     }
+    // #endregion methods public
+
+    // #region methods private
+    #methodResetCameraRotation(){
+            //
+            this.#camera.rotation.set(0,0,0);
+            this.#cameraPivot.rotation.set(0,0,0);
+            //
+            this.#pitch = 0;
+            // update perpendiculars
+            this.methodUpdatePerpendiculars();
+    }
+    // #endregion methods private
 
     // #region handlers
-
     methodHandleUpdatePosition(paramMessage)
     {
         // important to remember that we are sent the entire message, not Just the value
@@ -476,6 +510,5 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
         this.#camera.quaternion.copy(paramMessage.invokableHandlerValue.rotationB);
         this.#cameraPivot.quaternion.copy(resultRotationCamera.invokableHandlerValue.rotationA);
     }
-
     // #endregion handlers
 }
