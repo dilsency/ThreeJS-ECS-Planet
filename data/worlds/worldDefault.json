@@ -4,6 +4,32 @@
 
     "entities": [
         {
+            "name": "referenceBoxTop",
+            "components": [
+                {
+                    "type": "EntityComponentTestCube",
+                    "params": {
+                        "position":
+                            { "$vec3": { "x": 0, "y": 10, "z": 0 } },
+                        "lighting": true
+                    }
+                }
+            ]
+        },
+        {
+            "name": "referenceBoxBottom",
+            "components": [
+                {
+                    "type": "EntityComponentTestCube",
+                    "params": {
+                        "position":
+                            { "$vec3": { "x": 0, "y": -10, "z": 0 } },
+                        "lighting": true
+                    }
+                }
+            ]
+        },
+        {
             "name": "skybox",
             "components": [
                 {
@@ -21,7 +47,7 @@
                 "EntityComponentDirectionalLight":
                 {
                     "position":
-                    { "$vec3": { "x": 5, "y": 8, "z": 5 } }
+                        { "$vec3": { "x": 5, "y": 8, "z": 5 } }
                 }
             },
             "components": [

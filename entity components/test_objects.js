@@ -63,7 +63,7 @@ export class EntityComponentTestCube extends EntityComponent
 
     //
     #cube = null;
-    #positionOffset = { x: 0, y: 0, z: 0 };
+    #position = { x: 0, y: 0, z: 0 };
     #size = { x: 1, y: 1, z: 1 };
     #spin = true;
     #lighting = false;
@@ -86,9 +86,9 @@ export class EntityComponentTestCube extends EntityComponent
         this.#params = params;
 
         //
-        if(params.positionOffset != null)
+        if(params.position != null)
         {
-            this.#positionOffset = params.positionOffset;
+            this.#position = params.position;
         }
         if(params.size != null)
         {
@@ -156,16 +156,29 @@ export class EntityComponentTestCube extends EntityComponent
 
             const material = createFractalMaterialFromSources(vertexShader, fragmentShader, { map: texture, level: 3, shape: this.methodGetShape(), lighting: this.#lighting, debugNormals: this.#debugNormals, color1: this.methodGetColor1(), color2: this.methodGetColor2(), color1Texture: this.#color1Texture, color2BlendTexture: this.#color2BlendTexture });
             */
-            const material = new THREE.MeshStandardMaterial({ color: this.methodGetColor1() });
+
+            var material;
+            if(this.#lighting)
+            {
+                material = new THREE.MeshStandardMaterial({ color: this.methodGetColor1() });
+            }
+            else {
+                material = new THREE.MeshBasicMaterial({ color: this.methodGetColor1() });
+            }
 
             this.#cube = new THREE.Mesh(geometry, material);
-            this.#cube.castShadow = true;
-            this.#cube.receiveShadow = true;
+
+            // we only cast and receive shadows if we are lit
+            // the sun is never lit, it should never cast shadows
+            this.#cube.castShadow = (this.#lighting);
+            this.#cube.receiveShadow = (this.#lighting);
+
+            //
             this.methodGetTargetScene().add(this.#cube);
 
-            this.#cube.position.x += this.#positionOffset.x;
-            this.#cube.position.y += this.#positionOffset.y;
-            this.#cube.position.z += this.#positionOffset.z;
+            this.#cube.position.x += this.#position.x;
+            this.#cube.position.y += this.#position.y;
+            this.#cube.position.z += this.#position.z;
 
             this.methodRegisterMessageHandlerWithinEntity('update.position', (paramMessage) =>{ this.methodHandleUpdatePosition(paramMessage); });
 
@@ -250,7 +263,7 @@ export class EntityComponentTestCube extends EntityComponent
 //
 export class EntityComponentTestCubeHUD extends EntityComponentTestCube
 {
-    #positionOffsetY = 0;
+    #positionY = 0;
     #tiltFactor = 0;
     #yawRadians = 0;
 
@@ -269,9 +282,9 @@ export class EntityComponentTestCubeHUD extends EntityComponentTestCube
         super(params);
 
         //
-        if(params.positionOffset != null && params.positionOffset.y != null)
+        if(params.position != null && params.position.y != null)
         {
-            this.#positionOffsetY = params.positionOffset.y;
+            this.#positionY = params.position.y;
         }
         if(params.tiltFactor != null)
         {
@@ -328,7 +341,7 @@ export class EntityComponentTestCubeHUD extends EntityComponentTestCube
         // Crude approximation of "face the camera": rather than an exact lookAt (which
         // aims at the camera's single point rather than the frustum ray through this
         // spot), just tilt down proportionally to how far below center it sits.
-        this.methodGetCube().rotation.x += this.#positionOffsetY * this.#tiltFactor;
+        this.methodGetCube().rotation.x += this.#positionY * this.#tiltFactor;
 
         // Unlike the vertical tilt above, this yaw IS an exact lookAt-derived
         // correction (computed in main.js via THREE.Object3D.lookAt against
@@ -353,7 +366,7 @@ export class EntityComponentBackgroundPlane extends EntityComponent
 
     //
     #plane = null;
-    #positionOffset = { x: 0, y: 0, z: 0 };
+    #position = { x: 0, y: 0, z: 0 };
     #size = { width: 2.5, height: 2.5 };
     #color = 0x87ceeb; // sky blue
     #textureFile = null;
@@ -368,9 +381,9 @@ export class EntityComponentBackgroundPlane extends EntityComponent
         this.#params = params;
 
         //
-        if(params.positionOffset != null)
+        if(params.position != null)
         {
-            this.#positionOffset = params.positionOffset;
+            this.#position = params.position;
         }
         if(params.size != null)
         {
@@ -432,9 +445,9 @@ export class EntityComponentBackgroundPlane extends EntityComponent
         // hook - see BARE_MINIMUM_THREEJS_EXCEPTION_OR_NOT.md.
         this.methodGetSceneHUD().add(this.#plane);
 
-        this.#plane.position.x += this.#positionOffset.x;
-        this.#plane.position.y += this.#positionOffset.y;
-        this.#plane.position.z += this.#positionOffset.z;
+        this.#plane.position.x += this.#position.x;
+        this.#plane.position.y += this.#position.y;
+        this.#plane.position.z += this.#position.z;
 
         this.methodRegisterMessageHandlerWithinEntity('update.position', (paramMessage) => { this.methodHandleUpdatePosition(paramMessage); });
     }

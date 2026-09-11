@@ -12,8 +12,9 @@
         {
             "type": "EntityComponentTestCube",
             "params": {
-                "positionOffset": { "$vec3": { "x": 5, "y": 8, "z": 5 } },
-                "color1": "#FFFF00"
+                "position": { "$vec3": { "x": 5, "y": 8, "z": 5 } },
+                "color1": "#FFFF00",
+                "lighting": false
             }
         }
     ]
