@@ -404,6 +404,12 @@ behavior each should reproduce; don't port its code.
    the **data-driven World loader** this and later increments build on are specified in
    `DATA_DRIVEN_WORLDS_AND_PREFABS.md` — its staged **step 1** (registry + minimal flat
    loader for the easy entities) is the spine of this increment.
+   **Asset loading (decided 2026-09-11):** the `.obj` lives in **`assets/models/`** and is
+   loaded **lazily at generation** via a **`modelRegistry`** (`import.meta.glob(..., { eager:
+   false })`, `?url` + `OBJLoader.load`), memoized so the loaded geometry is kept across worlds
+   while the per-world mesh is disposable — a world that's never picked never fetches its
+   model. Full rationale in `DATA_DRIVEN_WORLDS_AND_PREFABS.md` §8 ("model / heavy-asset
+   loading").
 3. **`EntityComponentContextPlanetFaces` + spawn.** Parse the geometry into per-face
    data (normal-hash buckets → normal/center/outer-walls) and expose the lookups
    (`getFaceNormal`, `getFaceCenter`, `getNearestFace`, `isWithinFace`). Use the init

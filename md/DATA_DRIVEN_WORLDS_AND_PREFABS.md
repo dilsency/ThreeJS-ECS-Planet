@@ -224,6 +224,14 @@ The world generator becomes the **loader**. It owns *mechanism*, never *content*
   (not folded into the loader) — the single file that imports every gameplay component
   class.
 - **Builder registry** — `{ builderName: fn(loaderContext) }` for code-hook entities.
+- **Model registry** — `{ modelName: () => import(...) }`, a **lazy loader map** built with
+  `import.meta.glob('../assets/models/*.obj', { query: '?url', import: 'default', eager: false })`.
+  Unlike the component/prefab/world registries (eager imports), a model resolves **at
+  generation time**: `const url = await modelRegistry[name](); OBJLoader.load(url, …)`, so a
+  world the player never picks never fetches its model. The loaded geometry is **memoized**
+  (module-level, by name) — first visit fetches+parses, re-entry reuses — the persistent side
+  of the teardown design (kept geometry vs. disposable per-world mesh). Files live in
+  **`assets/models/`** (bundled source, not `public/`, per the §6 steer). Full rationale in §8.
 - **Param hydration (loader-side)** — recursively walk a params object; a node with a
   `$`-prefixed key is a reserved **tag**: `$vec3` → `new THREE.Vector3(x,y,z)` from a
   `{x,y,z}` object; `$ref` → **passed through untouched** (the component resolves it,
@@ -343,6 +351,27 @@ for a level editor.
   per-component params, last-write-wins. Whole-component additions go through the
   entry's `components` (concatenated onto the prefab's), not `overrideParams`.
   (Built + verified in step 2.)
+
+**Decided (2026-09-11) — model / heavy-asset loading:**
+- **`assets/models/` for model files** (`Icosahedron.obj` there) — a dedicated assets root,
+  not the reference project's top-level `models/`. Bundled source, not `public/` (same §6
+  base-path reasoning as the JSON).
+- **Lazy, not eager.** A **`modelRegistry`** (name → loader fn) via
+  `import.meta.glob(..., { eager: false })` — each model its own on-demand chunk, fetched
+  **only when a world that uses it is generated**, never on startup. Same lazy strategy §7
+  step 4 earmarks for worlds, applied to the heavy asset where it bites first (futureproofing
+  for many/large worlds — a world that's never picked pays nothing).
+- **`?url` + `OBJLoader.load` (async), not `?raw` + `parse`** — a large model should be
+  streamed as a fetched asset, not inlined as a JS string in a chunk. Generation is therefore
+  async (the conversion plan already assumed this), handled by the existing "resolve the mesh
+  fresh until it exists" pattern.
+- **Memoized persistent geometry.** The load promise is cached by name (the
+  `SHADER_SOURCE_AND_TEXTURE_CACHING` memo pattern); the loaded **geometry is persistent**
+  (kept across menu↔world), the **per-world scene mesh is disposable** — the two resource
+  tiers of the deferred-deletion design.
+- **Referenced by name from data** — a world/preset names the model (e.g.
+  `"model": "Icosahedron"`); the loader dials `modelRegistry`, exactly like the class/prefab
+  registries.
 
 **Still open:**
 - **Deep merge** for `overrideParams`: only if a real nested-param case appears
