@@ -12,6 +12,8 @@ import { EntityComponentTestCube } from "../../entity components/test_objects.js
 import { EntityComponentButtonPointerLock, EntityComponentButtonReturnToMainMenu } from "../../entity components/ui/buttons.js";
 import { EntityComponentCameraControllerFirstPerson } from "../../entity components/camera_controller_first_person.js";
 import { EntityComponentPlayerController } from "../../entity components/player_controller.js";
+//
+import { EntityComponentSkybox } from "../../entity components/environment/skybox.js";
 
 // all prefabs should be imported here
 import prefabPlayer from "../../data/prefabs/player.json";
@@ -72,6 +74,7 @@ export const entityComponentRegistry =
     "EntityComponentButtonReturnToMainMenu": EntityComponentButtonReturnToMainMenu,
     "EntityComponentCameraControllerFirstPerson": EntityComponentCameraControllerFirstPerson,
     "EntityComponentPlayerController": EntityComponentPlayerController,
+    "EntityComponentSkybox": EntityComponentSkybox,
 };
 
 // #endregion prefabs > entities

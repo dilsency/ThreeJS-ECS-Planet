@@ -4,6 +4,17 @@
 
     "entities": [
         {
+            "name": "skybox",
+            "components": [
+                {
+                    "type": "EntityComponentSkybox",
+                    "params": {
+                        "colors": ["#102000", "#909030", "#903090", "#309090", "#60C0C0"]
+                    }
+                }
+            ]
+        },
+        {
             "name": "sun",
             "prefab": "Sun",
             "overrideParams": {
@@ -25,13 +36,17 @@
         {
             "name": "buttonPointerLock",
             "components": [
-                { "type": "EntityComponentButtonPointerLock" }
+                {
+                    "type": "EntityComponentButtonPointerLock"
+                }
             ]
         },
         {
             "name": "buttonReturnToMainMenu",
             "components": [
-                { "type": "EntityComponentButtonReturnToMainMenu" }
+                {
+                    "type": "EntityComponentButtonReturnToMainMenu"
+                }
             ]
         }
     ]

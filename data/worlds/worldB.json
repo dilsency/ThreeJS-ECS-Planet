@@ -3,6 +3,30 @@
     "backgroundColor": "#60A060",
     "entities": [
         {
+            "name": "skybox",
+            "components": [
+                {
+                    "type": "EntityComponentSkybox",
+                    "params": {
+                        "colors": ["#102000", "#90FF90", "#9090FF", "#C0C0FF"]
+                    }
+                }
+            ]
+        },
+        {
+            "name": "sun",
+            "prefab": "Sun",
+            "overrideParams": {
+                "EntityComponentDirectionalLight":
+                {
+                    "position":
+                    { "$vec3": { "x": 5, "y": 8, "z": 5 } }
+                }
+            },
+            "components": [
+            ]
+        },
+        {
             "name": "player",
             "prefab": "Player",
             "components": [
