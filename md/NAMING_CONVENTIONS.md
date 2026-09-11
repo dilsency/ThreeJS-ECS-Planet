@@ -110,6 +110,16 @@ Reserve `Context` / `Manager` / `Controller` for those exact roles; don't use th
 generic filler. Rationale and the "single-consumer Context is fine, conditionally" nuance
 live in the shared doc.
 
+**Context components live alone on their own entity.** A `Context` gets a **dedicated
+entity** and is **never co-located with non-Context components on the same entity**. Its
+ownership is independent of any single consumer — that's the whole point of the role — so
+bolting it onto a consumer's entity would couple it in the wrong direction. Holds for
+`ContextEngine`, `ContextInitialization`, `ContextWorldLayout`, and the coming
+`ContextPlanetFaces` alike: e.g. the planet **mesh** (`EntityComponentPlanet`) is its own
+entity, and the planet's **face data** (`ContextPlanetFaces`) is a *separate* Context
+entity that resolves that mesh's geometry — never a sibling component on one shared entity.
+(Cross-project rationale: shared `ECS_DESIGN_PATTERNS_THREEJS.md` → "Context components".)
+
 ## 7. Hook (template-method) methods
 
 A reused base class exposes an **overridable hook** instead of forking, and subclasses
