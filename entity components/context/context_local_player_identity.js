@@ -13,7 +13,7 @@ import {EntityComponent} from "../../classes/ECS/entity_component.js";
 // itself (the raw palettes, to decode *other* players' incoming indices).
 // No single one of those three owns this data more than the others, so it
 // lives here instead - see NAMING_CONVENTIONS.md's "Entity-component naming
-// families" section for why this takes the EntityComponentContext prefix,
+// families" section for why this takes the EntityComponentSingletonContext prefix,
 // and BARE_MINIMUM_THREEJS_EXCEPTION_OR_NOT.md/TODO.md item 6.1 for the
 // fuller design history. Attached to its own dedicated entity, built by
 // main.js's initLocalPlayerIdentity() before any of its three consumers.
@@ -24,7 +24,7 @@ import {EntityComponent} from "../../classes/ECS/entity_component.js";
 // there's no "must be distinct from each other" requirement to worry about
 // here - an earlier version of this comment claimed one, left over from
 // before the two-palette split, and was never actually true.
-export class EntityComponentContextLocalPlayerIdentity extends EntityComponent
+export class EntityComponentSingletonContextLocalPlayerIdentity extends EntityComponent
 {
     #colorPaletteBody = Object.freeze(["hsl(223, 56.6%, 26.6%)", "hsl(0, 56.6%, 27.3%)", "hsl(180, 42.8%, 26.8%)", "hsl(218, 42.8%, 10.6%)"]);
     #colorPaletteDither = Object.freeze(["hsl(37, 56%, 62.5%)", "hsl(128, 56.6%, 63.7%)", "hsl(318, 42.8%, 68%)", "hsl(74, 51.9%, 87.9%)"]);

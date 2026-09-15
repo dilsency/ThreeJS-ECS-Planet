@@ -150,12 +150,12 @@ Input-vs-Logic split, lighting, and a first-person pivot rig.
    - **Strip:** the fractal dithering shader + textures, and all multiplayer
      components (`PeerConnection*`, `PeerMeshFormation`, `PlayerNetworkSync`,
      `RemotePlayerManager`). None relate to the planet game (at least initially).
-   - **Keep:** ECS classes, thin-`main.js` `init()`/loop shape, `ContextEngine`,
-     `ContextEnvironment`, the first-person `CameraController*` (+ Input/Touch),
+   - **Keep:** ECS classes, thin-`main.js` `init()`/loop shape, `SingletonContextEngine`,
+     `SingletonContextEnvironment`, the first-person `CameraController*` (+ Input/Touch),
      the `PlayerController*` movement (+ Input/Touch), lighting
      (`LightManager`/`DirectionalLight`), the pointer-lock button, and the **3D-HUD**
-     (`TestCubeHUD` cube + panel + `ContextHUDLayout`, self-looking-up
-     `ContextLocalPlayerIdentity`) — a reusable mechanic kept on purpose (see the
+     (`TestCubeHUD` cube + panel + `SingletonContextHUDLayout`, self-looking-up
+     `SingletonContextLocalPlayerIdentity`) — a reusable mechanic kept on purpose (see the
      "HUD as a forward-facing 3D model" entry in `RECURRING_MECHANICS_THREEJS.md`).
      The HUD is **World-scoped**: generated on confirm, destroyed on return-to-menu
      (decision 2026-09-08 — *not* menu-persistent). See
@@ -172,12 +172,12 @@ Input-vs-Logic split, lighting, and a first-person pivot rig.
 The components to build on top of the bare base, in the cadence below. Names
 follow the main project's conventions:
 
-- **Engine context** — `EntityComponentContextEngine`: holds
+- **Engine context** — `EntityComponentSingletonContextEngine`: holds
   renderer/scene/cameraPivot/camera/clock, looked up by everyone (don't hand-wire
   through constructors — see the "no hard-wiring in main.js" rule).
 - **MainMenu / initialization** — a **separate pre-generation system** (see the
   "Main menu / pre-generation setup" entry in `RECURRING_MECHANICS_THREEJS.md`).
-  - **`EntityComponentContextInitialization`** (a Context component): owns the
+  - **`EntityComponentSingletonContextInitialization`** (a Context component): owns the
     selectable **init sets** (`{planetRadius, spawnFaceIndex, spawnDistanceFromPlanet}`
     presets) + the chosen one; exposes `getPlanetRadius()` / `getSpawnFaceIndex()` /
     `getSpawnDistance()` once confirmed, plus `isConfirmed()` — the de-facto phase gate.
@@ -189,7 +189,7 @@ follow the main project's conventions:
     **unpaused**. Assumes nothing is generated yet.
 - **Planet entity** (generated on MainMenu confirm, parameterized by the init set)
   - the mesh (loaded OBJ, sized by the init set's `planetRadius`), and
-  - **`EntityComponentContextPlanetFaces`** (a Context component): owns the
+  - **`EntityComponentMultiContextPlanetFaces`** (a Context component): owns the
     parsed per-face data — the normal-hash → {plane/normal, center, outer-walls,
     triangle indices} maps — computed once at init from the geometry. Exposes
     lookups: `getFaceNormal(faceId)`, `getFaceCenter(faceId)`,
@@ -216,7 +216,7 @@ follow the main project's conventions:
     gravity regime we're in. Owns the throttle intervals.
   - **`EntityComponentGravityOrientation`**: owns the *current* gravity up (a face
     normal), performs the reorientation ease (old→new up), and applies it to
-    `cameraPivot.up`/`camera.up`. Reads `ContextPlanetFaces` + `GravityState`.
+    `cameraPivot.up`/`camera.up`. Reads `MultiContextPlanetFaces` + `GravityState`.
     Because it is the **single writer** of `cameraPivot.up`/`camera.up`, the camera
     controller and the movement component can both just *read* that up and stay
     gravity-agnostic. **Pick one reorientation path** (the frame-lerp is simpler;
@@ -276,7 +276,7 @@ than relying on registration order.
 
 ### ECS teardown & deferred deletion (foundational — the re-enterable MainMenu forces it)
 The MainMenu is **re-enterable at runtime** (navigate to *and* from it — level-select /
-"Quit to menu"). So `confirm` / `return-to-menu` **toggle** `ContextInitialization`'s
+"Quit to menu"). So `confirm` / `return-to-menu` **toggle** `SingletonContextInitialization`'s
 `isConfirmed`, and returning must tear the current world down so a new one can be built.
 This base ECS has **no removal** (`methodRemoveEntity` / `methodRemoveComponent` don't
 exist) — so it needs building, and it's needed by multiplayer despawn later too, so it's
@@ -342,7 +342,7 @@ dither pattern (`methodSendMessageWithinEntity`, listener registers on its *own*
 Cleanest and most idiomatic — **but only when the state is genuinely private to that one
 consumer.** A real **Context** is multi-consumer shared state *by definition* (that's the
 whole Context-component pattern), so bolting a specific consumer (the MainMenu UI) onto it
-would destroy the independence the Context exists for. `ContextInitialization` is read by
+would destroy the independence the Context exists for. `SingletonContextInitialization` is read by
 MainMenu, generation, *and* player-spawn — so it stays its own entity, and **A does not
 apply to it.** (A is only for state that isn't actually shared — e.g. a controller talking
 to its own siblings.)
@@ -361,7 +361,7 @@ the source's entity. Blind sender, one send, no new entity. Trade-off: it **bend
 entity), it is **unproven** here, and it needs a handler-**unregister** on teardown (a
 per-world listener's handler outlives it — see the teardown step, increment 4).
 
-**Where this leaves us:** `ContextInitialization` is a legitimate multi-consumer Context,
+**Where this leaves us:** `SingletonContextInitialization` is a legitimate multi-consumer Context,
 so it **stays a separate entity** (A is off the table for it — see the design check below).
 The real choice for notifying its consumers is **B vs C**: B is idiomatic to this ECS with
 mild, arguably-intended coupling; C is blind but unconventional with a lifecycle caveat.
@@ -377,8 +377,8 @@ not `"menu.hide"`) so each listener decides its own reaction — the shared
 **Design check — should Context components be their own entities?** Yes. Keeping a Context
 as its own entity is *correct* precisely because it's multi-consumer shared state whose
 ownership is independent of any single consumer — that is the Context pattern's whole
-purpose, and it applies to `ContextInitialization` exactly as to `ContextEngine` /
-`ContextPlanetFaces`. So "should MainMenu and the init Context be one entity?" resolves to
+purpose, and it applies to `SingletonContextInitialization` exactly as to `SingletonContextEngine` /
+`MultiContextPlanetFaces`. So "should MainMenu and the init Context be one entity?" resolves to
 **no**; the earlier co-location idea was inconsistent with the Context principle and is
 retracted. Co-location (A) is right only for genuinely private, single-consumer state — the
 init state is not that.
@@ -389,7 +389,7 @@ playable and verifiable before the next. Read the reference `main.js` for the
 behavior each should reproduce; don't port its code.
 
 0. **Bare base** (Phase 0): stripped main project, walk around flat ground.
-1. **MainMenu + init sets.** Add `EntityComponentContextInitialization` (the
+1. **MainMenu + init sets.** Add `EntityComponentSingletonContextInitialization` (the
    selectable `{planetRadius, spawnFaceIndex, spawnDistanceFromPlanet}` presets +
    chosen/confirmed state) and `EntityComponentMainMenu` (GUI showing the init-set
    choices while unconfirmed; on confirm, record the choice and flip to Playing
@@ -410,7 +410,7 @@ behavior each should reproduce; don't port its code.
    while the per-world mesh is disposable — a world that's never picked never fetches its
    model. Full rationale in `DATA_DRIVEN_WORLDS_AND_PREFABS.md` §8 ("model / heavy-asset
    loading").
-3. **`EntityComponentContextPlanetFaces` + spawn.** Parse the geometry into per-face
+3. **`EntityComponentMultiContextPlanetFaces` + spawn.** Parse the geometry into per-face
    data (normal-hash buckets → normal/center/outer-walls) and expose the lookups
    (`getFaceNormal`, `getFaceCenter`, `getNearestFace`, `isWithinFace`). Use the init
    set's `spawnFaceIndex` + `spawnDistanceFromPlanet` to place the player (along that

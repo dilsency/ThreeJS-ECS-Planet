@@ -292,9 +292,9 @@ export class EntityComponentPlayerController extends EntityComponent
         // EntityComponentCameraControllerFirstPerson (see
         // BARE_MINIMUM_THREEJS_EXCEPTION_OR_NOT.md's "Pattern C:
         // self-attaching sibling components" section). Which concrete class
-        // gets attached depends on EntityComponentContextEnvironment's
+        // gets attached depends on EntityComponentSingletonContextEnvironment's
         // touch-primary detection, but main.js never needs to know that.
-        const componentEnvironment = this.methodGetEntityByName("EnvironmentContext")?.methodGetComponent("EntityComponentContextEnvironment");
+        const componentEnvironment = this.methodGetEntityByName("SingletonContextEnvironment")?.methodGetComponent("EntityComponentSingletonContextEnvironment");
         const componentInput = componentEnvironment.methodGetIsTouchPrimary()
             ? new EntityComponentPlayerControllerInputTouch()
             : new EntityComponentPlayerControllerInput();
@@ -393,12 +393,12 @@ export class EntityComponentPlayerController extends EntityComponent
 
         // add throttle here
 
-        // we know that EngineContext exists
+        // we know that SingletonContextEngine exists
         // and that cameraPivot is in there
         // so we can get it from there
 
         // this "bubbles" up to the parent method in the base class EntityComponent in entity_component.js
-        // and the method there does the lookup of camera pivot via EngineContext for us
+        // and the method there does the lookup of camera pivot via SingletonContextEngine for us
         // just a shorthand, basically
         this.#cameraPivot = this.methodGetCameraPivot();
     }

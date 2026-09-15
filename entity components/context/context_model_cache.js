@@ -5,7 +5,7 @@ import {EntityComponent} from "../../classes/ECS/entity_component.js";
 import { modelRegistry } from "../../classes/loading-from-json/registry.js";
 import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
 
-export class EntityComponentContextModelCache extends EntityComponent
+export class EntityComponentSingletonContextModelCache extends EntityComponent
 {
     // #region privates
     // modelName -> Promise<THREE.BufferGeometry>

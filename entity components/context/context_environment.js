@@ -16,7 +16,7 @@ import {EntityComponent} from "../../classes/ECS/entity_component.js";
 // elsewhere (see NAMING_CONVENTIONS.md's "Entity-component naming
 // families" section for the fuller reasoning, including an explicit note
 // to revisit this decision if that ever changes).
-export class EntityComponentContextEnvironment extends EntityComponent
+export class EntityComponentSingletonContextEnvironment extends EntityComponent
 {
     // #region bare minimum
 

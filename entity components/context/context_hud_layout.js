@@ -27,13 +27,13 @@ export const HUDPanelYawBehaviorEnum = Object.freeze({
 // methodComputeLayout()'s own comments for the full derivation) rather than
 // guessed world-space numbers. Read by two siblings on the "hudPanel" entity
 // - EntityComponentTestCubeHUD and EntityComponentBackgroundPlane - which is
-// why this lives in its own EntityComponentContext-family component (see
+// why this lives in its own EntityComponentSingletonContext-family component (see
 // NAMING_CONVENTIONS.md's "Entity-component naming families" section)
 // instead of being owned by either one of them; "HUDLayout" rather than
 // "CubeHUDLayout" since the panel's fit is just as much this component's job
 // as the cube's own position/yaw. Formerly `computeCubeHUDLayout()`, a bare
 // closure in main.js (see TODO.md item 5.2).
-export class EntityComponentContextHUDLayout extends EntityComponent
+export class EntityComponentSingletonContextHUDLayout extends EntityComponent
 {
     // Shared by both the real cube and the panel-fitting math, so changing
     // scale (size) or rotation (tiltFactor) here keeps the two in sync

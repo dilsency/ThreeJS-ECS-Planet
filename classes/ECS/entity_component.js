@@ -51,9 +51,9 @@ export class EntityComponent
     }
 
     // getters - shorthand for bare-minimum Three.js state owned by the
-    // "EngineContext" entity's EntityComponentContextEngine - see
+    // "SingletonContextEngine" entity's EntityComponentSingletonContextEngine - see
     // BARE_MINIMUM_THREEJS_EXCEPTION_OR_NOT.md and NAMING_CONVENTIONS.md
-    // (the "EntityComponentContext*" naming family). All six bare-minimum
+    // (the "EntityComponentSingletonContext*" naming family). All six bare-minimum
     // values are covered now. None of these cache the lookup itself - a
     // per-frame consumer should resolve once in its own methodInitialize()
     // and stash the result, the way EntityComponentCameraControllerFirstPerson
@@ -62,27 +62,27 @@ export class EntityComponent
 
     methodGetScene()
     {
-        return this.methodGetEntityByName("EngineContext")?.methodGetComponent("EntityComponentContextEngine")?.methodGetScene();
+        return this.methodGetEntityByName("SingletonContextEngine")?.methodGetComponent("EntityComponentSingletonContextEngine")?.methodGetScene();
     }
     methodGetSceneHUD()
     {
-        return this.methodGetEntityByName("EngineContext")?.methodGetComponent("EntityComponentContextEngine")?.methodGetSceneHUD();
+        return this.methodGetEntityByName("SingletonContextEngine")?.methodGetComponent("EntityComponentSingletonContextEngine")?.methodGetSceneHUD();
     }
     methodGetRenderer()
     {
-        return this.methodGetEntityByName("EngineContext")?.methodGetComponent("EntityComponentContextEngine")?.methodGetRenderer();
+        return this.methodGetEntityByName("SingletonContextEngine")?.methodGetComponent("EntityComponentSingletonContextEngine")?.methodGetRenderer();
     }
     methodGetCamera()
     {
-        return this.methodGetEntityByName("EngineContext")?.methodGetComponent("EntityComponentContextEngine")?.methodGetCamera();
+        return this.methodGetEntityByName("SingletonContextEngine")?.methodGetComponent("EntityComponentSingletonContextEngine")?.methodGetCamera();
     }
     methodGetCameraPivot()
     {
-        return this.methodGetEntityByName("EngineContext")?.methodGetComponent("EntityComponentContextEngine")?.methodGetCameraPivot();
+        return this.methodGetEntityByName("SingletonContextEngine")?.methodGetComponent("EntityComponentSingletonContextEngine")?.methodGetCameraPivot();
     }
     methodGetCameraHUD()
     {
-        return this.methodGetEntityByName("EngineContext")?.methodGetComponent("EntityComponentContextEngine")?.methodGetCameraHUD();
+        return this.methodGetEntityByName("SingletonContextEngine")?.methodGetComponent("EntityComponentSingletonContextEngine")?.methodGetCameraHUD();
     }
 
     // getters, but actually for the parent

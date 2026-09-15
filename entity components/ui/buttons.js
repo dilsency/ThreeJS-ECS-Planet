@@ -45,17 +45,17 @@ export class EntityComponentButtonReturnToMainMenu extends EntityComponent
     // #region event listener handlers
     methodOnClickButton(e)
     {
-        // we need to get EntityComponentContextInitialization (context_initialization.js)
+        // we need to get EntityComponentSingletonContextInitialization (context_initialization.js)
         // that context entity-component holds .methodReturnToMainMenu
 
         // inline version : harder to read
-        //this.methodGetEntityByName("InitializationContext")?.methodGetComponent("EntityComponentContextInitialization")?.methodReturnToMainMenu();
+        //this.methodGetEntityByName("SingletonContextInitialization")?.methodGetComponent("EntityComponentSingletonContextInitialization")?.methodReturnToMainMenu();
 
         // long version with returns; actually still hard to read
         // could also use .methodGetEnititiesByComponent or whatever
-        const entityInitialization = this.methodGetEntityByName("InitializationContext");
+        const entityInitialization = this.methodGetEntityByName("SingletonContextInitialization");
         if(entityInitialization == null){return;}
-        const entityComponentContextInitialization = entityInitialization.methodGetComponent("EntityComponentContextInitialization");
+        const entityComponentContextInitialization = entityInitialization.methodGetComponent("EntityComponentSingletonContextInitialization");
         if(entityComponentContextInitialization == null){return;}
         entityComponentContextInitialization.methodReturnToMainMenu();
     }

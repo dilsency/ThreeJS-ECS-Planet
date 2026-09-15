@@ -12,11 +12,11 @@ import {EntityComponent} from "../../classes/ECS/entity_component.js";
 // see MULTIPLAYER_TOPOLOGY_AND_SYNC.md). No single one of those two
 // consumers owns this more than the other, so it lives here instead - see
 // NAMING_CONVENTIONS.md's "Entity-component naming families" section for
-// why this takes the EntityComponentContext prefix, and TODO.md item 6.2
+// why this takes the EntityComponentSingletonContext prefix, and TODO.md item 6.2
 // for the fuller design history. Attached to its own dedicated entity,
 // built by main.js's initContextComponents() before either of its two
 // consumers.
-export class EntityComponentContextWorldLayout extends EntityComponent
+export class EntityComponentSingletonContextWorldLayout extends EntityComponent
 {
     #groundSize = new THREE.Vector3(20, 0.2, 20);
     #groundPositionOffset = {x: 0, y: -1.5, z: 0};

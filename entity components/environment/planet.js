@@ -38,7 +38,7 @@ export class EntityComponentPlanet extends EntityComponent {
         // #endregion early return
 
         // #region get component
-        const entityComponentModelCache = this.methodGetEntityByName("ModelCacheContext")?.methodGetComponent("EntityComponentContextModelCache");
+        const entityComponentModelCache = this.methodGetEntityByName("SingletonContextModelCache")?.methodGetComponent("EntityComponentSingletonContextModelCache");
         // #endregion get component
 
         // #region early return

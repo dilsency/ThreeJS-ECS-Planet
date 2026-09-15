@@ -2,7 +2,7 @@
 
 > Scope: how the icosahedron planet is loaded, sized, shown, and torn down (**slice #1**,
 > the mesh), and — later — parsed into per-face gravity data (**slice #2**,
-> `ContextPlanetFaces`, deferred). Builds on the lazy model-loading decisions in
+> `MultiContextPlanetFaces`, deferred). Builds on the lazy model-loading decisions in
 > `DATA_DRIVEN_WORLDS_AND_PREFABS.md` §8 and increments 2–3 of `ECS_CONVERSION_PLAN.md`.
 
 ---
@@ -15,15 +15,15 @@ ground at a random X/Z; spawn-on-face is slice #2.
 
 ### Design (settled 2026-09-11)
 - **Entity topology.** A `planet` entity carries **only** `EntityComponentPlanet`. The face
-  data (`ContextPlanetFaces`, slice #2) is a **separate** Context entity — never a sibling
+  data (`MultiContextPlanetFaces`, slice #2) is a **separate** Context entity — never a sibling
   (see `NAMING_CONVENTIONS.md` §6, "Context components live alone on their own entity").
 - **Folder / name.** `entity components/environment/planet.js` → `EntityComponentPlanet`
   (plain domain name; it's a scene object, not a Context/Manager/Controller).
 - **Params (from world JSON).** `{ model: "Icosahedron", radius: <n>, color: "#FFFFFF" }`.
   `color` is per-world (default white, immaterial). Opt-in: a world without a planet just
   omits the entity.
-- **Load — async, lazy, memoized via `ModelCacheContext`.** `async methodInitialize()` looks up
-  the session-lived **`ModelCacheContext`** and `await`s `methodGetModelGeometry(model)`. That
+- **Load — async, lazy, memoized via `SingletonContextModelCache`.** `async methodInitialize()` looks up
+  the session-lived **`SingletonContextModelCache`** and `await`s `methodGetModelGeometry(model)`. That
   context owns the load (`modelRegistry[model]()` → `OBJLoader.loadAsync`) and **memoizes the
   unscaled geometry** in a `Map` keyed by model name. A world never picked never fetches its
   model; re-entry reuses the cached geometry. The planet imports neither `modelRegistry` nor
@@ -36,7 +36,7 @@ ground at a random X/Z; spawn-on-face is slice #2.
   the cached geometry (it's a persistent asset — the kept-vs-disposable resource tiers of the
   deferred-deletion design).
 - **Exposes** (for slice #2): `methodGetGeometry()` (the unscaled geometry) + `methodGetRadius()`.
-  `ContextPlanetFaces` will multiply face centers by `radius` for world space; face normals
+  `MultiContextPlanetFaces` will multiply face centers by `radius` for world space; face normals
   are scale-invariant under uniform scale.
 
 ### Runtime flow — data → class → instance → mesh
@@ -48,7 +48,7 @@ Generation is *generic*: the code never names the planet — **data** does. Two 
 ```mermaid
 flowchart TD
     A["worldDefault.json — data<br/>declares a 'planet' entity + params"]
-    B["ContextInitialization.methodConfirm()<br/>broadcasts 'initialization.confirmed'"]
+    B["SingletonContextInitialization.methodConfirm()<br/>broadcasts 'initialization.confirmed'"]
     C["WorldGenerator.methodGenerate()<br/>loops worldRegistry[world].entities"]
     D["registry.js — entityComponentRegistry<br/>'EntityComponentPlanet' string → class"]
     E["new EntityComponentPlanet(params)<br/>attached → methodInitialize() runs"]
@@ -60,7 +60,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     A["EntityComponentPlanet.methodInitialize()<br/>asks cache for model 'Icosahedron'"]
-    B["ModelCacheContext.methodGetModelGeometry()<br/>memoized: load once, reuse"]
+    B["SingletonContextModelCache.methodGetModelGeometry()<br/>memoized: load once, reuse"]
     C["registry.js — modelRegistry[name]()<br/>lazy dynamic import → asset URL"]
     D["assets/models/Icosahedron.obj<br/>OBJLoader.loadAsync → BufferGeometry"]
     E["Mesh built, scaled, added to scene<br/>per-world material; geometry cached"]
@@ -70,7 +70,7 @@ flowchart TD
 **The seams:** the planet is named **by string in data**; the two **registries** are the only
 string→real-thing bridges — `entityComponentRegistry` (string→class) and `modelRegistry`
 (string→lazy asset URL). The generator instantiates; the instance self-resolves its geometry
-through `ModelCacheContext`. (Pretty standalone copies live in the shared threejs notes folder:
+through `SingletonContextModelCache`. (Pretty standalone copies live in the shared threejs notes folder:
 `planet_generation_flow.svg` / `planet_model_resolution_flow.svg`.)
 
 ### Implementation steps → a visible planet
@@ -79,15 +79,15 @@ through `ModelCacheContext`. (Pretty standalone copies live in the shared threej
    one entry per model: `{ "Icosahedron": modelIcosahedron }`, where `modelIcosahedron()` returns
    `import('../../assets/models/Icosahedron.obj?url').then(m => m.default)`. (The `import.meta.glob`
    auto-collect form is the deferred scale-up — see `SCALE_WHEN_NEEDED.md`.)
-3. **`EntityComponentContextModelCache`** in `entity components/context/context_model_cache.js` —
+3. **`EntityComponentSingletonContextModelCache`** in `entity components/context/context_model_cache.js` —
    owns the cache + the load: `modelRegistry[name]()` → `OBJLoader.loadAsync` (from
    `three/addons/loaders/OBJLoader.js`) → the first mesh's geometry, memoized in a `Map` keyed by
    model name. Built once at startup in `main.js` `initContextComponents()` as the
-   `"ModelCacheContext"` entity (session-lived, never torn down).
+   `"SingletonContextModelCache"` entity (session-lived, never torn down).
 4. **`EntityComponentPlanet`** in `entity components/environment/planet.js` — the design above;
-   imports only `THREE` + `EntityComponent`, looks up `ModelCacheContext`, and `await`s the
+   imports only `THREE` + `EntityComponent`, looks up `SingletonContextModelCache`, and `await`s the
    geometry (so it never imports `modelRegistry`/`OBJLoader` — no import cycle).
-5. **Register** `EntityComponentPlanet` in `entityComponentRegistry`. (`ModelCacheContext` is a
+5. **Register** `EntityComponentPlanet` in `entityComponentRegistry`. (`SingletonContextModelCache` is a
    startup context — built in `main.js`, *not* registered here.)
 6. **Data.** Add a `planet` entity to `worldDefault.json` (and `worldB.json`):
    `{ "name": "planet", "components": [ { "type": "EntityComponentPlanet",
@@ -101,7 +101,7 @@ menu↔world cycle cleanly. (Player-on-flat-ground is expected at this stage.)
 
 ---
 
-## Slice #2 — `ContextPlanetFaces` (deferred)
+## Slice #2 — `MultiContextPlanetFaces` (deferred)
 
 The per-face parse (normal-hash buckets → normal / center / outer-walls), `getNearestFace` /
 `isWithinFace`, world-space centers via `radius`, and the `helper_mesh.js` port with its two

@@ -95,9 +95,17 @@ decide their own reaction".)
 Component classes are `EntityComponent<RoleWord><Domain>`, **role word first** so the
 family clusters in sorting/autocomplete:
 
-- **`Context`** — shared/derived state that exists to be *read* by others, with no
-  per-frame behavior of its own: `EntityComponentContextEngine`,
-  `EntityComponentContextInitialization`, `EntityComponentContextHUDLayout`.
+- **`SingletonContext` / `MultiContext`** — shared/derived state that exists to be *read* by
+  others, with no per-frame behavior of its own. The `Context` role comes in **two variants by
+  cardinality**, and the variant word (not a bare `Context`) is always used:
+  - **`SingletonContext`** — exactly **one** instance, looked up by a **fixed name**
+    (`methodGetEntityByName("SingletonContextEngine")`). Built once (usually at startup),
+    globally unique: `EntityComponentSingletonContextEngine`,
+    `EntityComponentSingletonContextInitialization`, `EntityComponentSingletonContextModelCache`.
+  - **`MultiContext`** — **many** instances, one per thing, so it's never "the" anything;
+    consumers reference a **specific** instance explicitly via a **`$ref`** (the lazy
+    dependency-resolution pattern), not a fixed-name lookup. First case:
+    `EntityComponentMultiContextPlanetFaces` (one per planet).
 - **`Manager`** — an ongoing **sync/spawn lifecycle**: `EntityComponentLightManager`
   (per-frame sync), and `RemotePlayerManager` when multiplayer returns.
 - **`Controller`** — real-time **input-driven** behavior: `EntityComponentPlayerController`,
@@ -106,17 +114,17 @@ family clusters in sorting/autocomplete:
   `EntityComponentDirectionalLight`, `EntityComponentTestCube`, `EntityComponentSkybox`,
   `EntityComponentButtonPointerLock`.
 
-Reserve `Context` / `Manager` / `Controller` for those exact roles; don't use them as
-generic filler. Rationale and the "single-consumer Context is fine, conditionally" nuance
-live in the shared doc.
+Reserve `SingletonContext` / `MultiContext` / `Manager` / `Controller` for those exact roles;
+don't use them as generic filler. Rationale and the "single-consumer Context is fine,
+conditionally" nuance live in the shared doc.
 
 **Context components live alone on their own entity.** A `Context` gets a **dedicated
 entity** and is **never co-located with non-Context components on the same entity**. Its
 ownership is independent of any single consumer — that's the whole point of the role — so
 bolting it onto a consumer's entity would couple it in the wrong direction. Holds for
-`ContextEngine`, `ContextInitialization`, `ContextWorldLayout`, and the coming
-`ContextPlanetFaces` alike: e.g. the planet **mesh** (`EntityComponentPlanet`) is its own
-entity, and the planet's **face data** (`ContextPlanetFaces`) is a *separate* Context
+`SingletonContextEngine`, `SingletonContextInitialization`, `SingletonContextWorldLayout`, and the coming
+`MultiContextPlanetFaces` alike: e.g. the planet **mesh** (`EntityComponentPlanet`) is its own
+entity, and the planet's **face data** (`MultiContextPlanetFaces`) is a *separate* Context
 entity that resolves that mesh's geometry — never a sibling component on one shared entity.
 (Cross-project rationale: shared `ECS_DESIGN_PATTERNS_THREEJS.md` → "Context components".)
 
@@ -132,12 +140,12 @@ speculatively — lift the hook up only when a genuine second consumer appears.
 ## 8. Entity names & component keys (strings)
 
 - **Entities** are added with a string name via `methodAddEntity(entity, "Name")`.
-  Context entities are named `"<Domain>Context"` — `"EngineContext"`,
-  `"InitializationContext"`, `"EnvironmentContext"`, `"WorldLayoutContext"`,
-  `"PlayerInitializationContext"`, `"LocalPlayerIdentityContext"`. Gameplay entities take
+  Context entities are named `"<Domain>Context"` — `"SingletonContextEngine"`,
+  `"SingletonContextInitialization"`, `"SingletonContextEnvironment"`, `"SingletonContextWorldLayout"`,
+  `"SingletonContextPlayerInitialization"`, `"SingletonContextLocalPlayerIdentity"`. Gameplay entities take
   a plain lowercase name — `"player"`, `"sun"`, `"MainMenu"`, `"WorldGenerator"`.
 - **Components** are keyed by their **class-name string** via
-  `methodAddComponentWithName("EntityComponentContextEngine", instance)`, and looked up by
+  `methodAddComponentWithName("EntityComponentSingletonContextEngine", instance)`, and looked up by
   that same string. (A rarely-used `__suffix` form allows multiples of one class.)
 - **Data-driven** entities/components come from JSON and are resolved through the
   registries — see `md/DATA_DRIVEN_WORLDS_AND_PREFABS.md`.

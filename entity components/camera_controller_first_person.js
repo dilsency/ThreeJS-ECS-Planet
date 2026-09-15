@@ -4,7 +4,7 @@ import {EntityComponent} from "../classes/ECS/entity_component.js";
 import {debugOverlaySetLine} from "./temp_debug_overlay.js"; // TEMPORARY - see that file's header comment
 */
 
-export class EntityComponentCameraControllerFirstPersonInput extends EntityComponent
+export class EntityComponentCameraControllerFirstPersonInputMK extends EntityComponent
 {
     // #region privates
     #params = null;
@@ -308,7 +308,7 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
 {
     // #region privates
     // scene/camera/cameraPivot used to be constructor params - now resolved
-    // once (see methodInitialize()) via EngineContext (see
+    // once (see methodInitialize()) via SingletonContextEngine (see
     // BARE_MINIMUM_THREEJS_EXCEPTION_OR_NOT.md) and cached here, since this
     // component reads and mutates camera/cameraPivot every single
     // methodUpdate() call - a fresh methodGetCamera()/methodGetCameraPivot()
@@ -363,13 +363,13 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
         // main.js - see BARE_MINIMUM_THREEJS_EXCEPTION_OR_NOT.md's "Pattern
         // C: self-attaching sibling components" section. Which concrete
         // class actually gets attached depends on
-        // EntityComponentContextEnvironment's touch-primary detection, but
+        // EntityComponentSingletonContextEnvironment's touch-primary detection, but
         // main.js never needs to know that, or that there are two classes
         // to choose between at all.
-        const componentEnvironment = this.methodGetEntityByName("EnvironmentContext")?.methodGetComponent("EntityComponentContextEnvironment");
+        const componentEnvironment = this.methodGetEntityByName("SingletonContextEnvironment")?.methodGetComponent("EntityComponentSingletonContextEnvironment");
         const componentInput = componentEnvironment.methodGetIsTouchPrimary()
             ? new EntityComponentCameraControllerFirstPersonInputTouch()
-            : new EntityComponentCameraControllerFirstPersonInput();
+            : new EntityComponentCameraControllerFirstPersonInputMK();
         this.methodGetParent().methodAddComponentWithName("EntityComponentCameraControllerFirstPersonInput", componentInput);
 
         this.#scene = this.methodGetScene();
@@ -380,10 +380,10 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
         // via constructor params, the same self-lookup shape as
         // camera/cameraPivot/scene above, just one level further out (this
         // component doesn't need to know spawn positions come from ground
-        // bounds at all - EntityComponentContextPlayerInitialization owns
+        // bounds at all - EntityComponentSingletonContextPlayerInitialization owns
         // that). See NAMING_CONVENTIONS.md's "A single consumer is fine,
         // conditionally" section and TODO.md item 6's sub-item 6.
-        const componentPlayerInitialization = this.methodGetEntityByName("PlayerInitializationContext")?.methodGetComponent("EntityComponentContextPlayerInitialization");
+        const componentPlayerInitialization = this.methodGetEntityByName("SingletonContextPlayerInitialization")?.methodGetComponent("EntityComponentSingletonContextPlayerInitialization");
         const spawnPosition = componentPlayerInitialization.methodGetSpawnPosition();
         this.#cameraPivot.position.set(spawnPosition.x, 0, spawnPosition.z);
 

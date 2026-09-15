@@ -143,7 +143,7 @@ export class EntityComponentDirectionalLightHUD extends EntityComponentDirection
 // The "source reference point" used to be a generic constructor param
 // (`sourceReferencePoint`, documented as "e.g. the main camera") - in
 // practice this project only ever passed the world camera, so it's now
-// fetched directly via `this.methodGetCamera()` (EngineContext - see
+// fetched directly via `this.methodGetCamera()` (SingletonContextEngine - see
 // BARE_MINIMUM_THREEJS_EXCEPTION_OR_NOT.md) instead of staying generic for
 // a genericity nothing in this codebase actually used. `targetReferencePoint`
 // (the HUD cube component) stays a constructor param - it's a real

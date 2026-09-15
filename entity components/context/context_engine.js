@@ -15,17 +15,17 @@ import {EntityComponent} from "../../classes/ECS/entity_component.js";
 // constructor params from main.js. See
 // BARE_MINIMUM_THREEJS_EXCEPTION_OR_NOT.md for the full design discussion -
 // all six bare-minimum values are converted now.
-// Attached to a single entity named "EngineContext", constructed by
-// main.js's initEngineContext() before any other entity/component, so that
+// Attached to a single entity named "SingletonContextEngine", constructed by
+// main.js's initSingletonContextEngine() before any other entity/component, so that
 // every other component's methodGetX() call can rely on it already
-// existing (see that doc's "Ensuring EngineContext initializes before
+// existing (see that doc's "Ensuring SingletonContextEngine initializes before
 // everything else" section).
 //
 // Deliberately synchronous: methodInitialize() only ever stashes
 // already-constructed object references, never awaits anything - the
 // "constructed first in main.js" ordering guarantee depends on that staying
 // true.
-export class EntityComponentContextEngine extends EntityComponent
+export class EntityComponentSingletonContextEngine extends EntityComponent
 {
     // #region privates
     #params = null; // {scene, sceneHUD, renderer, camera, cameraPivot, cameraHUD}

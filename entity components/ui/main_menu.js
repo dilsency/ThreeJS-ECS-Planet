@@ -25,7 +25,7 @@ export class EntityComponentMainMenu extends EntityComponent
     methodInitialize()
     {
         // context component, get, once
-        this.#componentInitialization = this.methodGetEntityByName("InitializationContext")?.methodGetComponent("EntityComponentContextInitialization");
+        this.#componentInitialization = this.methodGetEntityByName("SingletonContextInitialization")?.methodGetComponent("EntityComponentSingletonContextInitialization");
 
         //
         this.#elementTitle = document.createElement("div");

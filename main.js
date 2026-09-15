@@ -12,18 +12,18 @@ import {EntityManager} from "./classes/ECS/entity_manager.js";
 import {Entity} from "./classes/ECS/entity.js";
 import {EntityComponent} from "./classes/ECS/entity_component.js";
 // context components , most important
-import {EntityComponentContextEngine} from "./entity components/context/context_engine.js";
-import {EntityComponentContextInitialization} from "./entity components/context/context_initialization.js";
+import {EntityComponentSingletonContextEngine} from "./entity components/context/context_engine.js";
+import {EntityComponentSingletonContextInitialization} from "./entity components/context/context_initialization.js";
 // generator components
 import {EntityComponentMainMenu} from "./entity components/ui/main_menu.js";
 import {EntityComponentWorldGenerator} from "./entity components/generation/world_generator.js";
 // context components , less important
-import {EntityComponentContextModelCache} from "./entity components/context/context_model_cache.js";
-import {EntityComponentContextHUDLayout, HUDCubeHorizontalAlignmentEnum} from "./entity components/context/context_hud_layout.js";
-import {EntityComponentContextLocalPlayerIdentity} from "./entity components/context/context_local_player_identity.js";
-import {EntityComponentContextWorldLayout} from "./entity components/context/context_world_layout.js";
-import {EntityComponentContextPlayerInitialization} from "./entity components/context/context_player_initialization.js";
-import {EntityComponentContextEnvironment} from "./entity components/context/context_environment.js";
+import {EntityComponentSingletonContextModelCache} from "./entity components/context/context_model_cache.js";
+import {EntityComponentSingletonContextHUDLayout, HUDCubeHorizontalAlignmentEnum} from "./entity components/context/context_hud_layout.js";
+import {EntityComponentSingletonContextLocalPlayerIdentity} from "./entity components/context/context_local_player_identity.js";
+import {EntityComponentSingletonContextWorldLayout} from "./entity components/context/context_world_layout.js";
+import {EntityComponentSingletonContextPlayerInitialization} from "./entity components/context/context_player_initialization.js";
+import {EntityComponentSingletonContextEnvironment} from "./entity components/context/context_environment.js";
 // entity components
 /*
 import {EntityComponentCameraControllerFirstPerson} from "./entity components/camera_controller_first_person.js";
@@ -149,15 +149,15 @@ function init()
     }
 
     //
-    // Builds the "EngineContext" entity before anything else - deliberately
+    // Builds the "SingletonContextEngine" entity before anything else - deliberately
     // its own step, not folded into initEntityComponents(), so the ordering
-    // guarantee ("EngineContext exists before any component that might call
+    // guarantee ("SingletonContextEngine exists before any component that might call
     // this.methodGetScene()/this.methodGetRenderer()") is visible at
     // init()'s own top-level call sequence rather than depending on this
     // being the first few statements inside a much larger function. See
-    // BARE_MINIMUM_THREEJS_EXCEPTION_OR_NOT.md's "Ensuring EngineContext
+    // BARE_MINIMUM_THREEJS_EXCEPTION_OR_NOT.md's "Ensuring SingletonContextEngine
     // initializes before everything else" section.
-    function initEngineContext()
+    function initSingletonContextEngine()
     {
         //
         console.log("init engine context");
@@ -171,40 +171,40 @@ function init()
         // ...and we don't have to pass them around as parameters
 
         //
-        const entityEngineContext = new Entity(null);
-        entityManager.methodAddEntity(entityEngineContext, "EngineContext");
-        entityEngineContext.methodAddComponentWithName("EntityComponentContextEngine", new EntityComponentContextEngine({scene: scene, sceneHUD: sceneHUD, renderer: renderer, camera: camera, cameraPivot: cameraPivot, cameraHUD: cameraHUD,}));
+        const entitySingletonContextEngine = new Entity(null);
+        entityManager.methodAddEntity(entitySingletonContextEngine, "SingletonContextEngine");
+        entitySingletonContextEngine.methodAddComponentWithName("EntityComponentSingletonContextEngine", new EntityComponentSingletonContextEngine({scene: scene, sceneHUD: sceneHUD, renderer: renderer, camera: camera, cameraPivot: cameraPivot, cameraHUD: cameraHUD,}));
     }
 
     //
-    // Builds EntityComponentContext*-family components (other than
-    // EngineContext, which has its own initEngineContext() step above) that
+    // Builds EntityComponentSingletonContext*-family components (other than
+    // SingletonContextEngine, which has its own initSingletonContextEngine() step above) that
     // need to exist before initEntityComponents(), since their consumers
     // read from them at their own construction time. Named generally
     // (rather than initLocalPlayerIdentity(), what this was originally
-    // called, before EntityComponentContextWorldLayout below became the
+    // called, before EntityComponentSingletonContextWorldLayout below became the
     // second component built here) so any future ones can be added here
     // too, instead of each one getting its own narrowly-named initXxx()
     // function.
     //
-    // - EntityComponentContextLocalPlayerIdentity (see
+    // - EntityComponentSingletonContextLocalPlayerIdentity (see
     //   entity components/context/context_local_player_identity.js): read
     //   by three different entities' components (the player's own network
     //   broadcast, cubeHUD, and the remote-player manager) at their own
     //   construction time.
-    // - EntityComponentContextWorldLayout (see
+    // - EntityComponentSingletonContextWorldLayout (see
     //   entity components/context/context_world_layout.js): the ground's
     //   real footprint, read by the ground's own EntityComponentTestCube
     //   construction and by player-spawn randomization, so the two can
     //   never drift out of sync.
-    // - EntityComponentContextPlayerInitialization (see
+    // - EntityComponentSingletonContextPlayerInitialization (see
     //   entity components/context/context_player_initialization.js): the
     //   local player's spawn position, self-looked-up by
     //   EntityComponentCameraControllerFirstPerson. Built after
-    //   EntityComponentContextWorldLayout below, on purpose - it self-looks-up
+    //   EntityComponentSingletonContextWorldLayout below, on purpose - it self-looks-up
     //   that component in its own methodInitialize(), so WorldLayout has to
     //   already exist by the time it runs.
-    // - EntityComponentContextEnvironment (see
+    // - EntityComponentSingletonContextEnvironment (see
     //   entity components/context/context_environment.js): touch-vs-pointer
     //   and native-shell-vs-browser detection, self-looked-up by
     //   EntityComponentPeerConnectionUI (and, going forward, whatever
@@ -216,33 +216,33 @@ function init()
 
         // main menu
         const entityInitialization = new Entity(null);
-        entityManager.methodAddEntity(entityInitialization, "InitializationContext");
-        entityInitialization.methodAddComponentWithName("EntityComponentContextInitialization", new EntityComponentContextInitialization(null));
+        entityManager.methodAddEntity(entityInitialization, "SingletonContextInitialization");
+        entityInitialization.methodAddComponentWithName("EntityComponentSingletonContextInitialization", new EntityComponentSingletonContextInitialization(null));
 
         //
         const entityModelCache = new Entity(null);
-        entityManager.methodAddEntity(entityModelCache, "ModelCacheContext");
-        entityModelCache.methodAddComponentWithName("EntityComponentContextModelCache", new EntityComponentContextModelCache(null));
+        entityManager.methodAddEntity(entityModelCache, "SingletonContextModelCache");
+        entityModelCache.methodAddComponentWithName("EntityComponentSingletonContextModelCache", new EntityComponentSingletonContextModelCache(null));
 
         //
         const entityLocalPlayerIdentity = new Entity(null);
-        entityManager.methodAddEntity(entityLocalPlayerIdentity, "LocalPlayerIdentityContext");
-        entityLocalPlayerIdentity.methodAddComponentWithName("EntityComponentContextLocalPlayerIdentity", new EntityComponentContextLocalPlayerIdentity(null));
+        entityManager.methodAddEntity(entityLocalPlayerIdentity, "SingletonContextLocalPlayerIdentity");
+        entityLocalPlayerIdentity.methodAddComponentWithName("EntityComponentSingletonContextLocalPlayerIdentity", new EntityComponentSingletonContextLocalPlayerIdentity(null));
 
         //
         const entityEnvironment = new Entity(null);
-        entityManager.methodAddEntity(entityEnvironment, "EnvironmentContext");
-        entityEnvironment.methodAddComponentWithName("EntityComponentContextEnvironment", new EntityComponentContextEnvironment(null));
+        entityManager.methodAddEntity(entityEnvironment, "SingletonContextEnvironment");
+        entityEnvironment.methodAddComponentWithName("EntityComponentSingletonContextEnvironment", new EntityComponentSingletonContextEnvironment(null));
 
         //
         const entityWorldLayout = new Entity(null);
-        entityManager.methodAddEntity(entityWorldLayout, "WorldLayoutContext");
-        entityWorldLayout.methodAddComponentWithName("EntityComponentContextWorldLayout", new EntityComponentContextWorldLayout(null));
+        entityManager.methodAddEntity(entityWorldLayout, "SingletonContextWorldLayout");
+        entityWorldLayout.methodAddComponentWithName("EntityComponentSingletonContextWorldLayout", new EntityComponentSingletonContextWorldLayout(null));
 
         //
         const entityPlayerInitialization = new Entity(null);
-        entityManager.methodAddEntity(entityPlayerInitialization, "PlayerInitializationContext");
-        entityPlayerInitialization.methodAddComponentWithName("EntityComponentContextPlayerInitialization", new EntityComponentContextPlayerInitialization(null));
+        entityManager.methodAddEntity(entityPlayerInitialization, "SingletonContextPlayerInitialization");
+        entityPlayerInitialization.methodAddComponentWithName("EntityComponentSingletonContextPlayerInitialization", new EntityComponentSingletonContextPlayerInitialization(null));
     }
 
     //
@@ -267,17 +267,17 @@ function init()
         
         // Built by initContextComponents() above, before this function ran -
         // see entity components/context/context_world_layout.js.
-        // (EntityComponentContextLocalPlayerIdentity is no longer fetched
+        // (EntityComponentSingletonContextLocalPlayerIdentity is no longer fetched
         // here - every consumer self-looks it up now, see
         // BARE_MINIMUM_THREEJS_EXCEPTION_OR_NOT.md's "Player-identity hooks
         // on EntityComponentTestCube" section. Local player spawn position -
-        // formerly resolved here too, via EntityComponentContextWorldLayout -
+        // formerly resolved here too, via EntityComponentSingletonContextWorldLayout -
         // is likewise no longer fetched here: EntityComponentCameraControllerFirstPerson
-        // self-looks-up EntityComponentContextPlayerInitialization itself now,
+        // self-looks-up EntityComponentSingletonContextPlayerInitialization itself now,
         // see entity components/context/context_player_initialization.js and
         // NAMING_CONVENTIONS.md's "A single consumer is fine, conditionally"
         // section.)
-        const componentWorldLayout = entityManager.methodGetEntityByName("WorldLayoutContext").methodGetComponent("EntityComponentContextWorldLayout");
+        const componentWorldLayout = entityManager.methodGetEntityByName("SingletonContextWorldLayout").methodGetComponent("EntityComponentSingletonContextWorldLayout");
 
 
         //
@@ -319,8 +319,8 @@ function init()
         // design rationale (formerly a bare computeCubeHUDLayout() closure
         // here, see TODO.md item 5.2). Added first, before the cube/panel
         // themselves, since both need its output as constructor params.
-        const componentHUDLayout = new EntityComponentContextHUDLayout(null);
-        entityHUD.methodAddComponentWithName("EntityComponentContextHUDLayout", componentHUDLayout);
+        const componentHUDLayout = new EntityComponentSingletonContextHUDLayout(null);
+        entityHUD.methodAddComponentWithName("EntityComponentSingletonContextHUDLayout", componentHUDLayout);
 
         const cubeHUDHorizontalAlignment = HUDCubeHorizontalAlignmentEnum.LEFT;
 
@@ -334,7 +334,7 @@ function init()
         entityHUD.methodAddComponentWithName("EntityComponentBackgroundPlane", componentPanelHUD);
 
         // shape/color1/color2 are no longer passed here - EntityComponentTestCubeHUD
-        // self-looks-up EntityComponentContextLocalPlayerIdentity itself now
+        // self-looks-up EntityComponentSingletonContextLocalPlayerIdentity itself now
         // (it has exactly one instantiation in the whole codebase, always the
         // local player) - see BARE_MINIMUM_THREEJS_EXCEPTION_OR_NOT.md's
         // "Player-identity hooks on EntityComponentTestCube" section.
@@ -359,7 +359,7 @@ function init()
         entityLightHUD.methodAddComponentWithName("EntityComponentLightManager", new EntityComponentLightManager({
             source:null,//source:componentLightWorld,// we are making upcoming changes to world generation, so we null this for now
             // sourceReferencePoint is no longer passed here - EntityComponentLightManager
-            // now fetches the world camera itself via methodGetCamera() (EngineContext)
+            // now fetches the world camera itself via methodGetCamera() (SingletonContextEngine)
             targetReferencePoint:componentCubeHUD, // HUD cube: the same offset is re-applied from here
             // facing the sun head-on should fully light the HUD cube's near (camera-facing)
             // side, not its far side — see EntityComponentLightManager's field comment.
@@ -375,7 +375,7 @@ function init()
 
     //
     initECS();
-    initEngineContext();
+    initSingletonContextEngine();
     initContextComponents();
     initEntityComponents();
 

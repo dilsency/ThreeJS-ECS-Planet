@@ -31,8 +31,8 @@ export class EntityComponentWorldGenerator extends EntityComponent
     methodInitialize()
     {
         // context components, get, once
-        this.#componentInitialization = this.methodGetEntityByName("InitializationContext")?.methodGetComponent("EntityComponentContextInitialization");
-        this.#componentEngine = this.methodGetEntityByName("EngineContext")?.methodGetComponent("EntityComponentContextEngine");
+        this.#componentInitialization = this.methodGetEntityByName("SingletonContextInitialization")?.methodGetComponent("EntityComponentSingletonContextInitialization");
+        this.#componentEngine = this.methodGetEntityByName("SingletonContextEngine")?.methodGetComponent("EntityComponentSingletonContextEngine");
 
         // #region message system handler registration
         this.methodRegisterMessageHandlerWithinEntity("initialization.confirmed",

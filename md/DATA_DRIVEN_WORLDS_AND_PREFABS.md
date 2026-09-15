@@ -4,7 +4,7 @@
 > (reusable entity blueprints) as **JSON data**, loaded at world-generation time.
 > This supersedes the earlier "per-World code populate hook" sketch discussed for
 > the generator (see `ECS_CONVERSION_PLAN.md`, the generation increments). It sits
-> underneath the MainMenu → confirm → generate flow: `ContextInitialization` holds
+> underneath the MainMenu → confirm → generate flow: `SingletonContextInitialization` holds
 > the available Worlds, and the world **generator becomes a JSON loader**.
 >
 > Cross-project note: this is project-specific for now. If a second project adopts
@@ -113,7 +113,7 @@ The contract:
   enough. Add a throttle only for a dependency that can be *absent for a long time*.
 - **Bare-minimum objects are exempt.** `camera`/`cameraHUD`/`cameraPivot`/`scene` etc.
   are reachable from `methodInitialize()` via the typed `methodGetCamera*()` accessors
-  and already exist (EngineContext is built first). Lazy resolution is only for
+  and already exist (SingletonContextEngine is built first). Lazy resolution is only for
   **sibling/other-entity components and async meshes**.
 
 ---
@@ -124,7 +124,7 @@ The contract:
   `pointerLockButton`. These move to JSON almost as-is. (`pointerLockButton`'s
   `document` param is environmental — injected by the loader, not authored in JSON.)
 - **Hard / code builder hook → still part of the World:** the HUD trio
-  (`EntityComponentContextHUDLayout` → panel → cube → `EntityComponentLightManager`).
+  (`EntityComponentSingletonContextHUDLayout` → panel → cube → `EntityComponentLightManager`).
   Its params are **computed** from `cameraHUD`'s projection and it is cross-wired, so
   it isn't authored as flat params — but it **is World-scoped** (see below), so the
   World JSON names it as a **builder** entry and the loader calls a registered code
@@ -229,7 +229,7 @@ The world generator becomes the **loader**. It owns *mechanism*, never *content*
   `import('../../assets/models/Icosahedron.obj?url').then(m => m.default)`). Unlike the
   component/prefab/world registries (eager imports), a model resolves **lazily**, so a world the
   player never picks never fetches its model. The lookup + `OBJLoader.loadAsync` + **memoization**
-  live in a dedicated **`EntityComponentContextModelCache`** (a session-lived Context — not the
+  live in a dedicated **`EntityComponentSingletonContextModelCache`** (a session-lived Context — not the
   generator, not the planet component), which holds the loaded geometry as the persistent side of
   the teardown design (kept geometry vs. disposable per-world mesh). Files live in
   **`assets/models/`** (bundled source, not `public/`, per the §6 steer). The `import.meta.glob`
@@ -254,9 +254,9 @@ The world generator becomes the **loader**. It owns *mechanism*, never *content*
   built from day one, even though full disposal lands at increment 4). Keeps shared
   loaded assets (planet geometry) per the deferred-deletion design.
 
-Triggering (Option B messaging, already in place): `ContextInitialization` broadcasts
+Triggering (Option B messaging, already in place): `SingletonContextInitialization` broadcasts
 `initialization.confirmed` → loader `methodGenerate()`, and
-`initialization.returnedToMenu` → loader `methodTeardown()`. `ContextInitialization`
+`initialization.returnedToMenu` → loader `methodTeardown()`. `SingletonContextInitialization`
 adds the generator's component as a second capability-target alongside the existing
 `EntityComponentMainMenu` one.
 
@@ -269,7 +269,7 @@ adds the generator's component as a second capability-target alongside the exist
   reintroduces the exact `%BASE_URL%`/base-path pain already fought with the PWA
   manifest (see `GOTCHAS.md` / the manifest double-base note). Switch to runtime
   `fetch` only if Worlds must be user-editable/hot-loaded later.
-- **`ContextInitialization` evolves, it is not replaced.** Its `InitPreset`
+- **`SingletonContextInitialization` evolves, it is not replaced.** Its `InitPreset`
   data-class becomes "a loaded World definition"; its list of presets becomes a list
   of imported Worlds. The MainMenu → confirm → generate flow is unchanged — only the
   *source* of the data moves from hardcoded objects to JSON.
@@ -302,7 +302,7 @@ Build the spine first, layer richness after. Each step builds & runs on its own.
    (`LightManager.source` as a `$ref` the component resolves itself, per Lazy
    dependency resolution — no loader wiring). Fold the **HUD** in as a `"builder"`
    entity of the World load (it moved off the menu). Full param hydration coverage.
-4. **Multiple Worlds in the menu.** `ContextInitialization` loads a list of World
+4. **Multiple Worlds in the menu.** `SingletonContextInitialization` loads a list of World
    JSONs; MainMenu lists them; confirm loads the chosen one; return-to-menu tears it
    down (depends on increment-4 deferred deletion for real disposal).
 
@@ -314,7 +314,7 @@ Build the spine first, layer richness after. Each step builds & runs on its own.
      world file, no hand-listing. *Eager* = all bundled; *lazy* = each world is a
      dynamic import fetched only when selected (preferable once there are many).
 
-   Either way the generator loads the single world `ContextInitialization` selects —
+   Either way the generator loads the single world `SingletonContextInitialization` selects —
    never a pile of hardcoded `import` lines. (Step 1's lone `default.json` import is
    fine until then.)
 
@@ -369,14 +369,14 @@ for a level editor.
   async (the conversion plan already assumed this), handled by the existing "resolve the mesh
   fresh until it exists" pattern.
 - **Memoized in a Context; persistent geometry.** The cache + load live in a session-lived
-  **`EntityComponentContextModelCache`** (`"ModelCacheContext"`, built once at startup in
+  **`EntityComponentSingletonContextModelCache`** (`"SingletonContextModelCache"`, built once at startup in
   `main.js`) — it memoizes the load promise by name (the `SHADER_SOURCE_AND_TEXTURE_CACHING` memo
   pattern). The loaded **geometry is persistent** (kept across menu↔world); the **per-world scene
   mesh is disposable** — the two resource tiers of the deferred-deletion design. Keeping the cache
   in a Context (rather than a module-level global or the planet component) is also what breaks the
   planet↔`registry.js` import cycle.
 - **Referenced by name from data** — a world/preset names the model (e.g.
-  `"model": "Icosahedron"`); `ModelCacheContext` dials `modelRegistry`, exactly like the
+  `"model": "Icosahedron"`); `SingletonContextModelCache` dials `modelRegistry`, exactly like the
   class/prefab registries.
 
 **Still open:**

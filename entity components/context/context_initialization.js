@@ -5,7 +5,7 @@ import * as THREE from "three";
 import {EntityComponent} from "../../classes/ECS/entity_component.js";
 import { worldPresetRegistry } from "../../classes/loading-from-json/registry.js";
 
-export class EntityComponentContextInitialization extends EntityComponent
+export class EntityComponentSingletonContextInitialization extends EntityComponent
 {
     // #region privates
     #listPresets = [];

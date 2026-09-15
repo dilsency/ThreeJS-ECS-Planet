@@ -307,7 +307,7 @@ export class EntityComponentTestCubeHUD extends EntityComponentTestCube
         return this.methodGetSceneHUD();
     }
 
-    // Resolved from the cross-entity EntityComponentContextLocalPlayerIdentity
+    // Resolved from the cross-entity EntityComponentSingletonContextLocalPlayerIdentity
     // (self-looked-up in methodInitialize() below) instead of from
     // constructor params - see the class-level comment above.
     methodGetShape()
@@ -334,7 +334,7 @@ export class EntityComponentTestCubeHUD extends EntityComponentTestCube
         // Resolved before super.methodInitialize() runs, since that's what
         // reads methodGetShape()/methodGetColor1()/methodGetColor2() to
         // build the material.
-        this.#componentLocalPlayerIdentity = this.methodGetEntityByName("LocalPlayerIdentityContext")?.methodGetComponent("EntityComponentContextLocalPlayerIdentity");
+        this.#componentLocalPlayerIdentity = this.methodGetEntityByName("SingletonContextLocalPlayerIdentity")?.methodGetComponent("EntityComponentSingletonContextLocalPlayerIdentity");
 
         await super.methodInitialize();
 
