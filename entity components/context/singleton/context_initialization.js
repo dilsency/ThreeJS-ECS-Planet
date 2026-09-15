@@ -2,8 +2,8 @@
 // base
 import * as THREE from "three";
 // ECS
-import {EntityComponent} from "../../classes/ECS/entity_component.js";
-import { worldPresetRegistry } from "../../classes/loading-from-json/registry.js";
+import {EntityComponent} from "../../../classes/ECS/entity_component.js";
+import { worldPresetRegistry } from "../../../classes/loading-from-json/registry.js";
 
 export class EntityComponentSingletonContextInitialization extends EntityComponent
 {

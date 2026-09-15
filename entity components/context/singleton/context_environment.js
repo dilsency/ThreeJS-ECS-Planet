@@ -1,6 +1,6 @@
 // imports
 // ECS
-import {EntityComponent} from "../../classes/ECS/entity_component.js";
+import {EntityComponent} from "../../../classes/ECS/entity_component.js";
 
 // Owns environment-detection state that would otherwise end up duplicated
 // as ad-hoc inline checks scattered across whichever component happens to

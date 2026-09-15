@@ -12,18 +12,18 @@ import {EntityManager} from "./classes/ECS/entity_manager.js";
 import {Entity} from "./classes/ECS/entity.js";
 import {EntityComponent} from "./classes/ECS/entity_component.js";
 // context components , most important
-import {EntityComponentSingletonContextEngine} from "./entity components/context/context_engine.js";
-import {EntityComponentSingletonContextInitialization} from "./entity components/context/context_initialization.js";
+import {EntityComponentSingletonContextEngine} from "./entity components/context/singleton/context_engine.js";
+import {EntityComponentSingletonContextInitialization} from "./entity components/context/singleton/context_initialization.js";
 // generator components
 import {EntityComponentMainMenu} from "./entity components/ui/main_menu.js";
 import {EntityComponentWorldGenerator} from "./entity components/generation/world_generator.js";
 // context components , less important
-import {EntityComponentSingletonContextModelCache} from "./entity components/context/context_model_cache.js";
-import {EntityComponentSingletonContextHUDLayout, HUDCubeHorizontalAlignmentEnum} from "./entity components/context/context_hud_layout.js";
-import {EntityComponentSingletonContextLocalPlayerIdentity} from "./entity components/context/context_local_player_identity.js";
-import {EntityComponentSingletonContextWorldLayout} from "./entity components/context/context_world_layout.js";
-import {EntityComponentSingletonContextPlayerInitialization} from "./entity components/context/context_player_initialization.js";
-import {EntityComponentSingletonContextEnvironment} from "./entity components/context/context_environment.js";
+import {EntityComponentSingletonContextModelCache} from "./entity components/context/singleton/context_model_cache.js";
+import {EntityComponentSingletonContextHUDLayout, HUDCubeHorizontalAlignmentEnum} from "./entity components/context/singleton/context_hud_layout.js";
+import {EntityComponentSingletonContextLocalPlayerIdentity} from "./entity components/context/singleton/context_local_player_identity.js";
+import {EntityComponentSingletonContextWorldLayout} from "./entity components/context/singleton/context_world_layout.js";
+import {EntityComponentSingletonContextPlayerInitialization} from "./entity components/context/singleton/context_player_initialization.js";
+import {EntityComponentSingletonContextEnvironment} from "./entity components/context/singleton/context_environment.js";
 // entity components
 /*
 import {EntityComponentCameraControllerFirstPerson} from "./entity components/camera_controller_first_person.js";
@@ -188,24 +188,24 @@ function init()
     // function.
     //
     // - EntityComponentSingletonContextLocalPlayerIdentity (see
-    //   entity components/context/context_local_player_identity.js): read
+    //   entity components/context/singleton/context_local_player_identity.js): read
     //   by three different entities' components (the player's own network
     //   broadcast, cubeHUD, and the remote-player manager) at their own
     //   construction time.
     // - EntityComponentSingletonContextWorldLayout (see
-    //   entity components/context/context_world_layout.js): the ground's
+    //   entity components/context/singleton/context_world_layout.js): the ground's
     //   real footprint, read by the ground's own EntityComponentTestCube
     //   construction and by player-spawn randomization, so the two can
     //   never drift out of sync.
     // - EntityComponentSingletonContextPlayerInitialization (see
-    //   entity components/context/context_player_initialization.js): the
+    //   entity components/context/singleton/context_player_initialization.js): the
     //   local player's spawn position, self-looked-up by
     //   EntityComponentCameraControllerFirstPerson. Built after
     //   EntityComponentSingletonContextWorldLayout below, on purpose - it self-looks-up
     //   that component in its own methodInitialize(), so WorldLayout has to
     //   already exist by the time it runs.
     // - EntityComponentSingletonContextEnvironment (see
-    //   entity components/context/context_environment.js): touch-vs-pointer
+    //   entity components/context/singleton/context_environment.js): touch-vs-pointer
     //   and native-shell-vs-browser detection, self-looked-up by
     //   EntityComponentPeerConnectionUI (and, going forward, whatever
     //   touch-input component ends up needing the touch-primary check).
@@ -266,7 +266,7 @@ function init()
         /*
         
         // Built by initContextComponents() above, before this function ran -
-        // see entity components/context/context_world_layout.js.
+        // see entity components/context/singleton/context_world_layout.js.
         // (EntityComponentSingletonContextLocalPlayerIdentity is no longer fetched
         // here - every consumer self-looks it up now, see
         // BARE_MINIMUM_THREEJS_EXCEPTION_OR_NOT.md's "Player-identity hooks
@@ -274,7 +274,7 @@ function init()
         // formerly resolved here too, via EntityComponentSingletonContextWorldLayout -
         // is likewise no longer fetched here: EntityComponentCameraControllerFirstPerson
         // self-looks-up EntityComponentSingletonContextPlayerInitialization itself now,
-        // see entity components/context/context_player_initialization.js and
+        // see entity components/context/singleton/context_player_initialization.js and
         // NAMING_CONVENTIONS.md's "A single consumer is fine, conditionally"
         // section.)
         const componentWorldLayout = entityManager.methodGetEntityByName("SingletonContextWorldLayout").methodGetComponent("EntityComponentSingletonContextWorldLayout");
@@ -315,7 +315,7 @@ function init()
 
         // Solves cubeHUD's own position/yaw and the HUD panel's fit through
         // cameraHUD's actual projection - see
-        // entity components/context/context_hud_layout.js for the full math and
+        // entity components/context/singleton/context_hud_layout.js for the full math and
         // design rationale (formerly a bare computeCubeHUDLayout() closure
         // here, see TODO.md item 5.2). Added first, before the cube/panel
         // themselves, since both need its output as constructor params.

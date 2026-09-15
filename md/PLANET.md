@@ -79,7 +79,7 @@ through `SingletonContextModelCache`. (Pretty standalone copies live in the shar
    one entry per model: `{ "Icosahedron": modelIcosahedron }`, where `modelIcosahedron()` returns
    `import('../../assets/models/Icosahedron.obj?url').then(m => m.default)`. (The `import.meta.glob`
    auto-collect form is the deferred scale-up — see `SCALE_WHEN_NEEDED.md`.)
-3. **`EntityComponentSingletonContextModelCache`** in `entity components/context/context_model_cache.js` —
+3. **`EntityComponentSingletonContextModelCache`** in `entity components/context/singleton/context_model_cache.js` —
    owns the cache + the load: `modelRegistry[name]()` → `OBJLoader.loadAsync` (from
    `three/addons/loaders/OBJLoader.js`) → the first mesh's geometry, memoized in a `Map` keyed by
    model name. Built once at startup in `main.js` `initContextComponents()` as the

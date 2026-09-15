@@ -2,7 +2,7 @@
 // base
 import * as THREE from "three";
 // ECS
-import {EntityComponent} from "../../classes/ECS/entity_component.js";
+import {EntityComponent} from "../../../classes/ECS/entity_component.js";
 
 // Owns Three.js's own "bare minimum" objects - plus cameraPivot, which
 // isn't a Three.js concept but is tightly tied to camera in this project's

@@ -1,6 +1,6 @@
 // imports
 // ECS
-import {EntityComponent} from "../../classes/ECS/entity_component.js";
+import {EntityComponent} from "../../../classes/ECS/entity_component.js";
 
 // Local player identity, chosen once at startup (not re-rolled per frame) -
 // read by three different components on three different entities: cubeHUD

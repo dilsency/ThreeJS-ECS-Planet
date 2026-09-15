@@ -1,8 +1,8 @@
 // imports
 // ECS
-import {EntityComponent} from "../../classes/ECS/entity_component.js";
+import {EntityComponent} from "../../../classes/ECS/entity_component.js";
 // loaders
-import { modelRegistry } from "../../classes/loading-from-json/registry.js";
+import { modelRegistry } from "../../../classes/loading-from-json/registry.js";
 import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
 
 export class EntityComponentSingletonContextModelCache extends EntityComponent

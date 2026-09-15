@@ -2,7 +2,7 @@
 // base
 import * as THREE from "three";
 // ECS
-import {EntityComponent} from "../../classes/ECS/entity_component.js";
+import {EntityComponent} from "../../../classes/ECS/entity_component.js";
 
 // Horizontal alignment of cubeHUD within the viewport - CENTER keeps it
 // centered (x offset 0); LEFT/RIGHT solve for an offset that puts the

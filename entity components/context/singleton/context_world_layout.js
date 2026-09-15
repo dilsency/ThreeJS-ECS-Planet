@@ -2,7 +2,7 @@
 // base
 import * as THREE from "three";
 // ECS
-import {EntityComponent} from "../../classes/ECS/entity_component.js";
+import {EntityComponent} from "../../../classes/ECS/entity_component.js";
 
 // The ground's real footprint - defined once here and reused by both the
 // actual ground EntityComponentTestCube's construction and player-spawn

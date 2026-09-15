@@ -1,6 +1,6 @@
 // imports
 // ECS
-import {EntityComponent} from "../../classes/ECS/entity_component.js";
+import {EntityComponent} from "../../../classes/ECS/entity_component.js";
 
 // Owns the local player's one-time spawn position, self-looking-up
 // EntityComponentSingletonContextWorldLayout for the ground's bounds rather than
