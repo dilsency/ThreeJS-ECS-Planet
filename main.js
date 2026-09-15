@@ -18,6 +18,7 @@ import {EntityComponentContextInitialization} from "./entity components/context/
 import {EntityComponentMainMenu} from "./entity components/ui/main_menu.js";
 import {EntityComponentWorldGenerator} from "./entity components/generation/world_generator.js";
 // context components , less important
+import {EntityComponentContextModelCache} from "./entity components/context/context_model_cache.js";
 import {EntityComponentContextHUDLayout, HUDCubeHorizontalAlignmentEnum} from "./entity components/context/context_hud_layout.js";
 import {EntityComponentContextLocalPlayerIdentity} from "./entity components/context/context_local_player_identity.js";
 import {EntityComponentContextWorldLayout} from "./entity components/context/context_world_layout.js";
@@ -217,6 +218,11 @@ function init()
         const entityInitialization = new Entity(null);
         entityManager.methodAddEntity(entityInitialization, "InitializationContext");
         entityInitialization.methodAddComponentWithName("EntityComponentContextInitialization", new EntityComponentContextInitialization(null));
+
+        //
+        const entityModelCache = new Entity(null);
+        entityManager.methodAddEntity(entityModelCache, "ModelCacheContext");
+        entityModelCache.methodAddComponentWithName("EntityComponentContextModelCache", new EntityComponentContextModelCache(null));
 
         //
         const entityLocalPlayerIdentity = new Entity(null);

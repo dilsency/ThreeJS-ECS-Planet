@@ -22,10 +22,12 @@ ground at a random X/Z; spawn-on-face is slice #2.
 - **Params (from world JSON).** `{ model: "Icosahedron", radius: <n>, color: "#FFFFFF" }`.
   `color` is per-world (default white, immaterial). Opt-in: a world without a planet just
   omits the entity.
-- **Load — async, lazy, memoized.** `async methodInitialize()`:
-  `await modelRegistry[model]()` → `OBJLoader.load(url)`; the parsed **geometry is memoized
-  unscaled** (module-level, keyed by model name). A world never picked never fetches its
-  model; re-entry reuses the cached geometry.
+- **Load — async, lazy, memoized via `ModelCacheContext`.** `async methodInitialize()` looks up
+  the session-lived **`ModelCacheContext`** and `await`s `methodGetModelGeometry(model)`. That
+  context owns the load (`modelRegistry[model]()` → `OBJLoader.loadAsync`) and **memoizes the
+  unscaled geometry** in a `Map` keyed by model name. A world never picked never fetches its
+  model; re-entry reuses the cached geometry. The planet imports neither `modelRegistry` nor
+  `OBJLoader` — that's what keeps it out of the import cycle.
 - **Per-world mesh.** `new THREE.Mesh(cachedGeometry, material)`, `mesh.scale.setScalar(radius)`,
   added to the world scene at the origin. Material: lit
   `MeshStandardMaterial({ color, flatShading: true })`, `castShadow`/`receiveShadow` on
@@ -37,19 +39,60 @@ ground at a random X/Z; spawn-on-face is slice #2.
   `ContextPlanetFaces` will multiply face centers by `radius` for world space; face normals
   are scale-invariant under uniform scale.
 
+### Runtime flow — data → class → instance → mesh
+
+Generation is *generic*: the code never names the planet — **data** does. Two hops.
+
+**1. How the entity is created** (declaration → instantiation):
+
+```mermaid
+flowchart TD
+    A["worldDefault.json — data<br/>declares a 'planet' entity + params"]
+    B["ContextInitialization.methodConfirm()<br/>broadcasts 'initialization.confirmed'"]
+    C["WorldGenerator.methodGenerate()<br/>loops worldRegistry[world].entities"]
+    D["registry.js — entityComponentRegistry<br/>'EntityComponentPlanet' string → class"]
+    E["new EntityComponentPlanet(params)<br/>attached → methodInitialize() runs"]
+    A --> B --> C --> D --> E
+```
+
+**2. How the instance gets its mesh** (the component resolves its own asset via the cache context):
+
+```mermaid
+flowchart TD
+    A["EntityComponentPlanet.methodInitialize()<br/>asks cache for model 'Icosahedron'"]
+    B["ModelCacheContext.methodGetModelGeometry()<br/>memoized: load once, reuse"]
+    C["registry.js — modelRegistry[name]()<br/>lazy dynamic import → asset URL"]
+    D["assets/models/Icosahedron.obj<br/>OBJLoader.loadAsync → BufferGeometry"]
+    E["Mesh built, scaled, added to scene<br/>per-world material; geometry cached"]
+    A --> B --> C --> D --> E
+```
+
+**The seams:** the planet is named **by string in data**; the two **registries** are the only
+string→real-thing bridges — `entityComponentRegistry` (string→class) and `modelRegistry`
+(string→lazy asset URL). The generator instantiates; the instance self-resolves its geometry
+through `ModelCacheContext`. (Pretty standalone copies live in the shared threejs notes folder:
+`planet_generation_flow.svg` / `planet_model_resolution_flow.svg`.)
+
 ### Implementation steps → a visible planet
 1. **Asset in place.** `assets/models/Icosahedron.obj` (ported from `dilsency/threejs`).
-2. **`modelRegistry`** in `classes/loading-from-json/registry.js`:
-   `import.meta.glob('../../assets/models/*.obj', { query: '?url', import: 'default', eager: false })`,
-   re-keyed from the glob's full paths to bare model names (basename, no extension), exported.
-3. **`EntityComponentPlanet`** in `entity components/environment/planet.js` — the design above.
-   `OBJLoader` from `three/addons/loaders/OBJLoader.js`; a module-level `#geometryCache`
-   (name → `Promise<BufferGeometry>`) memoizes the load.
-4. **Register** `EntityComponentPlanet` in `entityComponentRegistry`.
-5. **Data.** Add a `planet` entity to `worldDefault.json` (and `worldB.json`):
+2. **`modelRegistry`** in `classes/loading-from-json/registry.js` — a **hand-listed** lazy map,
+   one entry per model: `{ "Icosahedron": modelIcosahedron }`, where `modelIcosahedron()` returns
+   `import('../../assets/models/Icosahedron.obj?url').then(m => m.default)`. (The `import.meta.glob`
+   auto-collect form is the deferred scale-up — see `SCALE_WHEN_NEEDED.md`.)
+3. **`EntityComponentContextModelCache`** in `entity components/context/context_model_cache.js` —
+   owns the cache + the load: `modelRegistry[name]()` → `OBJLoader.loadAsync` (from
+   `three/addons/loaders/OBJLoader.js`) → the first mesh's geometry, memoized in a `Map` keyed by
+   model name. Built once at startup in `main.js` `initContextComponents()` as the
+   `"ModelCacheContext"` entity (session-lived, never torn down).
+4. **`EntityComponentPlanet`** in `entity components/environment/planet.js` — the design above;
+   imports only `THREE` + `EntityComponent`, looks up `ModelCacheContext`, and `await`s the
+   geometry (so it never imports `modelRegistry`/`OBJLoader` — no import cycle).
+5. **Register** `EntityComponentPlanet` in `entityComponentRegistry`. (`ModelCacheContext` is a
+   startup context — built in `main.js`, *not* registered here.)
+6. **Data.** Add a `planet` entity to `worldDefault.json` (and `worldB.json`):
    `{ "name": "planet", "components": [ { "type": "EntityComponentPlanet",
    "params": { "model": "Icosahedron", "radius": 20, "color": "#FFFFFF" } } ] }`.
-6. **Verify in-browser.** Menu → pick a world → a flat-shaded planet of that radius appears
+7. **Verify in-browser.** Menu → pick a world → a flat-shaded planet of that radius appears
    at the origin; walk near it; return-to-menu disposes it cleanly (no leak, background
    restored); re-enter reuses the cached geometry.
 

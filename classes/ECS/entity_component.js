@@ -95,6 +95,11 @@ export class EntityComponent
     {
         return this.#toBeDeleted;
     }
+    methodGetIsThisOrParentFlaggedForDeletion()
+    {
+        if(this.#toBeDeleted){return true;}
+        return this.#parent.methodGetIsFlaggedForDeletion();
+    }
     // #endregion getters
 
     // #region setters

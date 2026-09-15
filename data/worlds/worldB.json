@@ -69,6 +69,19 @@
             "components": [
                 { "type": "EntityComponentButtonReturnToMainMenu" }
             ]
+        },
+        {
+            "name": "planet",
+            "components": [
+                {
+                    "type": "EntityComponentPlanet",
+                    "params": {
+                        "model": "Icosahedron",
+                        "radius": 20,
+                        "color": "#00FF90"
+                    }
+                }
+            ]
         }
     ]
 }
