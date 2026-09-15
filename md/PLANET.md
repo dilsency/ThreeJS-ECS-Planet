@@ -101,10 +101,88 @@ menu↔world cycle cleanly. (Player-on-flat-ground is expected at this stage.)
 
 ---
 
-## Slice #2 — `MultiContextPlanetFaces` (deferred)
+## Slice #2 — `EntityComponentMultiContextPlanetFaces` + spawn-on-face
 
-The per-face parse (normal-hash buckets → normal / center / outer-walls), `getNearestFace` /
-`isWithinFace`, world-space centers via `radius`, and the `helper_mesh.js` port with its two
-bug fixes (`getNormalTriangleData` only writing its first vertex; the dead
-`getSignOfPointInTriangle` `return`). Mostly maths — brainstormed separately, once slice #1
-is on screen.
+**Spec (settled 2026-09-15). Scope: core + spawn.** Parse the icosahedron into per-face data
+and spawn the player on a chosen face. **Multi-planet-ready by design**, one planet authored
+for now.
+
+**Deferred to the gravity slice** (see `SCALE_WHEN_NEEDED.md`): `getNearestFace`,
+`isWithinFace`, the outer-wall planes, the `helper_mesh.js` port (its two bug-fixes —
+`getNormalTriangleData` first-vertex, dead `getSignOfPointInTriangle` `return`), and
+**orientation** (aligning "up" to the face normal). So in this slice the player spawns
+*positioned* on a face but still world-Y up.
+
+### Decisions
+- **Icosahedron 1:1** — 20 triangles = 20 faces; no coplanar bucketing / normal-hash. A
+  different flat-faced shape (dodecahedron) → a *separate* builder later, behind the same face
+  interface (`SCALE_WHEN_NEEDED.md`).
+- **Multi-instance Context** — per-**planet**, its own entity, in
+  `entity components/context/multi/`. Consumers reference a *specific* instance via **`$ref`**,
+  not a fixed-name lookup (that's the whole point of the `MultiContext` role).
+- **The faces-context is the player's "active planet" reference** (not the planet mesh) — it
+  holds the face data *and* a `$ref` to its planet; the future planet-switch mechanism re-points it.
+
+### `EntityComponentMultiContextPlanetFaces` (`context/multi/`)
+- **Param:** `planet` = `$ref` → that planet's `EntityComponentPlanet`.
+- **Lazy parse** (`methodUpdate`): resolve the `planet` `$ref`; once its geometry is loaded
+  (`methodGetGeometry()` non-null) parse **once**, set `#isReady`, then early-return forever.
+- **Parse:** iterate triangles (`geometry.index` if present, else sequential position triples).
+  Per face `i`: `centerLocal = (a+b+c)/3`; `normal = normalize(cross(b−a, c−a))`, flipped outward
+  if `dot(normal, centerLocal) < 0` (convex mesh centered at origin — **no vertex normals**, so
+  the buggy `getNormalTriangleData` is never needed). Store **world-space**
+  `center = planetPosition + centerLocal × radius`.
+- **Exposes:** `methodGetFaceCount()`, `methodGetFaceCenter(i)` (world), `methodGetFaceNormal(i)`,
+  `methodGetIsReady()`.
+- **Debug** (`debug` param, default off): an `ArrowHelper` per face center along its normal;
+  removed in `methodDispose`.
+- **Dispose:** drop parsed arrays; remove debug arrows. (Per-world; swept on teardown.)
+
+### `EntityComponentPlanet` — amendment
+- Add a **`position` param** (default origin); mesh placed at `position`, scaled by `radius`.
+  (Enables multiple planets at distinct spots; face centers use it.)
+
+### `EntityComponentPlayerSpawnOnFace` (on the Player prefab)
+- **Params:** `faces` = `$ref` → the target `MultiContextPlanetFaces`; `spawnFaceIndex` (default
+  0); `spawnDistance` (default 2, world units along the normal).
+- **Lazy one-shot** (`methodUpdate`): resolve `faces`; if not ready, return; once ready →
+  `position = getFaceCenter(i) + getFaceNormal(i) × spawnDistance` → `methodSetPosition(position)`
+  (broadcasts `update.position` to the camera rig) → set `#hasSpawned`; thereafter return.
+- Coexists with the startup ground-spawn (`SingletonContextPlayerInitialization` → the camera
+  controller): the player briefly sits at the ground X/Z, then snaps to the face once ready.
+
+### Runtime chain (all lazy / guarded)
+`PlayerSpawnOnFace` waits on `MultiContextPlanetFaces.methodGetIsReady()` → which waits on
+`EntityComponentPlanet.methodGetGeometry()` (async OBJ load) → which waits on
+`SingletonContextModelCache`. Each hop is a `$ref`/null guard — no ordering assumptions.
+
+### Data (per world, multi-planet-ready)
+```jsonc
+{ "name": "planet",      "components": [{ "type": "EntityComponentPlanet",
+    "params": { "model": "Icosahedron", "radius": 20, "color": "#00FF00" } }] },
+{ "name": "planetFaces", "components": [{ "type": "EntityComponentMultiContextPlanetFaces",
+    "params": { "planet": { "$ref": { "entity": "planet", "component": "EntityComponentPlanet" } } } }] },
+// Player prefab gains PlayerSpawnOnFace; per-world overrideParams targets the faces + face:
+"EntityComponentPlayerSpawnOnFace": {
+    "faces": { "$ref": { "entity": "planetFaces", "component": "EntityComponentMultiContextPlanetFaces" } },
+    "spawnFaceIndex": 0, "spawnDistance": 2 }
+```
+
+### Registration
+`EntityComponentMultiContextPlanetFaces` + `EntityComponentPlayerSpawnOnFace` added to
+`entityComponentRegistry` (both JSON-spawned). `PlayerSpawnOnFace` added to `data/prefabs/player.json`.
+
+### `$ref` resolution
+Both components resolve their `$ref` via the lazy dependency-resolution pattern: store the
+descriptor, each `methodUpdate` try `methodGetEntityByName(ref.entity).methodGetComponent(ref.component)`
+until it succeeds, then cache. Hydration passes `$ref` through untouched (loader-side).
+
+### Verify
+Pick `spawnFaceIndex`; confirm the player spawns at that face's position. **Drop `radius` to
+~3–5** to see the planet as a discrete object (at 20 the player spawns inside it → invisible
+from inside). Optional debug arrows to eyeball the parse. Return-to-menu tears down cleanly.
+
+### Build order
+1. `EntityComponentPlanet` `position` param. 2. `EntityComponentMultiContextPlanetFaces`
+(`context/multi/`) + register. 3. `EntityComponentPlayerSpawnOnFace` + register + add to player
+prefab. 4. World JSON: `planetFaces` entity + player `overrideParams`. 5. Verify in-browser.
