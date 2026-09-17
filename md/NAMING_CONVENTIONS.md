@@ -102,10 +102,16 @@ family clusters in sorting/autocomplete:
     (`methodGetEntityByName("SingletonContextEngine")`). Built once (usually at startup),
     globally unique: `EntityComponentSingletonContextEngine`,
     `EntityComponentSingletonContextInitialization`, `EntityComponentSingletonContextModelCache`.
-  - **`MultiContext`** — **many** instances, one per thing, so it's never "the" anything;
-    consumers reference a **specific** instance explicitly via a **`$ref`** (the lazy
-    dependency-resolution pattern), not a fixed-name lookup. First case:
-    `EntityComponentMultiContextPlanetFaces` (one per planet).
+  - **`MultiContext`** — **theoretical / not in use.** The role *would* be **many** instances of
+    genuinely ambient state, one per thing, referenced by a **`$ref`** (the lazy
+    dependency-resolution pattern) rather than a fixed name — but it has **no member and no
+    concrete use yet.** The case first slated for it — planet face data — turned out to be an
+    *intrinsic facet of the planet*, not ambient state, so it became a **plain component
+    co-located on the planet entity** (see "Entity topology" below). It is documented only as a
+    theoretical boundary: reserve `MultiContext` for per-instance state that truly floats *above*
+    individual entities (owned by none) — e.g. a hypothetical multiplayer "team/faction" read by
+    many members but owned by none. The `entity components/context/multi/` folder is **kept for
+    now** against that possibility, currently empty.
 - **`Manager`** — an ongoing **sync/spawn lifecycle**: `EntityComponentLightManager`
   (per-frame sync), and `RemotePlayerManager` when multiplayer returns.
 - **`Controller`** — real-time **input-driven** behavior: `EntityComponentPlayerController`,
@@ -118,14 +124,34 @@ Reserve `SingletonContext` / `MultiContext` / `Manager` / `Controller` for those
 don't use them as generic filler. Rationale and the "single-consumer Context is fine,
 conditionally" nuance live in the shared doc.
 
-**Context components live alone on their own entity.** A `Context` gets a **dedicated
-entity** and is **never co-located with non-Context components on the same entity**. Its
-ownership is independent of any single consumer — that's the whole point of the role — so
-bolting it onto a consumer's entity would couple it in the wrong direction. Holds for
-`SingletonContextEngine`, `SingletonContextInitialization`, `SingletonContextWorldLayout`, and the coming
-`MultiContextPlanetFaces` alike: e.g. the planet **mesh** (`EntityComponentPlanet`) is its own
-entity, and the planet's **face data** (`MultiContextPlanetFaces`) is a *separate* Context
-entity that resolves that mesh's geometry — never a sibling component on one shared entity.
+### Entity topology — co-locate a facet, isolate ambient state
+
+Whether a component **shares an entity** with another or gets its **own** entity comes down to
+one question: **is it a facet of one specific thing, or does it float above all of them?**
+
+- **A facet of one entity → co-locate it** as a normal component on that entity. If a component
+  describes or extends *what a specific thing is*, and lives and dies with it, it's part of that
+  entity's composition. An entity is the sum of the facets that define it: the `planet` entity
+  carries both `EntityComponentPlanetModel` (its visual mesh) **and** `EntityComponentPlanetFaces`
+  (its surface / face data) because **both are facets of the one planet.** Co-located siblings
+  reach each other directly through their shared parent entity's `methodGetComponent` — **no
+  `$ref` needed between them.** (`$ref` exists only to point *across* entities.)
+
+- **Ambient / ownerless state → give it its own entity** (the **Context** role). State that
+  exists *between* or *above* gameplay things — owned by none of them — has no natural host;
+  bolting it onto some consumer's entity would couple that consumer to being the arbitrary home
+  of shared state. `SingletonContextEngine`, `SingletonContextWorldLayout`,
+  `SingletonContextInitialization` all float above the world, so each lives alone on a dedicated
+  entity, with a lifecycle independent of any single consumer.
+
+**The trap (corrected 2026-09-15).** "Other entities read it" is **not** the test — being read
+by others does not make data ambient. Planet face data is read by the player's spawn/gravity
+logic, which made it *look* Context-like; but it is unmistakably *about one planet* — a facet of
+its owner. **The test is ownership, not readership.** So the face data is a plain component on the
+planet entity, and cross-entity readers (e.g. the player) `$ref` the **owning planet entity**,
+not a separate faces-entity. This retracts the earlier "a Context lives alone → planet faces get
+their own entity" reasoning: that rule was formed around the **Singletons**, which are genuinely
+ownerless, and doesn't transfer to a facet that has an obvious owner.
 (Cross-project rationale: shared `ECS_DESIGN_PATTERNS_THREEJS.md` → "Context components".)
 
 ## 7. Hook (template-method) methods

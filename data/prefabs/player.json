@@ -2,6 +2,15 @@
     "name": "Player",
     "components": [
         {"type": "EntityComponentCameraControllerFirstPerson"},
-        {"type": "EntityComponentPlayerController"}
+        {"type": "EntityComponentPlayerController"},
+        {"type": "EntityComponentSpawnOnPlanetFace",
+        "params": {
+            "planet":
+                {"$ref": {
+                    "entity": "planet",
+                    "component": "EntityComponentPlanetFaces"
+                }},
+                "faceDistance": 20.0
+        }}
     ]
 }

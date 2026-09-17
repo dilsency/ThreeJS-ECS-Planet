@@ -215,7 +215,7 @@ export class EntityComponentPlayerControllerInputTouch extends EntityComponent
                 this.#walkingTouchIdentifier = touch.identifier;
                 this.#keys.forward = true;
                 this.#pendingTapElapsedSeconds = null;
-                debugOverlaySetLine("player", `WALKING START id=${touch.identifier}`); // TEMPORARY
+                //debugOverlaySetLine("player", `WALKING START id=${touch.identifier}`); // TEMPORARY
                 return;
             }
         }
@@ -224,7 +224,7 @@ export class EntityComponentPlayerControllerInputTouch extends EntityComponent
         this.#candidateStartX = touch.clientX;
         this.#candidateStartY = touch.clientY;
         this.#candidateElapsedSeconds = 0;
-        debugOverlaySetLine("player", `tap candidate id=${touch.identifier} walking=${this.#walkingTouchIdentifier}`); // TEMPORARY
+        //debugOverlaySetLine("player", `tap candidate id=${touch.identifier} walking=${this.#walkingTouchIdentifier}`); // TEMPORARY
     }
 
     methodEventOnTouchEnd(e)
@@ -245,7 +245,7 @@ export class EntityComponentPlayerControllerInputTouch extends EntityComponent
         {
             this.#walkingTouchIdentifier = null;
             this.#keys.forward = false;
-            debugOverlaySetLine("player", `WALKING STOP id=${touch.identifier}`); // TEMPORARY
+            //debugOverlaySetLine("player", `WALKING STOP id=${touch.identifier}`); // TEMPORARY
             return; // a touch that just drove walking isn't itself a tap candidate
         }
 
@@ -257,12 +257,12 @@ export class EntityComponentPlayerControllerInputTouch extends EntityComponent
         // for a future double-tap - if it was quick and didn't move much;
         // otherwise it was a drag/long-press, not a tap.
         const distanceFromStart = Math.hypot(touch.clientX - this.#candidateStartX, touch.clientY - this.#candidateStartY);
-        if(candidateElapsedSeconds > TAP_MAX_DURATION_SECONDS || distanceFromStart > TAP_MAX_MOVEMENT_PX){debugOverlaySetLine("player", `tap rejected (elapsed=${candidateElapsedSeconds.toFixed(2)}s dist=${distanceFromStart.toFixed(0)}px)`); return;} // TEMPORARY
+        //if(candidateElapsedSeconds > TAP_MAX_DURATION_SECONDS || distanceFromStart > TAP_MAX_MOVEMENT_PX){debugOverlaySetLine("player", `tap rejected (elapsed=${candidateElapsedSeconds.toFixed(2)}s dist=${distanceFromStart.toFixed(0)}px)`); return;} // TEMPORARY
 
         this.#pendingTapElapsedSeconds = 0;
         this.#pendingTapX = touch.clientX;
         this.#pendingTapY = touch.clientY;
-        debugOverlaySetLine("player", `tap completed id=${touch.identifier}, waiting for 2nd`); // TEMPORARY
+        //debugOverlaySetLine("player", `tap completed id=${touch.identifier}, waiting for 2nd`); // TEMPORARY
     }
 }
 

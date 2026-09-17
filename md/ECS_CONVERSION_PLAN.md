@@ -189,12 +189,13 @@ follow the main project's conventions:
     **unpaused**. Assumes nothing is generated yet.
 - **Planet entity** (generated on MainMenu confirm, parameterized by the init set)
   - the mesh (loaded OBJ, sized by the init set's `planetRadius`), and
-  - **`EntityComponentMultiContextPlanetFaces`** (a Context component): owns the
-    parsed per-face data — the normal-hash → {plane/normal, center, outer-walls,
-    triangle indices} maps — computed once at init from the geometry. Exposes
-    lookups: `getFaceNormal(faceId)`, `getFaceCenter(faceId)`,
-    `getNearestFace(position)`, `isWithinFace(position, faceId)`. This replaces
-    the global `terrainObject*` maps.
+  - **`EntityComponentPlanetFaces`** (a **facet of the planet, co-located on the
+    same entity** as the mesh — *not* a Context; see `NAMING_CONVENTIONS.md` §6
+    "Entity topology"): owns the parsed per-face data — the normal-hash →
+    {plane/normal, center, outer-walls, triangle indices} maps — computed once at
+    init from its sibling mesh's geometry. Exposes lookups: `getFaceNormal(faceId)`,
+    `getFaceCenter(faceId)`, `getNearestFace(position)`, `isWithinFace(position, faceId)`.
+    This replaces the global `terrainObject*` maps.
 - **Player entity** (the cameraPivot rig), with single-purpose siblings:
   - **Input** (mouse+keyboard, and the touch/Joy-Con paths this repo already
     dabbled in — note `helper_camera_rotation.js`'s `isJoyConL` math): raw state
@@ -216,7 +217,8 @@ follow the main project's conventions:
     gravity regime we're in. Owns the throttle intervals.
   - **`EntityComponentGravityOrientation`**: owns the *current* gravity up (a face
     normal), performs the reorientation ease (old→new up), and applies it to
-    `cameraPivot.up`/`camera.up`. Reads `MultiContextPlanetFaces` + `GravityState`.
+    `cameraPivot.up`/`camera.up`. Reads the active planet's `EntityComponentPlanetFaces`
+    (via `$ref` to the planet entity) + `GravityState`.
     Because it is the **single writer** of `cameraPivot.up`/`camera.up`, the camera
     controller and the movement component can both just *read* that up and stay
     gravity-agnostic. **Pick one reorientation path** (the frame-lerp is simpler;
@@ -377,11 +379,13 @@ not `"menu.hide"`) so each listener decides its own reaction — the shared
 **Design check — should Context components be their own entities?** Yes. Keeping a Context
 as its own entity is *correct* precisely because it's multi-consumer shared state whose
 ownership is independent of any single consumer — that is the Context pattern's whole
-purpose, and it applies to `SingletonContextInitialization` exactly as to `SingletonContextEngine` /
-`MultiContextPlanetFaces`. So "should MainMenu and the init Context be one entity?" resolves to
-**no**; the earlier co-location idea was inconsistent with the Context principle and is
-retracted. Co-location (A) is right only for genuinely private, single-consumer state — the
-init state is not that.
+purpose, and it applies to `SingletonContextInitialization` exactly as to `SingletonContextEngine`.
+So "should MainMenu and the init Context be one entity?" resolves to **no**; the earlier
+co-location idea was inconsistent with the Context principle and is retracted. Co-location is
+right for state that is a **facet of one specific entity** (e.g. planet face data lives on the
+planet entity — see `NAMING_CONVENTIONS.md` §6 "Entity topology"); the init state is genuinely
+ownerless/ambient, so it stays a Context on its own entity. The test is **ownership**, not
+whether other entities read it.
 
 ### Increment cadence — one new entity component at a time
 Each step adds **one** new component to the running base and leaves the game
@@ -410,9 +414,9 @@ behavior each should reproduce; don't port its code.
    while the per-world mesh is disposable — a world that's never picked never fetches its
    model. Full rationale in `DATA_DRIVEN_WORLDS_AND_PREFABS.md` §8 ("model / heavy-asset
    loading").
-3. **`EntityComponentMultiContextPlanetFaces` + spawn.** Parse the geometry into per-face
-   data (normal-hash buckets → normal/center/outer-walls) and expose the lookups
-   (`getFaceNormal`, `getFaceCenter`, `getNearestFace`, `isWithinFace`). Use the init
+3. **`EntityComponentPlanetFaces` (co-located on the planet entity) + spawn.** Parse the
+   geometry into per-face data (normal-hash buckets → normal/center/outer-walls) and expose
+   the lookups (`getFaceNormal`, `getFaceCenter`, `getNearestFace`, `isWithinFace`). Use the init
    set's `spawnFaceIndex` + `spawnDistanceFromPlanet` to place the player (along that
    face's normal). Verify the face data by visualizing centers + normals, and that
    the player spawns where the chosen set says.

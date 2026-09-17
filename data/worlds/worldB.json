@@ -55,6 +55,12 @@
         {
             "name": "player",
             "prefab": "Player",
+            "overrideParams": {
+                "EntityComponentSpawnOnPlanetFace":
+                {
+                    "faceDistance": 20.0
+                }
+            },
             "components": [
             ]
         },
@@ -74,11 +80,19 @@
             "name": "planet",
             "components": [
                 {
-                    "type": "EntityComponentPlanet",
+                    "type": "EntityComponentPlanetModel",
                     "params": {
                         "model": "Icosahedron",
+                        "position":
+                            { "$vec3": { "x": 0, "y": 0, "z": -50 } },
                         "radius": 20,
                         "color": "#00FF90"
+                    }
+                },
+                {
+                    "type": "EntityComponentPlanetFaces",
+                    "params": {
+                        "debug": true
                     }
                 }
             ]

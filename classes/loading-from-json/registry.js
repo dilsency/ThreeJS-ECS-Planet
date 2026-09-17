@@ -14,7 +14,7 @@ import { EntityComponentCameraControllerFirstPerson } from "../../entity compone
 import { EntityComponentPlayerController } from "../../entity components/player_controller.js";
 // /entity-components/environment/
 import { EntityComponentSkybox } from "../../entity components/environment/skybox.js";
-import { EntityComponentPlanet } from "../../entity components/environment/planet.js";
+import { EntityComponentPlanetModel, EntityComponentPlanetFaces, EntityComponentSpawnOnPlanetFace } from "../../entity components/environment/planet.js";
 
 // all prefabs should be imported here
 import prefabPlayer from "../../data/prefabs/player.json";
@@ -76,7 +76,9 @@ export const entityComponentRegistry =
     "EntityComponentCameraControllerFirstPerson": EntityComponentCameraControllerFirstPerson,
     "EntityComponentPlayerController": EntityComponentPlayerController,
     "EntityComponentSkybox": EntityComponentSkybox,
-    "EntityComponentPlanet": EntityComponentPlanet,
+    "EntityComponentPlanetModel": EntityComponentPlanetModel,
+    "EntityComponentPlanetFaces": EntityComponentPlanetFaces,
+    "EntityComponentSpawnOnPlanetFace": EntityComponentSpawnOnPlanetFace,
 };
 
 // #endregion prefabs > entities

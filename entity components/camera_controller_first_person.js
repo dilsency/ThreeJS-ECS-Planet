@@ -132,8 +132,17 @@ export class EntityComponentCameraControllerFirstPersonInputMK extends EntityCom
     // #region methods
     methodResetMouse()
     {
+        //
         this.#mouseX = 0;
         this.#mouseY = 0;
+    }
+    methodResetKeys()
+    {
+        //
+        this.#keys.up = false;
+        this.#keys.down = false;
+        this.#keys.left = false;
+        this.#keys.right = false;
     }
     // #endregion methods
 }
@@ -246,7 +255,7 @@ export class EntityComponentCameraControllerFirstPersonInputTouch extends Entity
     methodOnTouchStart(e)
     {
         const touch = e.touches[0];
-        debugOverlaySetLine("cam", `touchstart touches=${e.touches.length} id=${touch?.identifier} pos=${touch?.clientX},${touch?.clientY}`); // TEMPORARY
+        //debugOverlaySetLine("cam", `touchstart touches=${e.touches.length} id=${touch?.identifier} pos=${touch?.clientX},${touch?.clientY}`); // TEMPORARY
         if(touch == null){return;}
 
         // Must preventDefault() here, not just in methodOnTouchMove()
@@ -266,8 +275,8 @@ export class EntityComponentCameraControllerFirstPersonInputTouch extends Entity
     methodOnTouchMove(e)
     {
         const touch = e.touches[0];
-        if(touch == null){debugOverlaySetLine("cam", "move: no touch[0]"); return;} // TEMPORARY
-        if(this.#lastTouchX == null || this.#lastTouchY == null){debugOverlaySetLine("cam", `move: no lastTouch (id=${touch.identifier})`); return;} // TEMPORARY // no prior touchstart to diff against
+        //if(touch == null){debugOverlaySetLine("cam", "move: no touch[0]"); return;} // TEMPORARY
+        //if(this.#lastTouchX == null || this.#lastTouchY == null){debugOverlaySetLine("cam", `move: no lastTouch (id=${touch.identifier})`); return;} // TEMPORARY // no prior touchstart to diff against
 
         e.preventDefault();
 
@@ -282,7 +291,7 @@ export class EntityComponentCameraControllerFirstPersonInputTouch extends Entity
         this.#lastTouchX = touch.clientX;
         this.#lastTouchY = touch.clientY;
 
-        debugOverlaySetLine("cam", `touches=${e.touches.length} id=${touch.identifier} dx=${this.#mouseX} dy=${this.#mouseY}`); // TEMPORARY
+        //debugOverlaySetLine("cam", `touches=${e.touches.length} id=${touch.identifier} dx=${this.#mouseX} dy=${this.#mouseY}`); // TEMPORARY
     }
 
     methodOnTouchEnd(e)
@@ -291,15 +300,24 @@ export class EntityComponentCameraControllerFirstPersonInputTouch extends Entity
         // stale position left over from this now-ended touch.
         this.#lastTouchX = null;
         this.#lastTouchY = null;
-        debugOverlaySetLine("cam", `touchend touches=${e.touches.length} (cleared)`); // TEMPORARY
+        //debugOverlaySetLine("cam", `touchend touches=${e.touches.length} (cleared)`); // TEMPORARY
     }
     // #endregion event listener handlers
 
     // #region methods
     methodResetMouse()
     {
+        //
         this.#mouseX = 0;
         this.#mouseY = 0;
+    }
+    methodResetKeys()
+    {
+        //
+        this.#keys.up = false;
+        this.#keys.down = false;
+        this.#keys.left = false;
+        this.#keys.right = false;
     }
     // #endregion methods
 }
@@ -383,9 +401,13 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
         // bounds at all - EntityComponentSingletonContextPlayerInitialization owns
         // that). See NAMING_CONVENTIONS.md's "A single consumer is fine,
         // conditionally" section and TODO.md item 6's sub-item 6.
+
+        // comment this out so that it doesn't fight with our planet spawning
+        /*
         const componentPlayerInitialization = this.methodGetEntityByName("SingletonContextPlayerInitialization")?.methodGetComponent("EntityComponentSingletonContextPlayerInitialization");
         const spawnPosition = componentPlayerInitialization.methodGetSpawnPosition();
         this.#cameraPivot.position.set(spawnPosition.x, 0, spawnPosition.z);
+        */
 
         this.#directionForward = new THREE.Vector3(0,0,-1);
         this.#directionForwardNonvertical = new THREE.Vector3(0,0,-1);
@@ -415,6 +437,9 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
             //
             this.#methodResetCameraRotation();
             //
+            componentInstanceInput.methodResetMouse();
+            componentInstanceInput.methodResetKeys();
+            //
             return;
         }
 
@@ -431,18 +456,27 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
         else if(componentInstanceInput.keys.down){speedY = -0.02;}
         else{speedY = componentInstanceInput.mouseY * -0.001;}
 
+        // clear the mouse deltas, always! will lead to severe bugs otherwise
+        componentInstanceInput.methodResetMouse();
+        componentInstanceInput.methodResetKeys();
+
         // early return: we don't do anything if we don't have anything
         if(speedX == 0 && speedY == 0){return;}
 
-        // pitch (up-down rotation)
-        //this.#camera.rotateX(speedY);
         // we first accumulate the pitch (up-down rotation)
         // and then we clamp it, to prevent overshooting
         this.#pitch = THREE.MathUtils.clamp(this.#pitch + speedY, -Math.PI / 2, Math.PI / 2);
         // then we apply it
         this.#camera.rotation.x = this.#pitch;
 
-        //
+        // this is apparently fine
+        // though it informs how we set rotations elsewhere
+        // basically after we do this
+        // we will be unable to directly set .rotation.y = yaw
+        // because yaw could exceed +- pi
+        // so we need to .rotation.set(0,yaw,0) instead
+        // very hard to figure out without help
+        // more on this in the GOTCHAS .md file
         this.#cameraPivot.rotateY(speedX);
 
 
@@ -457,6 +491,7 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
         // when we are done with using mouse
         // we reset it
         componentInstanceInput.methodResetMouse();
+        componentInstanceInput.methodResetKeys();
 
         // update perpendiculars
         this.methodUpdatePerpendiculars();
@@ -483,6 +518,48 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
         // when will we use the unformatted version of directionRight? idk, but here it is
         this.#directionRight.crossVectors(this.#scene.up, this.#directionForward);
         this.#directionRightNonvertical.crossVectors(this.#scene.up, this.#directionForwardNonvertical);
+    }
+    methodLookInDirection(direction)
+    {
+        // create a new dir (to not affect the old one), and make Sure that it is normalized
+        const dir = direction.clone().normalize();
+
+        // yaw: rotation around the up axis, matching the default forward of (0,0,-1)
+        // atan2 is unstable when close to 0
+        // we need to handle this edge case
+        const horizontalLengthSquared = dir.x * dir.x + dir.z * dir.z;
+        // we only apply for non-negligible values
+        if(horizontalLengthSquared > 1e-6)
+        {
+            const yaw = Math.atan2(-dir.x, -dir.z);
+            // was: this.#cameraPivot.rotation.y = yaw;
+            // more on why this is unsafe in the GOTCHAS .md file
+            // in short : yaw must not be allowed to exceed +- pi
+            // and directly setting it helps
+            this.#cameraPivot.rotation.set(0, yaw, 0);
+        }
+        
+        // pitch: elevation above/below the horizontal plane, same clamp as mouse-look uses
+        const horizontalLength = Math.sqrt(horizontalLengthSquared);
+        this.#pitch = THREE.MathUtils.clamp(Math.atan2(dir.y, horizontalLength), -Math.PI / 2, Math.PI / 2);
+        this.#camera.rotation.x = this.#pitch;
+        
+        //
+        //this.methodUpdatePerpendiculars();
+    }
+    methodLookAt(targetPosition)
+    {
+        // we transform this problem
+        // to: "get the direction to the target"
+        // and then we invoke our LookInDirection() method...
+        // ...with regards to that direction
+
+        //
+        console.log(this.#cameraPivot.position);
+        
+        //
+        const direction = new THREE.Vector3().subVectors(targetPosition, this.#cameraPivot.position);
+        this.methodLookInDirection(direction);
     }
     // #endregion methods public
 
