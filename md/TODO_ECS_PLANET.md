@@ -5,6 +5,10 @@ Distinct from `TODO.md`, which is a **seed-ported reference** (it describes the 
 project verbatim and is left unmodified — see its PROVENANCE banner). New refactor /
 cleanup items for *this* codebase go here.
 
+> **Planet slices #1 and #2 are both complete and committed** (see `PLANET.md`) — face
+> parsing, debug visualization, and `EntityComponentSpawnOnPlanetFace` are wired into both
+> worlds. The two items below are unrelated cleanup and remain open.
+
 ---
 
 ## 1. Align input-variant naming: `PlayerControllerInput` → `PlayerControllerInputMK`

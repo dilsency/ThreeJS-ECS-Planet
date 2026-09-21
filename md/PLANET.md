@@ -106,17 +106,23 @@ menu↔world cycle cleanly. (Player-on-flat-ground is expected at this stage.)
 
 ---
 
-## Slice #2 — `EntityComponentPlanetFaces` (co-located) + spawn-on-face
+## Slice #2 — `EntityComponentPlanetFaces` (co-located) + spawn-on-face — **implemented**
 
 **Spec (settled 2026-09-15, revised same day — see "Topology decision").** Scope: **core +
 spawn.** Parse the icosahedron into per-face data and spawn the player on a chosen face.
 **Multi-planet-ready by design**, one planet authored for now.
 
+**Status (2026-09-21): built and wired into both worlds**, matching
+`entity components/environment/planet.js`. Two names differ from the original spec — see
+"Naming — as implemented" below — and the parse went further than spec'd, also building the
+wall planes originally deferred (next paragraph).
+
 **Deferred to the gravity slice** (see `SCALE_WHEN_NEEDED.md`): `getNearestFace`,
-`isWithinFace`, the outer-wall planes, the `helper_mesh.js` port (its two bug-fixes —
-`getNormalTriangleData` first-vertex, dead `getSignOfPointInTriangle` `return`), and
-**orientation** (aligning "up" to the face normal). So in this slice the player spawns
-*positioned* on a face but still world-Y up.
+`isWithinFace`, the `helper_mesh.js` port itself (its two known bugs —
+`getNormalTriangleData` first-vertex, dead `getSignOfPointInTriangle` `return` — are moot,
+since the floor/wall plane math was built directly in `EntityComponentPlanetFaces` instead
+of porting that helper), and **orientation** (aligning "up" to the face normal). So in this
+slice the player spawns *positioned* on a face but still world-Y up.
 
 ### Topology decision (why a co-located component, not a Context)
 Face data is an **intrinsic facet of the planet** — its surface, where you stand, where gravity
@@ -150,48 +156,77 @@ Multi-planet still falls out for free: each planet entity carries its **own** fa
   the buggy `getNormalTriangleData` is never needed). Store **world-space**
   `center = planetPosition + centerLocal × radius` (position/radius read off the mesh sibling).
 - **Exposes:** `methodGetFaceCount()`, `methodGetFaceCenter(i)` (world), `methodGetFaceNormal(i)`,
-  `methodGetIsReady()`.
-- **Debug** (`debug`, default off): an `ArrowHelper` per face center along its normal; removed in
-  `methodDispose`. **This is the browser-visible payoff of Piece 2** — 20 arrows out of the faces.
-- **Dispose:** drop parsed arrays; remove debug arrows. (Per-world; swept on teardown.)
+  `methodGetIsReady()` (alias `methodHasOnLazyLoadInit()`).
+- **Also builds, per face** (ahead of spec — pulled forward from the gravity slice): a floor
+  `THREE.Plane` (`#planesFloor[i]`, via `setFromNormalAndCoplanarPoint`) and 3 wall `Plane`s
+  (`#planesWall[i]`, one per edge, via `#methodCreatePlaneWalls`) — not yet exposed through a
+  getter or consumed anywhere; built for the future gravity/collision work.
+- **Debug** (`debug`, default off): an `ArrowHelper` per face center along its normal, **plus** a
+  wireframe `PlaneGeometry` mesh per face (faked, not `THREE.PlaneHelper` — see `GOTCHAS.md`'s
+  `PlaneHelper` entry for why); both removed in `methodDispose`. **This is the browser-visible
+  payoff of Piece 2** — 20 arrows + 20 wireframe squares out of the faces.
+- **Dispose:** remove + dispose debug arrows and debug plane meshes. (Per-world; swept on
+  teardown. Parsed arrays/planes are not explicitly cleared on dispose — the whole component
+  instance goes with the world.)
 
 ### `EntityComponentPlanetModel` — amendment
 - Add a **`position` param** (default origin); mesh placed at `position`, scaled by `radius`, and
   exposed via `methodGetPosition()` so the faces sibling can build world-space centers.
   (Enables multiple planets at distinct spots.)
 
-### `EntityComponentPlayerSpawnOnFace` (on the Player prefab)
-- **Params:** `faces` = `$ref` → the planet entity's `EntityComponentPlanetFaces`; `spawnFaceIndex`
-  (default 0); `spawnDistance` (default 2, world units along the normal).
-- **Lazy one-shot** (`methodUpdate`): resolve the `faces` `$ref`; if not ready, return; once ready →
-  `position = getFaceCenter(i) + getFaceNormal(i) × spawnDistance` → `methodSetPosition(position)`
-  (broadcasts `update.position` to the camera rig) → set `#hasSpawned`; thereafter return.
+### `EntityComponentSpawnOnPlanetFace` (on the Player prefab) — naming differs from spec
+Implemented as **`EntityComponentSpawnOnPlanetFace`** (spec'd as `EntityComponentPlayerSpawnOnFace`),
+with param names **`planet`** (spec'd `faces`), **`faceIndex`** (spec'd `spawnFaceIndex`), and
+**`faceDistance`** (spec'd `spawnDistance`, default 2 → implemented default 2.0, but both worlds
+override it to `20.0`).
+- **Params:** `planet` = `$ref` → the planet entity's `EntityComponentPlanetFaces`; `faceIndex`
+  (default `null` → **random** face via `Math.floor(Math.random() * faceCount)` if unset, not a
+  fixed default of 0 as spec'd); `faceDistance` (default 2.0, world units along the normal).
+- **Lazy one-shot** (`methodUpdate`): resolve the `planet` `$ref`; if not ready — including
+  waiting on the planet's own `methodGetIsReady()` — return; once ready →
+  `position = getFaceCenter(faceIndex) + getFaceNormal(faceIndex) × faceDistance` →
+  `methodSetPosition(position)` (bubbles up through the parent entity, broadcasting to the camera
+  rig); **also**, if a sibling `EntityComponentCameraControllerFirstPerson` exists, calls its
+  `methodLookAt(faceCenter)` to orient the view at the face — not in the original spec, added so
+  spawning doesn't leave the player facing an arbitrary direction; then sets `#hasOnLazyLoadInit`
+  and returns early on every later call.
 - Coexists with the startup ground-spawn (`SingletonContextPlayerInitialization` → the camera
   controller): the player briefly sits at the ground X/Z, then snaps to the face once ready.
+- **Wired in:** registered in `entityComponentRegistry` (`classes/loading-from-json/registry.js`),
+  added to `data/prefabs/player.json` with `planet` pointed at
+  `{ entity: "planet", component: "EntityComponentPlanetFaces" }` and `faceDistance: 20.0`, and
+  both `worldDefault.json` / `worldB.json` override `faceDistance` to `20.0` (radius-20 planet, so
+  the player spawns 20 units off the surface — matches the "outside the planet" expectation
+  the spec called for by suggesting a smaller radius instead).
 
 ### Runtime chain (all lazy / guarded)
-`PlayerSpawnOnFace` waits on `EntityComponentPlanetFaces.methodGetIsReady()` (resolved by `$ref`,
+`SpawnOnPlanetFace` waits on `EntityComponentPlanetFaces.methodGetIsReady()` (resolved by `$ref`,
 cross-entity) → which waits on its **sibling** `EntityComponentPlanetModel.methodGetGeometry()`
 (same entity, direct `methodGetComponent`, async OBJ load) → which waits on
 `SingletonContextModelCache`. Each hop is a `$ref`/null guard — no ordering assumptions.
 
-### Data (per world, multi-planet-ready)
+### Data (per world, multi-planet-ready) — as implemented
 ```jsonc
 // The planet entity carries BOTH facets — mesh + faces — as siblings:
 { "name": "planet", "components": [
     { "type": "EntityComponentPlanetModel",
       "params": { "model": "Icosahedron", "radius": 20, "color": "#00FF00" } },
     { "type": "EntityComponentPlanetFaces",
-      "params": { "debug": false } } ] },
-// Player prefab gains PlayerSpawnOnFace; per-world overrideParams points at the planet's faces facet:
-"EntityComponentPlayerSpawnOnFace": {
-    "faces": { "$ref": { "entity": "planet", "component": "EntityComponentPlanetFaces" } },
-    "spawnFaceIndex": 0, "spawnDistance": 2 }
+      "params": { "debug": true } } ] },
+// Player prefab gains EntityComponentSpawnOnPlanetFace; per-world overrideParams tune faceDistance:
+// (data/prefabs/player.json)
+"EntityComponentSpawnOnPlanetFace": {
+    "planet": { "$ref": { "entity": "planet", "component": "EntityComponentPlanetFaces" } },
+    "faceDistance": 20.0 }
+// (worldDefault.json / worldB.json overrideParams — faceIndex left unset → random face each run)
+"EntityComponentSpawnOnPlanetFace": { "faceDistance": 20.0 }
 ```
 
 ### Registration
-`EntityComponentPlanetFaces` + `EntityComponentPlayerSpawnOnFace` added to
-`entityComponentRegistry` (both JSON-spawned). `PlayerSpawnOnFace` added to `data/prefabs/player.json`.
+`EntityComponentPlanetModel`, `EntityComponentPlanetFaces` + `EntityComponentSpawnOnPlanetFace` are
+all added to `entityComponentRegistry` (`classes/loading-from-json/registry.js`, one import from
+`environment/planet.js`). `EntityComponentSpawnOnPlanetFace` added to `data/prefabs/player.json`,
+alongside `EntityComponentCameraControllerFirstPerson` and `EntityComponentPlayerController`.
 
 ### `$ref` resolution
 The **only** `$ref` in this slice is player → the planet's faces facet (cross-entity). It resolves
@@ -201,12 +236,20 @@ The faces↔mesh link is **not** a `$ref` — same-entity siblings, direct `meth
 Hydration passes `$ref` through untouched (loader-side).
 
 ### Verify
-Pick `spawnFaceIndex`; confirm the player spawns at that face's position. **Drop `radius` to
-~3–5** to see the planet as a discrete object (at 20 the player spawns inside it → invisible
-from inside). Turn `debug: true` to eyeball the parse (20 arrows). Return-to-menu tears down cleanly.
+Set a `faceIndex` (or leave it unset for a random face); confirm the player spawns at that face's
+position, `faceDistance` off the surface, looking at the face. Both worlds ship with `radius: 20`
+and `faceDistance: 20.0` — rather than shrinking the planet to see it from outside (the original
+suggestion), the spawn distance was pushed out instead, so the player still starts outside the
+mesh. `debug: true` is on in both worlds, so the 20 debug arrows **and** 20 wireframe floor
+squares are visible on load. Return-to-menu tears down cleanly (arrows + plane meshes disposed).
 
-### Build order (each piece is browser-checkable)
-1. `EntityComponentPlanetModel` `position` param → planet renders offset. 2. `EntityComponentPlanetFaces`
-(co-located sibling, with `debug`) + register + add to the planet entity → 20 debug arrows.
-3. `EntityComponentPlayerSpawnOnFace` + register + add to player prefab + world `overrideParams` →
-player snaps to the chosen face. 4. Promote wiring to the real worlds; final verify.
+### Build order (each piece is browser-checkable) — all done as of 2026-09-21
+1. **Done.** `EntityComponentPlanetModel` `position` param → planet renders offset.
+2. **Done.** `EntityComponentPlanetFaces` (co-located sibling, with `debug`) + register + add to
+   the planet entity → 20 debug arrows + 20 debug wireframe floor squares (parse also builds
+   floor/wall `Plane`s per face, ahead of spec, for the future gravity slice).
+3. **Done**, as `EntityComponentSpawnOnPlanetFace` (name/param differences from spec — see above)
+   + register + add to player prefab + world `overrideParams` → player snaps to the chosen (or
+   random) face and looks at it.
+4. **Done.** Wiring promoted to both `worldDefault.json` and `worldB.json`; working tree is clean
+   and this is all committed (`1ebea31`).

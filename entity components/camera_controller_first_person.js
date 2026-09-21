@@ -57,11 +57,23 @@ export class EntityComponentCameraControllerFirstPersonInputMK extends EntityCom
         document.addEventListener('keyup', this.#eventListenerHandlerOnKeyUp, false);
         document.addEventListener('mousemove', this.#eventListenerHandlerOnMouseMove, false);
 
-        // Some environments deliver global keyboard events to window instead of document
-        // (depending on focus). Listen on both to improve reliability in production builds.
-        window.addEventListener('keydown', this.#eventListenerHandlerOnKeyDown, false);
-        window.addEventListener('keyup', this.#eventListenerHandlerOnKeyUp, false);
-        window.addEventListener('mousemove', this.#eventListenerHandlerOnMouseMove, false);
+        // Redundant: keydown/keyup/mousemove all bubble from document up to
+        // window, so the document listeners above already see every one of
+        // these events - adding the same handler on window as well just
+        // fires it a second time per event. Harmless for the boolean key
+        // flags here (setting `true`/`false` twice is a no-op), but this is
+        // exactly the double-registration anti-pattern GOTCHAS.md warns
+        // about ("don't register the same listener on document AND window -
+        // it double-fires and corrupts any value computed by diffing across
+        // events"), which would bite methodOnMouseMove() if it ever moved
+        // from reading e.movementX/e.movementY (browser-precomputed) to
+        // computing its own delta by diffing across events. Left commented
+        // out rather than deleted so the earlier "improve reliability in
+        // production builds" reasoning stays visible if window-only focus
+        // turns out to matter after all.
+        //window.addEventListener('keydown', this.#eventListenerHandlerOnKeyDown, false);
+        //window.addEventListener('keyup', this.#eventListenerHandlerOnKeyUp, false);
+        //window.addEventListener('mousemove', this.#eventListenerHandlerOnMouseMove, false);
     }
     methodDispose()
     {
@@ -73,9 +85,10 @@ export class EntityComponentCameraControllerFirstPersonInputMK extends EntityCom
         document.removeEventListener('keyup', this.#eventListenerHandlerOnKeyUp, false);
         document.removeEventListener('mousemove', this.#eventListenerHandlerOnMouseMove, false);
 
-        window.removeEventListener('keydown', this.#eventListenerHandlerOnKeyDown, false);
-        window.removeEventListener('keyup', this.#eventListenerHandlerOnKeyUp, false);
-        window.removeEventListener('mousemove', this.#eventListenerHandlerOnMouseMove, false);
+        // matches the window.addEventListener calls commented out above in methodInitialize()
+        //window.removeEventListener('keydown', this.#eventListenerHandlerOnKeyDown, false);
+        //window.removeEventListener('keyup', this.#eventListenerHandlerOnKeyUp, false);
+        //window.removeEventListener('mousemove', this.#eventListenerHandlerOnMouseMove, false);
     }
     // #endregion lifecycle
 
@@ -86,15 +99,23 @@ export class EntityComponentCameraControllerFirstPersonInputMK extends EntityCom
         {
             case 38: // arrow up
                 this.#keys.up = true;
+                // browsers require arrow keys specifically to .preventDefault(), otherwise they are treated as page scrolling
+                e.preventDefault();
                 break;
             case 40: // arrow down
                 this.#keys.down = true;
+                // browsers require arrow keys specifically to .preventDefault(), otherwise they are treated as page scrolling
+                e.preventDefault();
                 break;
             case 37: // arrow left
                 this.#keys.left = true;
+                // browsers require arrow keys specifically to .preventDefault(), otherwise they are treated as page scrolling
+                e.preventDefault();
                 break;
             case 39: // arrow right
                 this.#keys.right = true;
+                // browsers require arrow keys specifically to .preventDefault(), otherwise they are treated as page scrolling
+                e.preventDefault();
                 break;
             case 90: // key z
                 this.#keys.reset = true;
@@ -458,7 +479,8 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
 
         // clear the mouse deltas, always! will lead to severe bugs otherwise
         componentInstanceInput.methodResetMouse();
-        componentInstanceInput.methodResetKeys();
+        // just the mouse though; not the keys
+        //componentInstanceInput.methodResetKeys();
 
         // early return: we don't do anything if we don't have anything
         if(speedX == 0 && speedY == 0){return;}
@@ -491,7 +513,8 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
         // when we are done with using mouse
         // we reset it
         componentInstanceInput.methodResetMouse();
-        componentInstanceInput.methodResetKeys();
+        // just reset the mouse; not the keys
+        //componentInstanceInput.methodResetKeys();
 
         // update perpendiculars
         this.methodUpdatePerpendiculars();
