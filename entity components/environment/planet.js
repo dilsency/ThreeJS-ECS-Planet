@@ -809,6 +809,13 @@ export class EntityComponentSpawnOnPlanetFace extends EntityComponent
     // #region getters
     methodGetIsReady(){return this.#hasOnLazyLoadInit;}
     methodHasOnLazyLoadInit(){return this.#hasOnLazyLoadInit;}
+    //
+    methodGetFaceNormal()
+    {
+        if(this.#planetResolved == null){return;}
+        if(!this.#planetResolved.methodGetIsReady()){return;}
+        return this.#planetResolved.methodGetFaceNormal(this.#faceIndex);
+    }
     // #endregion getters
 
     // #region private methods

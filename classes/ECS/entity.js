@@ -35,6 +35,9 @@ export class Entity
     #components = null;
 
     #position = null;
+    #dirUp = null;
+    #dirFacing = null;
+    // outdated?
     #rotationA = null;
     #rotationB = null;
 
@@ -53,6 +56,11 @@ export class Entity
 
         //
         this.#position = new THREE.Vector3();
+
+        // normalized directional vectors
+        this.#dirUp = new THREE.Vector3(0,1,0);
+        this.#dirFacing = new THREE.Vector3(0,0,-1);
+        // outdated?
         this.#rotationA = new THREE.Quaternion();
         this.#rotationB = new THREE.Quaternion();
 
@@ -131,12 +139,18 @@ export class Entity
     methodGetParent(){return this.#parent;}
     methodGetName(){return this.#name;}
     methodGetPosition(){return this.#position;}
-    methodGetRotations(){return {rotationA: this.#rotationA, rotationB: rotationB};}
+    methodGetDirUp(){return this.#dirUp;}
+    methodGetDirFacing(){return this.#dirFacing;}
+    // outdated?
+    methodGetRotations(){return {rotationA: this.#rotationA, rotationB: this.#rotationB};}
 
     get Parent(){return this.#parent;}
     get Name(){return this.#name;}
     get Position(){return this.#position;}
-    get Rotation(){return {rotationA: this.#rotationA, rotationB: rotationB};}
+    get DirUp(){return this.#dirUp;}
+    get DirFacing(){return this.#dirFacing;}
+    // outdated?
+    get Rotation(){return {rotationA: this.#rotationA, rotationB: this.#rotationB};}
     // #endregion getters
 
     // #region setters
@@ -155,6 +169,25 @@ export class Entity
             invokableHandlerValue: this.#position,
         });
     }
+    methodSetDirUp(paramDirUp)
+    {
+        this.#dirUp.copy(paramDirUp);
+            // supposedly this lets us trickle down our dirUp to each entity_component that needs it
+        this.methodSendMessageWithinEntity({
+            invokableHandlerName: 'update.dir.up',
+            invokableHandlerValue: this.#dirUp,
+        });
+    }
+    methodSetDirFacing(paramDirFacing)
+    {
+        this.#dirFacing.copy(paramDirFacing);
+            // supposedly this lets us trickle down our dirFacing to each entity_component that needs it
+        this.methodSendMessageWithinEntity({
+            invokableHandlerName: 'update.dir.facing',
+            invokableHandlerValue: this.#dirFacing,
+        });
+    }
+    // outdated?
     methodSetRotation(paramRotation){
         this.#rotationA.copy(paramRotation);
             // supposedly this lets us trickle down our rotation to each entity_component that needs it

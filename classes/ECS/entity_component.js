@@ -89,6 +89,8 @@ export class EntityComponent
 
     methodGetName(){return this.#parent.methodGetName();}
     methodGetPosition(){return this.#parent.methodGetPosition();}
+    methodGetDirUp(){return this.#parent.methodGetDirUp();}
+    methodGetDirFacing(){return this.#parent.methodGetDirFacing();}
 
     //
     methodGetIsFlaggedForDeletion()
@@ -108,10 +110,10 @@ export class EntityComponent
 
     // setters, but actually for the parent
 
-    methodSetPosition(paramPosition)
-    {
-        this.#parent.methodSetPosition(paramPosition);
-    }
+    methodSetPosition(paramPosition) { this.#parent.methodSetPosition(paramPosition); }
+    methodSetDirUp(paramDirUp) { this.#parent.methodSetDirUp(paramDirUp); }
+    methodSetDirFacing(paramDirFacing) { this.#parent.methodSetDirFacing(paramDirFacing); }
+    // outdated?
     methodSetRotations(paramRotationA, paramRotationADelta, paramRotationB, paramRotationBDelta)
     {
         this.#parent.methodSetRotations(paramRotationA, paramRotationADelta, paramRotationB, paramRotationBDelta);

@@ -356,13 +356,17 @@ export class EntityComponentPlayerController extends EntityComponent
         //
         if(componentInstanceInput.keys.up == true)
         {
-            positionResult.y += 0.05;
-            //this.#cameraPivot.position.y += 0.05;
+            positionResult.addScaledVector(this.methodGetDirUp(), 0.05);
+            // outdated : we don't want to travel straight up anymore
+            // we want to travel in the CURRENT up direction, which is able to change
+            //positionResult.y += 0.05;
         }
         else if(componentInstanceInput.keys.down == true)
         {
-            positionResult.y -= 0.05;
-            //this.#cameraPivot.position.y -= 0.05;
+            positionResult.addScaledVector(this.methodGetDirUp(), -0.05);
+            // outdated : we don't want to travel straight up anymore
+            // we want to travel in the CURRENT up direction, which is able to change
+            //positionResult.y -= 0.05;
         }
 
 

@@ -44,6 +44,7 @@ export class EntityComponentCameraControllerFirstPersonInputMK extends EntityCom
             left: false,
             right: false,
             reset: false,
+            updirection: false,
         };
 
         // we need to store event listener handlers...
@@ -120,6 +121,9 @@ export class EntityComponentCameraControllerFirstPersonInputMK extends EntityCom
             case 90: // key z
                 this.#keys.reset = true;
                 break;
+            case 88: // key x
+                this.#keys.updirection = true;
+                break;
         }
     }
     methodOnKeyUp(e)
@@ -140,6 +144,9 @@ export class EntityComponentCameraControllerFirstPersonInputMK extends EntityCom
                 break;
             case 90: // key z
                 this.#keys.reset = false;
+                break;
+            case 88: // key x
+                this.#keys.updirection = false;
                 break;
         }
     }
@@ -164,6 +171,7 @@ export class EntityComponentCameraControllerFirstPersonInputMK extends EntityCom
         this.#keys.down = false;
         this.#keys.left = false;
         this.#keys.right = false;
+        this.#keys.updirection = false;
     }
     // #endregion methods
 }
@@ -376,25 +384,6 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
     }
     // #endregion construct
 
-    // #region getters
-    get directionForward(){return this.#directionForward;}
-    get directionForwardNonvertical(){return this.#directionForwardNonvertical;}
-    get directionRightNonvertical(){return this.#directionRightNonvertical;}
-
-    // For network sync (see MULTIPLAYER_TOPOLOGY_AND_SYNC.md). Exposes each
-    // object's own quaternion rather than a derived yaw/pitch scalar pair -
-    // the real facing direction the local player sees is
-    // cameraPivot.quaternion (parent) composed with camera.quaternion
-    // (child), and sending each object's actual quaternion stays correct
-    // regardless of how their rotation logic evolves, unlike extracting
-    // yaw/pitch Euler components, which only worked because cameraPivot
-    // currently only ever rotates on Y and camera only ever rotates on X
-    // (see TODO.md's now-resolved item 3 for the full reasoning).
-    methodGetPosition(){return this.#cameraPivot.position;}
-    methodGetCameraPivotQuaternion(){return this.#cameraPivot.quaternion;}
-    methodGetCameraQuaternion(){return this.#camera.quaternion;}
-    // #endregion getters
-
     // #region lifecycle
     methodInitialize()
     {
@@ -460,9 +449,21 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
             //
             componentInstanceInput.methodResetMouse();
             componentInstanceInput.methodResetKeys();
+            // the reset key probably shouldn't reset dirUp in the future, but let's try for now
+            this.methodSetDirUp(new THREE.Vector3(0,1,0));
             //
             return;
         }
+
+        // #region up-direction
+        if(componentInstanceInput.keys.updirection == true)
+        {
+            const componentInstancePlanetFaceSpawn = this.methodGetComponent("EntityComponentSpawnOnPlanetFace");
+            const planetFaceNormal = componentInstancePlanetFaceSpawn?.methodGetFaceNormal();
+            if(planetFaceNormal == null){console.error("no face normal to update to");return;}
+            this.methodSetDirUp(planetFaceNormal);
+        }
+        // #endregion up-direction
 
         // speeds
         var speedX = 0;
@@ -485,11 +486,21 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
         // early return: we don't do anything if we don't have anything
         if(speedX == 0 && speedY == 0){return;}
 
+        // #region pitch
+
+        // orientation independent
+
         // we first accumulate the pitch (up-down rotation)
         // and then we clamp it, to prevent overshooting
         this.#pitch = THREE.MathUtils.clamp(this.#pitch + speedY, -Math.PI / 2, Math.PI / 2);
         // then we apply it
         this.#camera.rotation.x = this.#pitch;
+
+        // #endregion pitch
+
+        // #region yaw
+
+        // orientation dependent
 
         // this is apparently fine
         // though it informs how we set rotations elsewhere
@@ -499,7 +510,14 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
         // so we need to .rotation.set(0,yaw,0) instead
         // very hard to figure out without help
         // more on this in the GOTCHAS .md file
-        this.#cameraPivot.rotateY(speedX);
+
+        //
+        this.#cameraPivot.rotateOnWorldAxis(this.methodGetDirUp(), speedX);
+
+        // outdated : this would have been fine if up-direction could not be changed (but it can be)
+        //this.#cameraPivot.rotateY(speedX);
+
+        // #endregion yaw
 
 
         // IF we want to broadcast to other components that we have changed rotation
@@ -507,6 +525,7 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
         //
         const resultRotationCamera = new THREE.Quaternion().copy(this.#camera.quaternion);
         const resultRotationCameraPivot = new THREE.Quaternion().copy(this.#cameraPivot.quaternion);
+
         // in order to broadcast to other components that we have changed rotation
         this.methodSetRotations(resultRotationCameraPivot, speedX, resultRotationCamera, speedY);
 
@@ -521,26 +540,80 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
     }
     // #endregion lifecycle
 
+    // #region getters
+    get directionForward(){return this.#directionForward;}
+    get directionForwardNonvertical(){return this.#directionForwardNonvertical;}
+    get directionRightNonvertical(){return this.#directionRightNonvertical;}
+
+    // For network sync (see MULTIPLAYER_TOPOLOGY_AND_SYNC.md). Exposes each
+    // object's own quaternion rather than a derived yaw/pitch scalar pair -
+    // the real facing direction the local player sees is
+    // cameraPivot.quaternion (parent) composed with camera.quaternion
+    // (child), and sending each object's actual quaternion stays correct
+    // regardless of how their rotation logic evolves, unlike extracting
+    // yaw/pitch Euler components, which only worked because cameraPivot
+    // currently only ever rotates on Y and camera only ever rotates on X
+    // (see TODO.md's now-resolved item 3 for the full reasoning).
+    methodGetPosition(){return this.#cameraPivot.position;}
+    methodGetCameraPivotQuaternion(){return this.#cameraPivot.quaternion;}
+    methodGetCameraQuaternion(){return this.#camera.quaternion;}
+
+    // #endregion getters
+
+    // #region setters
+    methodSetDirUp(paramDirUp)
+    {
+        // pitfall : we can't .setFromUnitVectors() directly on #cameraPivot.quaternion
+        // this is because #cameraPivot.quaternion already holds data
+        // so we create a new delta quaternion that we do .setFromUnitVectors() on
+        // second big change : we apply it to #cameraPivot.quaternion via .premultiply() specifically
+        // .multiply() is similar to .rotateOnAxis()
+        // whereas
+        // .premultiply() is similar to .rotateOnWorldAxis()
+
+        // this is all noted in the GOTCHAS.md file.
+
+        //
+        const delta = new THREE.Quaternion().setFromUnitVectors(this.methodGetDirUp(), paramDirUp);
+        //
+        this.#cameraPivot.quaternion.premultiply(delta);
+
+        // super. is to make sure we use the base class version
+        super.methodSetDirUp(paramDirUp);
+        this.methodUpdatePerpendiculars();
+    }
+    methodSetDirFacing(paramDirFacing)
+    {
+        console.log("() methodSetDirFacing");
+        return;
+    }
+    // #endregion setters
+
     // #region methods public
     methodUpdatePerpendiculars()
     {
         // we use the cross product
         // of our camera's forward direction
-        // and the current up direction (which is not changing in this project)
+        // and the current up direction
         // to get the right direction
 
         // update directionForward
         // with our camera's current direction
         this.#camera.getWorldDirection(this.#directionForward);
-        // we need a version of directionForward
-        // that has no vertical component
+
+        // #region directionForward with no vertical component
+
+        //
         this.#directionForwardNonvertical.copy(this.#directionForward);
-        this.#directionForwardNonvertical.y = 0;
+        // this gets our current up direction, and zeroes it out
+        this.#directionForwardNonvertical.addScaledVector(this.methodGetDirUp(), -this.#directionForward.dot(this.methodGetDirUp()));
         this.#directionForwardNonvertical.normalize();
 
+        // #endregion directionForward with no vertical component
+
         // when will we use the unformatted version of directionRight? idk, but here it is
-        this.#directionRight.crossVectors(this.#scene.up, this.#directionForward);
-        this.#directionRightNonvertical.crossVectors(this.#scene.up, this.#directionForwardNonvertical);
+        this.#directionRight.crossVectors(this.methodGetDirUp(), this.#directionForward);
+        this.#directionRightNonvertical.crossVectors(this.methodGetDirUp(), this.#directionForwardNonvertical);
     }
     methodLookInDirection(direction)
     {
