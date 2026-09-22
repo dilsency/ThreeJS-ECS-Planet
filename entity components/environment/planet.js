@@ -117,6 +117,10 @@ export class EntityComponentPlanetFaces extends EntityComponent
     //
     #faceCenters = null;
     #faceNormals = null;
+    // there are a lot of "shortcuts" that can be done
+    // by storing edge data in an array for each face
+    // makes looking it up much easier later
+    #faceEdgeData = [];
     // planes; makes math calculations easier, and there are helpers to visualize them
     // each face of the planet has 1 floor; we store each plane directly in this
     #planesFloor = [];
@@ -124,8 +128,11 @@ export class EntityComponentPlanetFaces extends EntityComponent
     #planesWall = [];
     //
     #debug = false;
-    #debugArrows = [];
+    #debugArrowsFloor = [];
+    #debugArrowsWall = [];
     #debugPlanesFloor = [];
+    // reminder : each item in this array will contain its own array of 3 items; each wall
+    #debugPlanesWall = [];
     // #endregion privates
 
     // #region construct
@@ -154,25 +161,39 @@ export class EntityComponentPlanetFaces extends EntityComponent
         // #endregion lazy
 
         // #region body
-        // we COULD move the first initial geometry to faces loop here
-        // but then we'd need another flag
-        // so we should really rename #methodGetIsReady to #methodSingleInitialization or something
-        // and #isReady to #hasSingleInitialized or something
         // #endregion body
     }
     methodDispose() {
-        if(this.#debugArrows != null && this.#debugArrows.length > 0)
+        if(this.#debugArrowsFloor != null && this.#debugArrowsFloor.length > 0)
         {
             // dispose of arrows
-            for(var i = 0; i < this.#debugArrows.length; i++)
+            for(var i = 0; i < this.#debugArrowsFloor.length; i++)
             {
                 // remove from scene
                 // apparently we don't need to dispose arrow.geometry
                 // since this geometry is of a shared&static type
-                this.methodGetScene().remove(this.#debugArrows[i]);
+                this.methodGetScene().remove(this.#debugArrowsFloor[i]);
             }
-            // dispose of pointer
-            this.#debugArrows = [];
+            // dispose of container's pointer
+            this.#debugArrowsFloor = [];
+        }
+        if(this.#debugArrowsWall != null && this.#debugArrowsWall.length > 0)
+        {
+            // dispose of arrows
+            for(var i = 0; i < this.#debugArrowsWall.length; i++)
+            {
+                for(var j = 0; j < 3; j++)
+                {
+                    // remove from scene
+                    // apparently we don't need to dispose arrow.geometry
+                    // since this geometry is of a shared&static type
+                    this.methodGetScene().remove(this.#debugArrowsWall[i][j]);
+                }
+                // dispose of container's pointer
+                this.#debugArrowsWall[i] = [];
+            }
+            // dispose of container's pointer
+            this.#debugArrowsWall = [];
         }
         if(this.#debugPlanesFloor != null && this.#debugPlanesFloor.length > 0)
         {
@@ -186,8 +207,31 @@ export class EntityComponentPlanetFaces extends EntityComponent
                 //
                 this.methodGetScene().remove(this.#debugPlanesFloor[i]);
             }
-            // dispose of pointer
+            // dispose of container's pointer
             this.#debugPlanesFloor = [];
+        }
+        if(this.#debugPlanesWall != null && this.#debugPlanesWall.length > 0)
+        {
+            // dispose of planes (floor)
+            for(var i = 0; i < this.#debugPlanesWall.length; i++)
+            {
+                if(this.#debugPlanesWall[i] == null){console.error("no debugPlanesWall["+i+"]");continue;}
+                for(var j = 0; j < 3; j++)
+                {
+                    if(this.#debugPlanesWall[i][j] == null){console.error("no debugPlanesWall["+i+"]["+j+"]");continue;}
+
+                    // our planeHelpers are actual meshes created by us
+                    // so we need to dispose of both geometry and material
+                    this.#debugPlanesWall[i][j].material.dispose();
+                    this.#debugPlanesWall[i][j].geometry.dispose();
+                    //
+                    this.methodGetScene().remove(this.#debugPlanesWall[i][j]);
+                }
+                // dispose of container's pointer
+                this.#debugPlanesWall[i] = [];
+            }
+            // dispose of container's pointer
+            this.#debugPlanesWall = [];
         }
     }
     // #endregion lifecycle
@@ -261,8 +305,10 @@ export class EntityComponentPlanetFaces extends EntityComponent
         //
         if(this.#debug == true)
         {
-            this.#methodCreateDebugArrows();
-            this.#methodCreateDebugPlanesFloor();
+            this.#methodCreateDebugArrowsFloor();
+            this.#methodCreateDebugArrowsWall();
+            //this.#methodCreateDebugPlanesFloor();
+            //this.#methodCreateDebugPlanesWall();
         }
 
         // #endregion body
@@ -344,8 +390,10 @@ export class EntityComponentPlanetFaces extends EntityComponent
             const planeFloor = new THREE.Plane().setFromNormalAndCoplanarPoint(normal, worldSpacePosition);
             this.#planesFloor.push(planeFloor);
 
-            // now we need 3 more planes; each representing a wall of the triangle
-            this.#methodCreatePlaneWalls(i,a,b,c,ab,ac,bc,worldSpacePosition,normal,position,radius);
+            // we use this opporunity to both store edge data
+            // AND create planes that represent walls
+            this.#methodStoreEdgeData(i,a,b,c,ab,ac,bc,worldSpacePosition,normal,position,radius);
+            //this.#methodCreatePlaneWalls(i,a,b,c,ab,ac,bc,worldSpacePosition,normal,position,radius);
 
             // #endregion planes
 
@@ -396,62 +444,212 @@ export class EntityComponentPlanetFaces extends EntityComponent
             this.#geometry.attributes.position.array[indexK + 2]
         ));
     }
-    #methodCreatePlaneWalls(i,a,b,c,ab,ac,bc,worldSpacePosition,normal,position,radius)
+    #methodStoreEdgeData(i,a,b,c,ab,ac,bc,worldSpacePosition,normal,position,radius)
     {
+        //
+        //console.log("() methodStoreEdgeData");
+
+        // #region first
+
+        // our i is increased by not only the itemSize (3), but also for the count of each attribute (x,y,z) (also 3)
+        // but we want to use an index of 0,1,2,3..
+        const iterationIndex = i / (this.#geometry.attributes.position.itemSize * 3);
+
         // new array of size 3
-        this.#planesWall[i] = [];
+        this.#faceEdgeData[iterationIndex] = [];
+
+        // #endregion first
+
+        // #region calculate
 
         // we need world-space positions
         // a,b,c are local-space
         // so, using the position and radius
         // we can convert them
 
-        //
+        // also useful to calculate midpoints
         const aWorld = a.clone().multiplyScalar(radius).add(position);
         const bWorld = b.clone().multiplyScalar(radius).add(position);
-        // c is not actually needed; we only need 2 points
-        //const cWorld = c.clone().multiplyScalar(radius).add(position);
+        const cWorld = c.clone().multiplyScalar(radius).add(position);
+
+        // midpoints
+        const abMidWorld = new THREE.Vector3()
+            .add(aWorld).add(bWorld)
+            .divideScalar(2);
+        const acMidWorld = new THREE.Vector3()
+            .add(aWorld).add(cWorld)
+            .divideScalar(2);
+        const bcMidWorld = new THREE.Vector3()
+            .add(bWorld).add(cWorld)
+            .divideScalar(2);
+
+        // we ALSO want to store the direction from the midpoint to the center
+        // the order of operations matter!
+        // in order to get an inwards pointing vector...
+        // ...the center position is sub'd with the midpoint position
+        const abToCenter = new THREE.Vector3().subVectors(worldSpacePosition, abMidWorld).normalize();
+        const acToCenter = new THREE.Vector3().subVectors(worldSpacePosition, acMidWorld).normalize();
+        const bcToCenter = new THREE.Vector3().subVectors(worldSpacePosition, bcMidWorld).normalize();
+
+        // #region edge direction
 
         //
         const abEdgeDirection = ab.clone().normalize();
         const abNormal = new THREE.Vector3().crossVectors(abEdgeDirection, normal).normalize();
         if(abNormal.dot(aWorld.clone().sub(worldSpacePosition)) < 0){abNormal.negate();}
-        this.#planesWall[i].push(new THREE.Plane().setFromNormalAndCoplanarPoint(abNormal, aWorld));
 
         //
         const acEdgeDirection = ac.clone().normalize();
         const acNormal = new THREE.Vector3().crossVectors(acEdgeDirection, normal).normalize();
         if(acNormal.dot(aWorld.clone().sub(worldSpacePosition)) < 0){acNormal.negate();}
-        this.#planesWall[i].push(new THREE.Plane().setFromNormalAndCoplanarPoint(acNormal, aWorld));
 
         //
         const bcEdgeDirection = bc.clone().normalize();
         const bcNormal = new THREE.Vector3().crossVectors(bcEdgeDirection, normal).normalize();
         if(bcNormal.dot(bWorld.clone().sub(worldSpacePosition)) < 0){bcNormal.negate();}
-        this.#planesWall[i].push(new THREE.Plane().setFromNormalAndCoplanarPoint(bcNormal, bWorld));
+
+        // #endregion edge direction
+
+        // #endregion calculate
+
+        // #region store
+
+        //
+        const abObj = {
+            "pointL": aWorld,
+            "pointM": abMidWorld,
+            "pointR": bWorld,
+            "dirAlong": abNormal,
+            "dirToCenter": abToCenter,
+        };
+        this.#faceEdgeData[iterationIndex].push(abObj);
+
+        //
+        const acObj = {
+            "pointL": aWorld,
+            "pointM": acMidWorld,
+            "pointR": cWorld,
+            "dirAlong": acNormal,
+            "dirToCenter": acToCenter,
+        };
+        this.#faceEdgeData[iterationIndex].push(acObj);
+
+        //
+        const bcObj = {
+            "pointL": bWorld,
+            "pointM": bcMidWorld,
+            "pointR": cWorld,
+            "dirAlong": bcNormal,
+            "dirToCenter": bcToCenter,
+        };
+        this.#faceEdgeData[iterationIndex].push(bcObj);
+
+        // #endregion store
+
+        // #region plane walls
+
+        // we use what we stored above to create planes to represent each wall
+        this.#methodCreatePlaneWalls(iterationIndex,
+            abNormal, aWorld,
+            acNormal,
+            bcNormal, bWorld
+        );
+
+        // #endregion plane walls
     }
-    #methodCreateDebugArrows()
+    #methodCreatePlaneWalls(iterationIndex,
+        abNormal, aWorld,
+        acNormal,
+        bcNormal, bWorld
+    )
+    {
+        //
+        //console.log("() methodCreatePlaneWalls");
+
+        // new array of size 3
+        this.#planesWall[iterationIndex] = [];
+
+        //
+        this.#planesWall[iterationIndex].push(
+            new THREE.Plane().setFromNormalAndCoplanarPoint(abNormal, aWorld)
+        );
+
+        //
+        this.#planesWall[iterationIndex].push(
+            new THREE.Plane().setFromNormalAndCoplanarPoint(acNormal, aWorld)
+        );
+
+        //
+        this.#planesWall[iterationIndex].push(
+            new THREE.Plane().setFromNormalAndCoplanarPoint(bcNormal, bWorld)
+        );
+    }
+    // #region debug
+    #methodGetDebugColorPerFace(i){
+        const hue = (i / this.methodGetFaceCount()) % 1.0;
+        return new THREE.Color().setHSL(hue, 1.0, 0.5);
+    }
+    #methodCreateDebugArrowsFloor()
     {
         // loop through our face data and add arrows to all centers
         for(var i = 0; i < this.methodGetFaceCount(); i++)
         {
+            //
+            console.log("() " + i + " methodCreateDebugArrowsFloor");
+            
             // direction must be normalized
             // in this case, it is
             const arrow = new THREE.ArrowHelper(
                 this.methodGetFaceNormal(i),
                 this.methodGetFaceCenter(i),
                 2.0,
-                "#FFFF00"
+                this.#methodGetDebugColorPerFace(i)
             );
             this.methodGetScene().add(arrow);
-            this.#debugArrows.push(arrow);
+            this.#debugArrowsFloor.push(arrow);
         }
+    }
+    #methodCreateDebugArrowsWall()
+    {
+        // reminder : each face has 3 sides
+        // so we first loop through all faces
+        for(var i = 0; i < this.methodGetFaceCount(); i++)
+        {
+            // to store all 3 walls
+            this.#debugArrowsWall[i] = [];
+
+            // we can now loop through all sides, of the current face
+            for(var j = 0; j < 3; j++)
+            {
+                //
+                this.#methodCreateDebugArrowsWallI(i,j);
+            } 
+        }
+    }
+    #methodCreateDebugArrowsWallI(i,j)
+    {
+        if(this.#faceEdgeData[i] == null){console.error("this.#faceEdgeData[i] == null");return;}
+        if(this.#faceEdgeData[i][j] == null){console.error("this.#faceEdgeData[i][j] == null");return;}
+        if(this.#faceEdgeData[i][j].pointM == null){console.error("this.#faceEdgeData[i][j].pointM == null");return;}
+
+        //
+        console.log("() " + i + " methodCreateDebugArrowsWallI");
+
+        //
+        const arrowHelper = new THREE.ArrowHelper(this.#faceEdgeData[i][j].dirToCenter, this.#faceEdgeData[i][j].pointM, 1.0, this.#methodGetDebugColorPerFace(i));
+
+        //
+        this.methodGetScene().add(arrowHelper);
+        this.#debugArrowsWall[i].push(arrowHelper);
     }
     #methodCreateDebugPlanesFloor()
     {
         // loop through our face data and add arrows to all centers
         for(var i = 0; i < this.methodGetFaceCount(); i++)
         {
+            //
+            console.log("() " + i + " methodCreateDebugPlanesFloor");
+            
             // read the GOTCHAS .md file
             // we cannot use the built-in PlaneHelper
             // because our origin point is not 0
@@ -459,7 +657,7 @@ export class EntityComponentPlanetFaces extends EntityComponent
             
             //
             const geometry = new THREE.PlaneGeometry(4,4);
-            const material = new THREE.MeshBasicMaterial({wireframe: true,});
+            const material = new THREE.MeshBasicMaterial({wireframe: true,color:this.#methodGetDebugColorPerFace(i),});
             const planeMesh = new THREE.Mesh(geometry, material);
 
             //
@@ -478,6 +676,90 @@ export class EntityComponentPlanetFaces extends EntityComponent
             this.#debugPlanesFloor.push(planeMesh);
         }
     }
+    #methodCreateDebugPlanesWall()
+    {
+        // reminder : each face has 3 sides
+        // so we first loop through all faces
+        for(var i = 0; i < this.methodGetFaceCount(); i++)
+        {
+            // to store all 3 walls
+            this.#debugPlanesWall[i] = [];
+
+            // we can now loop through all sides, of the current face
+            for(var j = 0; j < 3; j++)
+            {
+                if(this.#planesWall[i] == null){console.error("no planesWall " + i);continue;}
+                if(this.#planesWall[i][j] == null){console.error("no planesWall " + i + " : " + j);continue;}
+
+                //
+                this.#methodCreateDebugPlanesWallI(i,j);
+            } 
+        }
+    }
+    #methodCreateDebugPlanesWallI(i,j)
+    {
+        if(this.#faceEdgeData[i] == null){console.error("this.#faceEdgeData[i] == null");return;}
+        if(this.#faceEdgeData[i][j] == null){console.error("this.#faceEdgeData[i][j] == null");return;}
+        if(this.#faceEdgeData[i][j].pointM == null){console.error("this.#faceEdgeData[i][j].pointM == null");return;}
+
+        //
+        console.log("() " + i + " methodCreateDebugPlanesWallI");
+
+        //
+        const geometry = new THREE.BufferGeometry();
+
+        //
+        geometry.setFromPoints([
+            this.#faceEdgeData[i][j].pointL,
+            this.#faceEdgeData[i][j].pointM.clone().addScaledVector(this.#faceNormals[i],1.0),
+            this.#faceEdgeData[i][j].pointR
+        ]);
+
+        // this is dependent on how many points we have
+        // 3 gives us this
+        geometry.setIndex([0, 1, 2]);
+
+        // 4 gives us this
+        //geometry.setIndex([0, 1, 2, 0, 2, 3]);
+
+        //
+        geometry.computeVertexNormals();
+
+        //
+        const material = new THREE.MeshBasicMaterial({wireframe: true,color:this.#methodGetDebugColorPerFace(i),});
+        const mesh = new THREE.Mesh(geometry,material);
+
+        //
+        this.methodGetScene().add(mesh);
+        this.#debugPlanesWall[i].push(mesh);
+    }
+    #methodCreateDebugPlanesWallIOLD(i)
+    {
+        //
+        const geometry = new THREE.PlaneGeometry(4,4);
+        const material = new THREE.MeshBasicMaterial({wireframe: true,});
+        const planeMesh = new THREE.Mesh(geometry, material);
+
+
+        // we need the midpoint to center it
+        // THREE.Plane does not have such a point
+        // so we use the stored value in #faceEdgeData
+        planeMesh.position.copy(this.#faceEdgeData[i][j].pointM);
+
+        // rotate here
+        // basically means
+        // "which direction is the default forward"
+        // , "which direction is the normal"
+        planeMesh.quaternion.setFromUnitVectors(
+            new THREE.Vector3(0,0,1),
+            this.#faceEdgeData[i][j].dirToCenter
+        );
+
+        //
+        this.methodGetScene().add(planeMesh);
+        this.#debugPlanesWall[i].push(planeMesh);
+    }
+    // #endregion debug
     // #endregion private methods
 }
 
