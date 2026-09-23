@@ -114,9 +114,16 @@ export class EntityComponentPlanetFaces extends EntityComponent
     #geometry = null;
     // lazy
     #hasOnLazyLoadInit = false;
+    // an array of indeces, face indeces that are "direct" neighbors to the current one
+    // meaning they share 2 vertices at the corners, and thus 1 edge
+    #faceNeighborsDirect = [];
+    // an array of indeces, face indeces that are "diagonal" neighbors to the current one
+    // meaning they share only 1 vertices at a corner, no shared edges
+    #faceNeighborsDiagonal = [];
     //
     #faceCenters = null;
     #faceNormals = null;
+    #faceCorners = null;
     // there are a lot of "shortcuts" that can be done
     // by storing edge data in an array for each face
     // makes looking it up much easier later
@@ -238,6 +245,52 @@ export class EntityComponentPlanetFaces extends EntityComponent
 
     // #region getters
     methodGetFaceCount(){return this.#faceCenters.length;}
+    methodGetFaceNormal(index){return this.#faceNormals[index];}
+    methodGetIsReady(){return this.#hasOnLazyLoadInit;}
+    methodHasOnLazyLoadInit(){return this.#hasOnLazyLoadInit;}
+    // #endregion getters
+
+    // #region getters that calculate
+    methodGetMatchingCornersCount(cornersA, cornersB)
+    {
+        // our input parameters are a set of arrays
+        // each containing the 3 corners of a face
+        
+        // what we need to do is loop through all of them
+        // and check if they match
+        // then increment our counter
+
+        let matchingCornersCount = 0;
+
+        for(var i = 0; i < 3; i++)
+        {
+            for(var j = 0; j < 3; j++)
+            {
+                const xPrim = cornersA[i].x;
+                const yPrim = cornersA[i].y;
+                const zPrim = cornersA[i].z;
+
+                const xSec = cornersB[j].x;
+                const ySec = cornersB[j].y;
+                const zSec = cornersB[j].z;
+
+                const isMatch = 
+                    (xPrim == xSec)
+                    &&
+                    (yPrim == ySec)
+                    &&
+                    (zPrim == zSec);
+
+                if(isMatch)
+                {
+                    // we have a match!
+                    matchingCornersCount++;
+                }
+            }
+        }
+
+        return matchingCornersCount;
+    }
     methodGetFaceCenter(index){
         // our stored face center is in the (normalized) object-space of the triangle
         // so it ranges from -1 to 1
@@ -254,10 +307,15 @@ export class EntityComponentPlanetFaces extends EntityComponent
         .multiplyScalar(radius)
         .add(position);
     }
-    methodGetFaceNormal(index){return this.#faceNormals[index];}
-    methodGetIsReady(){return this.#hasOnLazyLoadInit;}
-    methodHasOnLazyLoadInit(){return this.#hasOnLazyLoadInit;}
-    // #endregion getters
+    methodGetIsWithinFace(index)
+    {
+
+    }
+    methodGetNearestFace(position)
+    {
+        
+    } 
+    // #endregion getters that calculate
 
     // #region private methods
     #methodOnLazyLoadInit()
@@ -299,8 +357,15 @@ export class EntityComponentPlanetFaces extends EntityComponent
         if(this.#geometry == null){return;}
         // #endregion early return
 
-        //
+        // the main loop
+        // is responsible for creating planes for floors, planes for walls, ...
+        // and the edge data that is required to create them
         this.#methodParseFaceData();
+
+        // a secondary loop
+        // will check the neighboring relationship between all faces
+        // and store them in handy lookup table
+        this.#methodStoreNeighborLookup();
 
         //
         if(this.#debug == true)
@@ -316,6 +381,8 @@ export class EntityComponentPlanetFaces extends EntityComponent
         // finally, we update the flag so that we don't have to do this again
         this.#hasOnLazyLoadInit = true;
     }
+
+    // #region face data
     #methodParseFaceData()
     {
         if(this.#geometry.index != null)
@@ -332,6 +399,7 @@ export class EntityComponentPlanetFaces extends EntityComponent
         //
         this.#faceCenters = [];
         this.#faceNormals = [];
+        this.#faceCorners = [];
 
         // the main loop
         for(var i = 0; i < this.#geometry.attributes.position.array.length; i += 3 * this.#geometry.attributes.position.itemSize)
@@ -390,9 +458,20 @@ export class EntityComponentPlanetFaces extends EntityComponent
             const planeFloor = new THREE.Plane().setFromNormalAndCoplanarPoint(normal, worldSpacePosition);
             this.#planesFloor.push(planeFloor);
 
+            // we want to store world-space positions
+            // a,b,c are local-space
+            // so, using the position and radius
+            // we can convert them
+            const aWorld = a.clone().multiplyScalar(radius).add(position);
+            const bWorld = b.clone().multiplyScalar(radius).add(position);
+            const cWorld = c.clone().multiplyScalar(radius).add(position);
+
+            // we can now store these for later use
+            this.#faceCorners.push([aWorld, bWorld, cWorld]);
+
             // we use this opporunity to both store edge data
             // AND create planes that represent walls
-            this.#methodStoreEdgeData(i,a,b,c,ab,ac,bc,worldSpacePosition,normal,position,radius);
+            this.#methodStoreEdgeData(i,aWorld,bWorld,cWorld,ab,ac,bc,worldSpacePosition,normal,position,radius);
             //this.#methodCreatePlaneWalls(i,a,b,c,ab,ac,bc,worldSpacePosition,normal,position,radius);
 
             // #endregion planes
@@ -444,7 +523,7 @@ export class EntityComponentPlanetFaces extends EntityComponent
             this.#geometry.attributes.position.array[indexK + 2]
         ));
     }
-    #methodStoreEdgeData(i,a,b,c,ab,ac,bc,worldSpacePosition,normal,position,radius)
+    #methodStoreEdgeData(i,aWorld,bWorld,cWorld,ab,ac,bc,worldSpacePosition,normal,position,radius)
     {
         //
         //console.log("() methodStoreEdgeData");
@@ -461,16 +540,6 @@ export class EntityComponentPlanetFaces extends EntityComponent
         // #endregion first
 
         // #region calculate
-
-        // we need world-space positions
-        // a,b,c are local-space
-        // so, using the position and radius
-        // we can convert them
-
-        // also useful to calculate midpoints
-        const aWorld = a.clone().multiplyScalar(radius).add(position);
-        const bWorld = b.clone().multiplyScalar(radius).add(position);
-        const cWorld = c.clone().multiplyScalar(radius).add(position);
 
         // midpoints
         const abMidWorld = new THREE.Vector3()
@@ -584,6 +653,107 @@ export class EntityComponentPlanetFaces extends EntityComponent
             new THREE.Plane().setFromNormalAndCoplanarPoint(bcNormal, bWorld)
         );
     }
+    // #endregion face data
+
+    //
+    #methodStoreNeighborLookup()
+    {
+        // length 20 for each face
+        // each face will have 3 direct neighbors
+        // each direct neighbor shares 2 vertices with the main face
+        // and thus 1 edge
+        this.#faceNeighborsDirect = [];
+
+        // length 20 for each face
+        // each face will have 6 diagonal neighbors
+        // each diagonal neighbor shares 1 vertex with the main face
+        // no edges
+        this.#faceNeighborsDiagonal = [];
+
+        // I think what we need to do
+        // is loop through all the faces
+        // TWICE
+        // to see if we can find shared vertices
+        // so a loop for each corner too?
+        // good lord
+
+        const faceCount = this.methodGetFaceCount();
+
+        // since all arrays have null values in them instead of a nested array
+        // we first do a pre-loop to reset them
+        // otherwise we'll just get an error when we .push()
+        for(var i = 0; i < faceCount; i++)
+        {
+            this.#faceNeighborsDirect[i] = [];
+            this.#faceNeighborsDiagonal[i] = [];
+        }
+
+        //
+        for(var iteratorIndexPrimaryFace = 0; iteratorIndexPrimaryFace < faceCount; iteratorIndexPrimaryFace++)
+        {
+            // in this method that we now invoke
+            // we loop over all faces again
+            // and set matching pairs in the stored array
+            // at BOTH indeces; they are neighbors to each other, after all
+            this.#methodStoreNeighborLookupForFace(faceCount, iteratorIndexPrimaryFace);
+        }
+
+        // we now have a lookup table of all neighboring faces; direct and diagonal
+        console.log("lookup table of neighbors : generated");
+        console.log("length (direct): " + this.#faceNeighborsDirect.length);
+        console.dir(this.#faceNeighborsDirect);
+        console.log("length (diagonal): " + this.#faceNeighborsDiagonal.length);
+        console.dir(this.#faceNeighborsDiagonal);
+    }
+    #methodStoreNeighborLookupForFace(faceCount, iteratorIndexPrimaryFace)
+    {
+        // in this method right here
+        // we loop over all faces again
+        // and set matching pairs in the stored array
+        // at BOTH indeces; they are neighbors to each other, after all
+
+        // optimization!
+        // if we were to start this loop at 0 , like you normally would
+        // we would be looping over the same faces over and over
+        // when we've already checked them
+        // we can instead only check the faces that come after the primary index's
+        // this way, we only check down the line "into the future"
+        const startIndex = (iteratorIndexPrimaryFace + 1);
+        // change back to 0 if we want to loop over the same faces we've already been over
+        for(var iteratorIndexComparisonFace = startIndex; iteratorIndexComparisonFace < faceCount; iteratorIndexComparisonFace++)
+        {
+            // early continue : do not check the same face that we are currently testing against
+            if(iteratorIndexPrimaryFace == iteratorIndexComparisonFace){continue;}
+
+            //
+            const matchingCornersCount = this.methodGetMatchingCornersCount(
+                this.#faceCorners[iteratorIndexPrimaryFace],
+                this.#faceCorners[iteratorIndexComparisonFace],
+            );
+
+            if(matchingCornersCount == 2)
+            {
+                // we have a "direct" neighbor
+                // we push our index
+                // but we actually push in BOTH directions; both faces are neighbors to each other, after all
+
+                //
+                this.#faceNeighborsDirect[iteratorIndexPrimaryFace].push(iteratorIndexComparisonFace);
+                this.#faceNeighborsDirect[iteratorIndexComparisonFace].push(iteratorIndexPrimaryFace);
+            }
+            else if (matchingCornersCount == 1)
+            {
+                // we have a "diagonal" neighbor
+                // we push our index
+                // but we actually push in BOTH directions; both faces are neighbors to each other, after all
+
+                //
+                this.#faceNeighborsDiagonal[iteratorIndexPrimaryFace].push(iteratorIndexComparisonFace);
+                this.#faceNeighborsDiagonal[iteratorIndexComparisonFace].push(iteratorIndexPrimaryFace);
+            }
+        }
+    }
+
     // #region debug
     #methodGetDebugColorPerFace(i){
         const hue = (i / this.methodGetFaceCount()) % 1.0;
@@ -595,7 +765,7 @@ export class EntityComponentPlanetFaces extends EntityComponent
         for(var i = 0; i < this.methodGetFaceCount(); i++)
         {
             //
-            console.log("() " + i + " methodCreateDebugArrowsFloor");
+            //console.log("() " + i + " methodCreateDebugArrowsFloor");
             
             // direction must be normalized
             // in this case, it is
@@ -633,7 +803,7 @@ export class EntityComponentPlanetFaces extends EntityComponent
         if(this.#faceEdgeData[i][j].pointM == null){console.error("this.#faceEdgeData[i][j].pointM == null");return;}
 
         //
-        console.log("() " + i + " methodCreateDebugArrowsWallI");
+        //console.log("() " + i + " methodCreateDebugArrowsWallI");
 
         //
         const arrowHelper = new THREE.ArrowHelper(this.#faceEdgeData[i][j].dirToCenter, this.#faceEdgeData[i][j].pointM, 1.0, this.#methodGetDebugColorPerFace(i));
@@ -648,7 +818,7 @@ export class EntityComponentPlanetFaces extends EntityComponent
         for(var i = 0; i < this.methodGetFaceCount(); i++)
         {
             //
-            console.log("() " + i + " methodCreateDebugPlanesFloor");
+            //console.log("() " + i + " methodCreateDebugPlanesFloor");
             
             // read the GOTCHAS .md file
             // we cannot use the built-in PlaneHelper
@@ -703,7 +873,7 @@ export class EntityComponentPlanetFaces extends EntityComponent
         if(this.#faceEdgeData[i][j].pointM == null){console.error("this.#faceEdgeData[i][j].pointM == null");return;}
 
         //
-        console.log("() " + i + " methodCreateDebugPlanesWallI");
+        //console.log("() " + i + " methodCreateDebugPlanesWallI");
 
         //
         const geometry = new THREE.BufferGeometry();
@@ -809,14 +979,16 @@ export class EntityComponentSpawnOnPlanetFace extends EntityComponent
     // #region getters
     methodGetIsReady(){return this.#hasOnLazyLoadInit;}
     methodHasOnLazyLoadInit(){return this.#hasOnLazyLoadInit;}
-    //
+    // #endregion getters
+
+    // #region getters that delegate
     methodGetFaceNormal()
     {
         if(this.#planetResolved == null){return;}
         if(!this.#planetResolved.methodGetIsReady()){return;}
         return this.#planetResolved.methodGetFaceNormal(this.#faceIndex);
     }
-    // #endregion getters
+    // #endregion getters that delegate
 
     // #region private methods
     #methodOnLazyLoadInit()
