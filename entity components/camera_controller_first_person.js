@@ -425,14 +425,14 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
         this.#directionRightNonvertical = new THREE.Vector3(1,0,0);
 
         // once at start, we update perpendiculars
-        this.methodUpdatePerpendiculars();
+        this.methodUpdatePerpendiculars(false);
 
         // register handlers
 
         this.methodRegisterMessageHandlerWithinEntity('update.position', (paramMessage) => { this.methodHandleUpdatePosition(paramMessage); });
         //this.methodRegisterMessageHandlerWithinEntity('update.rotations', (paramMessage) => { this.methodHandleUpdateRotations(paramMessage); });
     }
-    methodUpdate()
+    methodUpdate(timeElapsed, timeDelta)
     {
         //
         const componentInstanceInput = this.methodGetComponent("EntityComponentCameraControllerFirstPersonInput");
@@ -456,14 +456,20 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
         }
 
         // #region up-direction
+        /*
         if(componentInstanceInput.keys.updirection == true)
         {
-            const componentInstancePlanetFaceSpawn = this.methodGetComponent("EntityComponentSpawnOnPlanetFace");
-            const planetFaceNormal = componentInstancePlanetFaceSpawn?.methodGetFaceNormal();
-            if(planetFaceNormal == null){console.error("no face normal to update to");return;}
-            this.methodSetDirUp(planetFaceNormal);
+            const componentInstanceGravity = this.methodGetComponent("EntityComponentGravity");
+            const gravityDir = componentInstanceGravity?.methodGetGravityDir();
+            if(gravityDir == null){console.error("no gravity dir to update to");return;}
+            this.methodSetDirUp(gravityDir, false);
         }
+        */
         // #endregion up-direction
+
+        // #region up-direction transition
+        this.methodUpdateUpDirectionTransition(timeElapsed, timeDelta);
+        // #endregion up-direction transition
 
         // speeds
         var speedX = 0;
@@ -536,7 +542,36 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
         //componentInstanceInput.methodResetKeys();
 
         // update perpendiculars
-        this.methodUpdatePerpendiculars();
+        this.methodUpdatePerpendiculars(false);
+    }
+    methodUpdateUpDirectionTransition(timeElapsed, timeDelta)
+    {
+        // #region early return
+        if(this.#gravityTransitionRemainingAngle <= 0){return;}
+        // #endregion early return
+
+        // #region body
+
+        // calculate the step size to take
+        // in radian angles
+        const angleStep =
+            Math.min(
+                this.#gravityTransitionRemainingAngle,
+                this.#gravityTransitionAngularSpeed * timeDelta
+            );
+
+        // then we rotate the cameraPivot
+        // by that angleStep
+        // (we calculated the transition direction (pivot?) to rotate around earlier)
+        this.#cameraPivot.rotateOnWorldAxis(
+            this.#gravityTransitionAxis,
+            angleStep
+        );
+
+        // now we reduce our remaining angles by that step
+        this.#gravityTransitionRemainingAngle -= angleStep;
+
+        // #endregion body
     }
     // #endregion lifecycle
 
@@ -560,8 +595,57 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
 
     // #endregion getters
 
+    // move these to privates
+    #gravityTransitionAxis = null;
+    #gravityTransitionRemainingAngle = 0;
+    #gravityTransitionAngularSpeed = Math.PI;
+
+    // move... somewhere
+    #methodGetVisualDirUp()
+    {
+        // we don't need the current planet-face's normal direction
+        // we need the actual live up direction of the cameraPivot
+
+        // this is because we need to account for mid-transition changes
+        
+        // if we were to just take the current planet-face's normal direction
+        // we would undershoot or overshoot
+
+        //
+        return new THREE.Vector3(0, 1, 0).applyQuaternion(this.#cameraPivot.quaternion);
+
+        // old & outdated, below
+        // because it just takes the current planet-face's normal direction
+        // which doesn't account for mid-transition changes
+        // this.methodGetDirUp();
+    }
+
     // #region setters
-    methodSetDirUp(paramDirUp)
+    methodSetDirUp(paramDirUp, paramDebug)
+    {
+        //
+        const visualDirUp = this.#methodGetVisualDirUp();
+
+        // the cross product creates a perpendicular / orthogonal vector to those
+        // what this will accomplish, I do not know
+        // perhaps if we see this as an axis to rotate our up around, this makes more sense
+        // and it does, yay
+        this.#gravityTransitionAxis =
+            new THREE.Vector3()
+                .crossVectors(visualDirUp, paramDirUp)
+                .normalize();
+
+        // how many degrees we have left to rotate / transition
+        this.#gravityTransitionRemainingAngle = visualDirUp.angleTo(paramDirUp);
+
+        // we update our perpendiculars immediately
+        // this will cause our movement to be accurate immediately
+        // but our up direction will not be immediate ; this is to prevent snapping
+        // (reminder that we need the base class version, which is why we use super. instead of this.)
+        super.methodSetDirUp(paramDirUp);
+        this.methodUpdatePerpendiculars(paramDebug);
+    }
+    methodSetDirUpOLD(paramDirUp, paramDebug)
     {
         // pitfall : we can't .setFromUnitVectors() directly on #cameraPivot.quaternion
         // this is because #cameraPivot.quaternion already holds data
@@ -580,7 +664,7 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
 
         // super. is to make sure we use the base class version
         super.methodSetDirUp(paramDirUp);
-        this.methodUpdatePerpendiculars();
+        this.methodUpdatePerpendiculars(paramDebug);
     }
     methodSetDirFacing(paramDirFacing)
     {
@@ -590,7 +674,7 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
     // #endregion setters
 
     // #region methods public
-    methodUpdatePerpendiculars()
+    methodUpdatePerpendiculars(paramDebug)
     {
         // we use the cross product
         // of our camera's forward direction
@@ -641,7 +725,7 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
         this.#camera.rotation.x = this.#pitch;
         
         //
-        //this.methodUpdatePerpendiculars();
+        //this.methodUpdatePerpendiculars(false);
     }
     methodLookAt(targetPosition)
     {
@@ -667,7 +751,7 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
             //
             this.#pitch = 0;
             // update perpendiculars
-            this.methodUpdatePerpendiculars();
+            this.methodUpdatePerpendiculars(false);
     }
     // #endregion methods private
 

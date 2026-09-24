@@ -11,6 +11,14 @@
                     "component": "EntityComponentPlanetFaces"
                 }},
                 "faceDistance": 20.0
+        }},
+        {"type": "EntityComponentGravity",
+        "params": {
+            "planet":
+                {"$ref": {
+                    "entity": "planet",
+                    "component": "EntityComponentPlanetFaces"
+                }}
         }}
     ]
 }

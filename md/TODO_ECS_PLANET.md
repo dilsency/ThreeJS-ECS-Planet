@@ -47,3 +47,15 @@ concern-folders (the standing reorg intent; see `NAMING_CONVENTIONS.md` §10):
 Do the moves as focused commits (rename/move detection likes them isolated). After the
 `context/multi/context_planet_faces.js` conversion (→ co-located `EntityComponentPlanetFaces`
 in `environment/`), the `context/multi/` folder is deliberately kept but empty.
+
+## 3. `EntityComponentPlanetFaces` — use the cached `#planetCenter` instead of re-fetching
+
+Now that `EntityComponentPlanetFaces` caches the sibling planet's position once, in
+`#planetCenter` (set during `#methodOnLazyLoadInit()`, since `EntityComponentPlanetModel`'s
+position is fixed for its lifetime), the handful of call sites that still do
+`entityComponent.methodGetPosition()` off a freshly-resolved `EntityComponentPlanetModel`
+sibling — `methodGetFaceCenter()`, and inside the parse loop
+(`#methodParseFaceDataViaPositions()` / `#methodStoreEdgeData()`) — should read `this.#planetCenter`
+instead. Removes a few redundant sibling-component lookups; no behavior change, since the
+value is identical either way.
+- **File:** `entity components/environment/planet.js`.

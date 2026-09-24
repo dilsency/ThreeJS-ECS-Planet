@@ -5,7 +5,8 @@ import * as THREE from "three";
 import {EntityComponent} from "../../classes/ECS/entity_component.js";
 
 //
-export class EntityComponentPlanetModel extends EntityComponent {
+export class EntityComponentPlanetModel extends EntityComponent
+{
     // #region privates
     #params = null;
     //
@@ -120,6 +121,8 @@ export class EntityComponentPlanetFaces extends EntityComponent
     // an array of indeces, face indeces that are "diagonal" neighbors to the current one
     // meaning they share only 1 vertices at a corner, no shared edges
     #faceNeighborsDiagonal = [];
+    //
+    #planetCenter = null;
     //
     #faceCenters = null;
     #faceNormals = null;
@@ -248,6 +251,8 @@ export class EntityComponentPlanetFaces extends EntityComponent
     methodGetFaceNormal(index){return this.#faceNormals[index];}
     methodGetIsReady(){return this.#hasOnLazyLoadInit;}
     methodHasOnLazyLoadInit(){return this.#hasOnLazyLoadInit;}
+    methodGetPlanetPosition(){return this.#planetCenter;}
+    methodGetPlanetCenter(){return this.#planetCenter;}
     // #endregion getters
 
     // #region getters that calculate
@@ -307,13 +312,81 @@ export class EntityComponentPlanetFaces extends EntityComponent
         .multiplyScalar(radius)
         .add(position);
     }
-    methodGetIsWithinFace(index)
+    methodGetIsWithinFace(position, index)
     {
-
+        return (
+         this.methodGetIsAboveFaceFloor(position, index)
+         &&
+         this.methodGetIsWithinFaceWalls(position, index)
+         );
     }
-    methodGetNearestFace(position)
+    methodGetFloorDistance(position, index)
     {
-        
+        return this.#planesFloor[index].distanceToPoint(position);
+    }
+    methodGetIsAboveFaceFloor(position, index)
+    {
+        // here we would need the character's feet position
+        // or their camera/eye position - their height
+        // let's hardcode for now
+        return this.methodGetFloorDistance(position,index) >= 0.0;
+    }
+    methodGetIsWithinFaceWalls(position, index)
+    {
+        return (
+            this.#planesWall[index][0].distanceToPoint(position) >= 0.0
+            &&
+            this.#planesWall[index][1].distanceToPoint(position) >= 0.0
+            &&
+            this.#planesWall[index][2].distanceToPoint(position) >= 0.0
+            )
+            ;
+    }
+    
+    methodGetMostAlignedFace(position, planetCenter)
+    {
+        // optimization opportunity : 
+        // we know the face we are on (or were on last)
+        // and we know all of its neighbors
+        // we could just check those
+        // and skip checking faces it can't be
+
+        // we first get the direction from the current position
+        // to the center of the planet
+        const directionFromPlanetCenter = position.clone().sub(planetCenter).normalize();
+
+        // with that as our reference direction
+        // we need to compare the directions of all of the faces
+        // and use the dot product
+        // the closer the dot product is to 1 (I think), the better the match
+
+        //
+        let mostAlignedDirectionIndex = null;
+        let mostAlignedDirectionDot = -Infinity;
+
+        //
+        for(var i = 0; i < this.methodGetFaceCount(); i++)
+        {
+            //
+            let iterationDot = directionFromPlanetCenter.dot(this.methodGetFaceNormal(i));
+
+            // if it is a better match, replace our old index
+            if(iterationDot > mostAlignedDirectionDot)
+            {
+                mostAlignedDirectionDot = iterationDot;
+                mostAlignedDirectionIndex = i;
+            }
+        }
+
+        //
+        return mostAlignedDirectionIndex;
+    }
+    methodGetNearestFace(position, planetCenter)
+    {
+        // alias function
+        // because we actually compare directions to find the best match
+        // we do not care about distances
+        return this.methodGetMostAlignedFace(position, planetCenter);
     } 
     // #endregion getters that calculate
 
@@ -344,18 +417,21 @@ export class EntityComponentPlanetFaces extends EntityComponent
         // here, we need to get the planet geometry
 
         // we first need the component (a sibling to the current component)
-        const entityComponent = this.methodGetComponent("EntityComponentPlanetModel");
+        const componentInstancePlanetModel = this.methodGetComponent("EntityComponentPlanetModel");
 
         // #region early return
-        if(entityComponent == null){return;}
+        if(componentInstancePlanetModel == null){return;}
         // #endregion early return
 
         // then we get the geometry
-        this.#geometry = entityComponent.methodGetGeometry();
+        this.#geometry = componentInstancePlanetModel.methodGetGeometry();
 
         // #region early return
         if(this.#geometry == null){return;}
         // #endregion early return
+
+        // set planet center, for later
+        this.#planetCenter = componentInstancePlanetModel.methodGetPosition();
 
         // the main loop
         // is responsible for creating planes for floors, planes for walls, ...
@@ -565,17 +641,17 @@ export class EntityComponentPlanetFaces extends EntityComponent
         //
         const abEdgeDirection = ab.clone().normalize();
         const abNormal = new THREE.Vector3().crossVectors(abEdgeDirection, normal).normalize();
-        if(abNormal.dot(aWorld.clone().sub(worldSpacePosition)) < 0){abNormal.negate();}
+        if(abNormal.dot(worldSpacePosition.clone().sub(aWorld)) < 0){abNormal.negate();}
 
         //
         const acEdgeDirection = ac.clone().normalize();
         const acNormal = new THREE.Vector3().crossVectors(acEdgeDirection, normal).normalize();
-        if(acNormal.dot(aWorld.clone().sub(worldSpacePosition)) < 0){acNormal.negate();}
+        if(acNormal.dot(worldSpacePosition.clone().sub(aWorld)) < 0){acNormal.negate();}
 
         //
         const bcEdgeDirection = bc.clone().normalize();
         const bcNormal = new THREE.Vector3().crossVectors(bcEdgeDirection, normal).normalize();
-        if(bcNormal.dot(bWorld.clone().sub(worldSpacePosition)) < 0){bcNormal.negate();}
+        if(bcNormal.dot(worldSpacePosition.clone().sub(bWorld)) < 0){bcNormal.negate();}
 
         // #endregion edge direction
 
@@ -933,6 +1009,184 @@ export class EntityComponentPlanetFaces extends EntityComponent
     // #endregion private methods
 }
 
+export class EntityComponentGravity extends EntityComponent
+{
+    // lazy
+    #hasOnLazyLoadInit = false;
+    // reminder that this.#planet is just a $ref
+    #planet = null;
+    // reminder that this.#planetResolved is actually the component ...PlanetFaces
+    #componentInstancePlanetFaces = null;
+    //
+    #componentInstanceSpawnOnPlanetFace = null;
+    //
+    #isWithinFace = false;
+    #distanceToFloor = false;
+    #currentFaceIndex = null;
+    constructor(params)
+    {
+        //
+        super(params);
+
+        // reminder that params.planet is just a $ref
+        if(params.planet != null){this.#planet = params.planet;}
+    }
+    methodInitialize()
+    {
+        // all data depends on the planet
+        // and that isn't loaded at the start
+        // so we lazy-load it in methodUpdate()
+        // and can do nothing here :(
+    }
+    methodUpdate(timeElapsed, timeDelta)
+    {
+        // #region lazy
+        this.#methodOnLazyLoadInit();
+        if(!this.#hasOnLazyLoadInit){return;}
+        // #endregion lazy
+
+        // we can now assume that we have planet face data
+        // and the index of the face that the spawner places us on
+
+        // update our relative positioning booleans
+        const prevPosition = this.methodGetPosition();
+        if(prevPosition == null){console.error("no pos");return;}
+        if(this.#currentFaceIndex == null){console.error("no face index");return;}
+
+        //
+        this.#isWithinFace = this.#componentInstancePlanetFaces.methodGetIsWithinFace(prevPosition, this.#currentFaceIndex);
+
+        //
+        this.#distanceToFloor = this.#componentInstancePlanetFaces.methodGetFloorDistance(prevPosition, this.#currentFaceIndex);
+        //
+        const isWithinFloorRange = (this.#distanceToFloor >= 0.5 && this.#distanceToFloor <= 2.0);
+        
+        // we aren't within the face prism
+        // we need to update to the nearest face
+        if(!this.#isWithinFace)
+        {
+            //
+            const nearestFaceIndex = this.#componentInstancePlanetFaces.methodGetNearestFace(prevPosition, this.#componentInstancePlanetFaces.methodGetPlanetCenter());
+            //
+            if(nearestFaceIndex != this.#currentFaceIndex)
+            {
+                this.methodSetFaceIndex(nearestFaceIndex, true);
+            }
+        }
+
+        //
+        if(this.#isWithinFace && !isWithinFloorRange)
+        {
+            this.#methodApplyDownwardGravity(0.05);
+        }
+        else if (!this.#isWithinFace)
+        {
+            this.#methodApplyDownwardGravity(0.005);
+        }
+    }
+
+    // #region setters that calculate
+    methodSetFaceIndex(newFaceIndex, paramDebug)
+    {
+        //
+        this.#currentFaceIndex = newFaceIndex;
+
+        // we need to update the camera accordingly
+        // keep in mind that entities that do not have a camera should not
+        const componentInstanceFirstPersonCamera = this.methodGetComponent("EntityComponentCameraControllerFirstPerson");
+        // most entities will not have a camera, actually
+        if(componentInstanceFirstPersonCamera == null){return;}
+        
+        // with a new face index, we have a new up direction
+        const newUp = this.methodGetGravityDir();
+        // and with a new up direction, we can update our camera
+        // this will update our perpendiculars for us: great!
+        componentInstanceFirstPersonCamera.methodSetDirUp(newUp, paramDebug);
+    }
+    // #endregion setters that calculate
+
+    // #region getters
+    methodGetFaceNormal()
+    {
+        // #region lazy
+        if(this.#currentFaceIndex == null){return;}
+        if(this.#componentInstancePlanetFaces == null){return;}
+        // #endregion lazy
+        return this.#componentInstancePlanetFaces.methodGetFaceNormal(this.#currentFaceIndex);
+    }
+    methodGetGravityDir()
+    {
+        // alias function
+        return this.methodGetFaceNormal();
+    }
+    methodGetDirUp()
+    {
+        // alias function
+        return this.methodGetFaceNormal();
+    }
+    // #endregion getters
+
+    // #region private methods : gravity
+    #methodApplyDownwardGravity(gravitySpeed)
+    {
+        // calculate position displaced by gravity in accordance
+        const newPosition = this.methodGetPosition().clone();
+        newPosition.addScaledVector(this.#componentInstancePlanetFaces.methodGetFaceNormal(this.#currentFaceIndex), -gravitySpeed);
+
+        // apply new position
+        this.methodSetPosition(newPosition);
+    }
+    // #endregion private methods : gravity
+
+    // #region private methods : lazy
+    #methodOnLazyLoadInit()
+    {
+        //
+        if(this.#hasOnLazyLoadInit){return;}
+
+        //
+        const isPlanetResolvedAndReady = this.#methodResolvePlanet();
+        if(isPlanetResolvedAndReady != true){return;}
+
+        // reminder that this.#planetResolved is actually the component ...PlanetFaces
+
+        // #region body
+
+        // we can just assume that this means our spawner is also initialized
+        // and we can get our initial spawn face index from it
+        this.#componentInstanceSpawnOnPlanetFace = this.methodGetComponent("EntityComponentSpawnOnPlanetFace");
+        if(this.#componentInstanceSpawnOnPlanetFace == null){return;}
+        if(!this.#componentInstanceSpawnOnPlanetFace.methodGetIsReady()){return;}
+        this.#currentFaceIndex = this.#componentInstanceSpawnOnPlanetFace.methodGetFaceIndex();
+
+        // #endregion body
+
+        // finally, we update the flag so that we don't have to do this again
+        // must be at the very end
+        this.#hasOnLazyLoadInit = true;
+    }
+    #methodResolvePlanet()
+    {
+        // #region early return
+        if(this.#planet == null){return;}
+        if(this.#planet["$ref"] == null){return;}
+        // #endregion early return
+
+        // we have ourselves a param of the special type $ref
+        // we use this to find the planet we belong to
+
+        // 
+        this.#componentInstancePlanetFaces = this.methodGetEntityByName(this.#planet["$ref"]["entity"])?.methodGetComponent(this.#planet["$ref"]["component"]);
+
+        // #region early return
+        if(this.#componentInstancePlanetFaces == null){return;}
+        if(!this.#componentInstancePlanetFaces.methodGetIsReady()){console.log("we resolved the planet, but the planet itself hasn't parsed its triangles yet");return;}
+        // #endregion early return
+
+        return true;
+    }
+    // #endregion private methods : lazy
+}
 
 
 export class EntityComponentSpawnOnPlanetFace extends EntityComponent
@@ -942,7 +1196,9 @@ export class EntityComponentSpawnOnPlanetFace extends EntityComponent
     #hasOnLazyLoadInit = false;
     // reminder that this.#planet is just a $ref
     #planet = null;
-    #planetResolved = null;
+    // reminder that this.#planetResolved is actually the component ...PlanetFaces
+    #componentInstancePlanetFaces = null;
+    //
     #faceIndex = null;
     #faceDistance = 2.0;
     // #endregion privates
@@ -976,7 +1232,22 @@ export class EntityComponentSpawnOnPlanetFace extends EntityComponent
     methodDispose(){}
     // #endregion lifecycle
 
+    // #region setters that delegate
+    methodSetDirUp(paramDebug)
+    {
+        // if the entity doesn't have that camera component
+        // it is skipped
+        const cameraController = this.methodGetComponent("EntityComponentCameraControllerFirstPerson");
+        if(cameraController != null)
+        {
+            //
+            cameraController.methodSetDirUp(this.#componentInstancePlanetFaces.methodGetFaceNormal(this.#faceIndex), paramDebug);
+        }
+    }
+    // #endregion setters that delegate
+
     // #region getters
+    methodGetFaceIndex(){return this.#faceIndex;}
     methodGetIsReady(){return this.#hasOnLazyLoadInit;}
     methodHasOnLazyLoadInit(){return this.#hasOnLazyLoadInit;}
     // #endregion getters
@@ -984,13 +1255,13 @@ export class EntityComponentSpawnOnPlanetFace extends EntityComponent
     // #region getters that delegate
     methodGetFaceNormal()
     {
-        if(this.#planetResolved == null){return;}
-        if(!this.#planetResolved.methodGetIsReady()){return;}
-        return this.#planetResolved.methodGetFaceNormal(this.#faceIndex);
+        if(this.#componentInstancePlanetFaces == null){return;}
+        if(!this.#componentInstancePlanetFaces.methodGetIsReady()){return;}
+        return this.#componentInstancePlanetFaces.methodGetFaceNormal(this.#faceIndex);
     }
     // #endregion getters that delegate
 
-    // #region private methods
+    // #region private methods : lazy
     #methodOnLazyLoadInit()
     {
         // #region lazy
@@ -999,21 +1270,11 @@ export class EntityComponentSpawnOnPlanetFace extends EntityComponent
         
         // #region body
 
-        // #region early return
-        if(this.#planet == null){return;}
-        if(this.#planet["$ref"] == null){return;}
-        // #endregion early return
+        //
+        const isPlanetResolvedAndReady = this.#methodResolvePlanet();
+        if(isPlanetResolvedAndReady != true){return;}
 
-        // we have ourselves a param of the special type $ref
-        // we use this to find the planet we belong to
-
-        // 
-        this.#planetResolved = this.methodGetEntityByName(this.#planet["$ref"]["entity"])?.methodGetComponent(this.#planet["$ref"]["component"]);
-
-        // #region early return
-        if(this.#planetResolved == null){return;}
-        if(!this.#planetResolved.methodGetIsReady()){console.log("we resolved the planet, but the planet itself hasn't parsed its triangles yet");return;}
-        // #endregion early return
+        // reminder that this.#planetResolved is actually the component ...PlanetFaces
 
         // now we have the resolved planet, and it is ready
         // we can therefore re-position to the center of the current index
@@ -1023,34 +1284,48 @@ export class EntityComponentSpawnOnPlanetFace extends EntityComponent
         // let's randomize one!
         if(this.#faceIndex == null)
         {
-            this.#faceIndex = Math.floor(Math.random() * this.#planetResolved.methodGetFaceCount());
+            this.#faceIndex = Math.floor(Math.random() * this.#componentInstancePlanetFaces.methodGetFaceCount());
         }
 
         //
         this.methodSetPosition(
-            this.#planetResolved.methodGetFaceCenter(this.#faceIndex).add(
-                this.#planetResolved.methodGetFaceNormal(this.#faceIndex).clone().multiplyScalar(
+            this.#componentInstancePlanetFaces.methodGetFaceCenter(this.#faceIndex).add(
+                this.#componentInstancePlanetFaces.methodGetFaceNormal(this.#faceIndex).clone().multiplyScalar(
                     this.#faceDistance
                 )
             )
         );
 
-        // lookAt() the planet
-        // only if we are the player, mind you
-        // as in, we have the related component
-        // if we don't, we skip : neat!
-        const cameraController = this.methodGetComponent("EntityComponentCameraControllerFirstPerson");
-        if(cameraController != null)
-        {
-            // an alternative would be to use the .invert() normal direction
-            console.log("\tface index: " + this.#faceIndex);
-            cameraController.methodLookAt(this.#planetResolved.methodGetFaceCenter(this.#faceIndex));
-        }
+        // we get the user's camera
+        // if they do not have that component, they aren't the user
+        // so we skip it, hopefully this test is cheap
+        this.methodSetDirUp(false);
 
         // #endregion body
 
         // finally, we update the flag so that we don't have to do this again
+        // must be at the very end
         this.#hasOnLazyLoadInit = true;
     }
-    // #endregion private methods
+    #methodResolvePlanet()
+    {
+        // #region early return
+        if(this.#planet == null){return;}
+        if(this.#planet["$ref"] == null){return;}
+        // #endregion early return
+
+        // we have ourselves a param of the special type $ref
+        // we use this to find the planet we belong to
+
+        // 
+        this.#componentInstancePlanetFaces = this.methodGetEntityByName(this.#planet["$ref"]["entity"])?.methodGetComponent(this.#planet["$ref"]["component"]);
+
+        // #region early return
+        if(this.#componentInstancePlanetFaces == null){return;}
+        if(!this.#componentInstancePlanetFaces.methodGetIsReady()){console.log("we resolved the planet, but the planet itself hasn't parsed its triangles yet");return;}
+        // #endregion early return
+
+        return true;
+    }
+    // #endregion private methods : lazy
 }
