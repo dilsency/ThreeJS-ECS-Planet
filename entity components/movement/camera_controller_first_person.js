@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import {EntityComponent} from "../classes/ECS/entity_component.js";
+import {EntityComponent} from "../../classes/ECS/entity_component.js";
 /*
 import {debugOverlaySetLine} from "./temp_debug_overlay.js"; // TEMPORARY - see that file's header comment
 */

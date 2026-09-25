@@ -3,6 +3,7 @@
 import * as THREE from "three";
 // ECS
 import {EntityComponent} from "../../classes/ECS/entity_component.js";
+import { StateMachine } from "../../classes/state-machine/state_machine.js";
 
 //
 export class EntityComponentPlanetModel extends EntityComponent
@@ -1019,10 +1020,20 @@ export class EntityComponentGravity extends EntityComponent
     #componentInstancePlanetFaces = null;
     //
     #componentInstanceSpawnOnPlanetFace = null;
+    #componentInstanceVelocity = null;
     //
     #isWithinFace = false;
     #distanceToFloor = false;
     #currentFaceIndex = null;
+    //
+    #isWithinFaceWalls = false;
+    #isWithinFloorRange = false;
+    //
+    #gravitySpeed = 0.5;
+    //
+    #stateMachine = null;
+
+    //
     constructor(params)
     {
         //
@@ -1030,6 +1041,19 @@ export class EntityComponentGravity extends EntityComponent
 
         // reminder that params.planet is just a $ref
         if(params.planet != null){this.#planet = params.planet;}
+
+        // state machine
+        this.#stateMachine = new StateMachine("Falling");
+        this.#stateMachine.methodRegisterHandler("Falling", "Landed", () => {
+            console.log("landed from falling!");
+            this.methodNullifyGravity();
+        });
+        this.#stateMachine.methodRegisterHandler("Landed", "Jumping", () => {
+            console.log("jump!");
+        });
+        this.#stateMachine.methodRegisterHandler("Jumping", "Falling", () => {
+            console.log("apex of jump!");
+        });
     }
     methodInitialize()
     {
@@ -1048,6 +1072,8 @@ export class EntityComponentGravity extends EntityComponent
         // we can now assume that we have planet face data
         // and the index of the face that the spawner places us on
 
+        // #region update relative positioning variables
+
         // update our relative positioning booleans
         const prevPosition = this.methodGetPosition();
         if(prevPosition == null){console.error("no pos");return;}
@@ -1059,31 +1085,137 @@ export class EntityComponentGravity extends EntityComponent
         //
         this.#distanceToFloor = this.#componentInstancePlanetFaces.methodGetFloorDistance(prevPosition, this.#currentFaceIndex);
         //
-        const isWithinFloorRange = (this.#distanceToFloor >= 0.5 && this.#distanceToFloor <= 2.0);
+        this.#isWithinFaceWalls = this.#componentInstancePlanetFaces.methodGetIsWithinFaceWalls(prevPosition, this.#currentFaceIndex)
+        this.#isWithinFloorRange = (this.#distanceToFloor >= 0.5 && this.#distanceToFloor <= 2.0);
         
-        // we aren't within the face prism
+        // #endregion update relative positioning variables
+
+        // we handle gravity different based on our State
+        const currentState = this.#stateMachine.methodGetCurrentState();
+
+        //
+        switch(currentState)
+        {
+            case "Falling":
+                this.methodUpdateByStateFalling(timeElapsed, timeDelta, prevPosition);
+                break;
+            case "Landed":
+                this.methodUpdateByStateLanded(timeElapsed, timeDelta, prevPosition);
+                break;
+            case "Jumping":
+                this.methodUpdateByStateJumping(timeElapsed, timeDelta, prevPosition);
+                break;
+        }
+    }
+    methodUpdateByStateLanded(timeElapsed, timeDelta, prevPosition)
+    {
+        if (!this.#isWithinFaceWalls)
+        {
+            this.#stateMachine.methodTransitionTo("Falling");
+        }
+    }
+    methodUpdateByStateJumping(timeElapsed, timeDelta, prevPosition)
+    {
+        // if we aren't within the face prism
         // we need to update to the nearest face
         if(!this.#isWithinFace)
         {
             //
-            const nearestFaceIndex = this.#componentInstancePlanetFaces.methodGetNearestFace(prevPosition, this.#componentInstancePlanetFaces.methodGetPlanetCenter());
+            this.methodShouldUpdateToNearestFace(prevPosition);
+        }
+        else {
+            // we apply a constant, small amount of gravity
+            // so that we slow down our ascent
+            this.#methodApplyDownwardGravity(this.#gravitySpeed * 0.1);
+
+            // we can do a check here if our speed in axis is zero or negative
+            // and if so, transition to falling
+
             //
-            if(nearestFaceIndex != this.#currentFaceIndex)
+            const dir = this.#componentInstancePlanetFaces.methodGetFaceNormal(this.#currentFaceIndex).clone();
+
+            //
+            const isZeroOrNeg = this.#componentInstanceVelocity.methodGetIsVelocityAlongAxisZeroOrNegative(
+                dir
+            );
+
+            // we double-check that we are in the right state, too
+            if(this.#stateMachine.methodGetCurrentState() == "Jumping" && isZeroOrNeg)
             {
-                this.methodSetFaceIndex(nearestFaceIndex, true);
+                this.#stateMachine.methodTransitionTo("Falling");
             }
+        }
+    }
+    methodUpdateByStateFalling(timeElapsed, timeDelta, prevPosition)
+    {
+        const currentVelocity = this.#componentInstanceVelocity.methodGetVelocity();
+        console.log("\t[" + this.#currentFaceIndex + "]\t" + currentVelocity.x.toFixed(2) + " , " + currentVelocity.y.toFixed(2) + " , " + currentVelocity.z.toFixed(2));
+
+        // if we aren't within the face prism
+        // we need to update to the nearest face
+        if(!this.#isWithinFace)
+        {
+            //
+            this.methodShouldUpdateToNearestFace(prevPosition);
+            // it is possible that we moved below floor peak in doing so
+            // we can compensate for this, though
+            this.methodApplyUpwardForceIfBelowFloorPeak();
         }
 
         //
-        if(this.#isWithinFace && !isWithinFloorRange)
+        else if(this.#isWithinFace && !this.#isWithinFloorRange)
         {
-            this.#methodApplyDownwardGravity(0.05);
+            //
+            this.#methodApplyDownwardGravity(this.#gravitySpeed);
+        }
+        else if (this.#isWithinFaceWalls && !this.#isWithinFloorRange)
+        {
+            // we are within the planet
+            // apply upwards force
+
+            //
+            this.methodApplyUpwardForceIfBelowFloorPeak();
+
+            // too forceful and rigid, but does work
+            //this.methodPushUpToFloor();
         }
         else if (!this.#isWithinFace)
         {
-            this.#methodApplyDownwardGravity(0.005);
+            //
+            this.#methodApplyDownwardGravity(this.#gravitySpeed * 0.1);
+        }
+        else if (this.#isWithinFace && this.#isWithinFloorRange)
+        {
+            // we kind of only want to do this once, though
+            // we do need a statemachine for each entity
+            // wether they are landed, etc.
+            // currently this will run every frame
+
+            // with our new state machine, we can :)
+            this.#stateMachine.methodTransitionTo("Landed");
+
+            // old & outdated
+            //this.methodNullifyGravity();
         }
     }
+
+    //
+    methodShouldUpdateToNearestFace(prevPosition)
+    {
+        //
+        const nearestFaceIndex = this.#componentInstancePlanetFaces.methodGetNearestFace(prevPosition, this.#componentInstancePlanetFaces.methodGetPlanetCenter());
+        //
+        if(nearestFaceIndex == this.#currentFaceIndex){return;}
+
+        // #region body
+
+        // update to newest face
+        this.methodSetFaceIndex(nearestFaceIndex, true);
+        // push the player outwards to the utmost limit
+        
+        // #endregion body
+    }
+
 
     // #region setters that calculate
     methodSetFaceIndex(newFaceIndex, paramDebug)
@@ -1105,6 +1237,92 @@ export class EntityComponentGravity extends EntityComponent
     }
     // #endregion setters that calculate
 
+    // categorize as... something
+    methodApplyUpwardForceIfBelowFloorPeak()
+    {
+        // early return : we need a velocity component
+        if(this.#componentInstanceVelocity == null){return;}
+
+        // position
+        const pos = this.methodGetPosition().clone();
+
+        //
+        const dist = this.#componentInstancePlanetFaces
+            .methodGetFloorDistance(
+                pos,
+                this.#currentFaceIndex
+            );
+
+        // early return
+        if(dist >= 2.0){return;}
+
+        // we can use the strength of the dist difference to apply differing amounts of upwards force
+
+        // we have a new velocity component :) let's use it :)
+
+        // first the direction to apply velocity in
+        const alpha = 2.0 - dist;
+        const dir = this.#componentInstancePlanetFaces.methodGetFaceNormal(this.#currentFaceIndex).clone();
+        dir.multiplyScalar(alpha);
+        
+        // then we send it
+        this.#componentInstanceVelocity.methodAddToVelocity(dir.x,dir.y,dir.z);
+    }
+    methodPushUpToFloor()
+    {
+        // the idea is this
+        // we use the floor plane to calculate the distance to this.methodGetPosition()
+        // and if too low
+        // we push them up
+
+        // needs customization to set distance based on the entity (player hero A vs short goblin monsters, etc.)
+        // but let's hardcode for now :)
+
+        // precalculate
+
+        // position
+        const pos = this.methodGetPosition().clone();
+
+        //
+        const dist = this.#componentInstancePlanetFaces
+            .methodGetFloorDistance(
+                pos,
+                this.#currentFaceIndex
+            );
+
+        // early return
+        if(dist >= 2.0){return;}
+
+        // body
+
+        // we have a clone of the position
+        // we can just move that clone pos in the normal direction?
+
+        pos.addScaledVector(
+            this.#componentInstancePlanetFaces
+            .methodGetFaceNormal(
+                this.#currentFaceIndex
+            ),
+            (2.0 - dist)
+        );
+
+        // and then we apply?
+
+        this.methodSetPosition(pos);
+
+        console.log("pushed up to floor");
+    }
+    methodNullifyGravity()
+    {
+        // early return : we need a velocity component
+        if(this.#componentInstanceVelocity == null){return;}
+
+        //
+        this.#componentInstanceVelocity.methodNullifyGravity(
+            this.#componentInstancePlanetFaces.methodGetFaceNormal(this.#currentFaceIndex).clone()
+        );
+    }
+
     // #region getters
     methodGetFaceNormal()
     {
@@ -1113,6 +1331,11 @@ export class EntityComponentGravity extends EntityComponent
         if(this.#componentInstancePlanetFaces == null){return;}
         // #endregion lazy
         return this.#componentInstancePlanetFaces.methodGetFaceNormal(this.#currentFaceIndex);
+    }
+    methodGetCurrentFaceNormal()
+    {
+        // alias function
+        return this.methodGetFaceNormal();
     }
     methodGetGravityDir()
     {
@@ -1126,8 +1349,46 @@ export class EntityComponentGravity extends EntityComponent
     }
     // #endregion getters
 
+    // #region getters that delegate : state machine
+    methodGetState()
+    {
+        return this.#stateMachine.methodGetState();
+    }
+    methodGetCurrentState()
+    {
+        // alias function
+        return this.methodGetState();
+    }
+    // #endregion getters that delegate : state machine
+
+    // #region setters that delegate : state machine
+    methodTransitionTo(newState)
+    {
+        this.#stateMachine.methodTransitionTo(newState);
+    }
+    methodSetState(newState)
+    {
+        // alias function
+        this.methodTransitionTo(newState);
+    }
+    // #endregion setters that delegate : state machine
+
     // #region private methods : gravity
     #methodApplyDownwardGravity(gravitySpeed)
+    {
+        //
+        if(this.#componentInstanceVelocity == null){return;}
+
+        // let's double check that we have the same face index
+        console.log("\t[" + this.#currentFaceIndex + "]");
+
+        //
+        const dir = this.#componentInstancePlanetFaces.methodGetFaceNormal(this.#currentFaceIndex).clone().negate();
+        dir.multiplyScalar(gravitySpeed);
+
+        this.#componentInstanceVelocity.methodAddToVelocityVector3(dir);
+    }
+    #methodApplyDownwardGravityOLD(gravitySpeed)
     {
         // calculate position displaced by gravity in accordance
         const newPosition = this.methodGetPosition().clone();
@@ -1158,6 +1419,16 @@ export class EntityComponentGravity extends EntityComponent
         if(this.#componentInstanceSpawnOnPlanetFace == null){return;}
         if(!this.#componentInstanceSpawnOnPlanetFace.methodGetIsReady()){return;}
         this.#currentFaceIndex = this.#componentInstanceSpawnOnPlanetFace.methodGetFaceIndex();
+
+        // and let's assume our velocity component has been initialized
+        this.#componentInstanceVelocity = this.methodGetComponent("EntityComponentVelocity");
+        if(this.#componentInstanceVelocity == null){return;}
+
+        // we log our initial velocity
+        // should be 0,0,0
+        console.log("initial velocity:");
+        const initialVelocity = this.#componentInstanceVelocity.methodGetVelocity();
+        console.log("\t[" + this.#currentFaceIndex + "]\t" + initialVelocity.x.toFixed(2) + " , " + initialVelocity.y.toFixed(2) + " , " + initialVelocity.z.toFixed(2));
 
         // #endregion body
 

@@ -10,8 +10,9 @@
 import { EntityComponentDirectionalLight } from "../../entity components/lighting.js";
 import { EntityComponentTestCube } from "../../entity components/test_objects.js";
 import { EntityComponentButtonPointerLock, EntityComponentButtonReturnToMainMenu } from "../../entity components/ui/buttons.js";
-import { EntityComponentCameraControllerFirstPerson } from "../../entity components/camera_controller_first_person.js";
-import { EntityComponentPlayerController } from "../../entity components/player_controller.js";
+import { EntityComponentCameraControllerFirstPerson } from "../../entity components/movement/camera_controller_first_person.js";
+import { EntityComponentPlayerController } from "../../entity components/movement/player_controller.js";
+import { EntityComponentVelocity } from "../../entity components/movement/velocity.js";
 // /entity-components/environment/
 import { EntityComponentSkybox } from "../../entity components/environment/skybox.js";
 import { EntityComponentPlanetModel, EntityComponentPlanetFaces, EntityComponentGravity, EntityComponentSpawnOnPlanetFace } from "../../entity components/environment/planet.js";
@@ -73,6 +74,7 @@ export const entityComponentRegistry =
     "EntityComponentTestCube": EntityComponentTestCube,
     "EntityComponentButtonPointerLock": EntityComponentButtonPointerLock,
     "EntityComponentButtonReturnToMainMenu": EntityComponentButtonReturnToMainMenu,
+    "EntityComponentVelocity": EntityComponentVelocity,
     "EntityComponentCameraControllerFirstPerson": EntityComponentCameraControllerFirstPerson,
     "EntityComponentPlayerController": EntityComponentPlayerController,
     "EntityComponentSkybox": EntityComponentSkybox,

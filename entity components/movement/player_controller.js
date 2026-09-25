@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import {EntityComponent} from "../classes/ECS/entity_component.js";
+import {EntityComponent} from "../../classes/ECS/entity_component.js";
 /*
 import {debugOverlaySetLine} from "./temp_debug_overlay.js"; // TEMPORARY - see that file's header comment
 */
@@ -36,6 +36,7 @@ export class EntityComponentPlayerControllerInput extends EntityComponent
             right: false,
             up: false,
             down: false,
+            jump: false,
         };
         document.addEventListener('keydown', (e) => this.methodEventOnKeyDown(e), false);
         document.addEventListener('keyup', (e) => this.methodEventOnKeyUp(e), false);
@@ -62,6 +63,9 @@ export class EntityComponentPlayerControllerInput extends EntityComponent
             case 68: // letter d
                 this.#keys.right = true;
                 break;
+            case 32: // spacebar
+                this.#keys.jump = true;
+                break;
         }
     }
     methodEventOnKeyUp(e)
@@ -85,6 +89,9 @@ export class EntityComponentPlayerControllerInput extends EntityComponent
                 break;
             case 68: // letter d
                 this.#keys.right = false;
+                break;
+            case 32: // spacebar
+                this.#keys.jump = false;
                 break;
         }
     }
@@ -273,9 +280,19 @@ export class EntityComponentPlayerController extends EntityComponent
     #keys = null;
     // #region privates
 
+    // lazy
+    #hasOnLazyLoadInit = false;
+
     // #region unresolved privates
     #cameraPivot = null;
     // #endregion unresolved privates
+
+    // #region component instances : lazy loaded
+    #componentInstanceInput = null;
+    #componentInstanceCameraControllerFirstPerson = null;
+    #componentInstanceGravity = null;
+    #componentInstanceVelocity = null;
+    // #endregion component instances : lazy loaded
 
     constructor(params)
     {
@@ -303,23 +320,23 @@ export class EntityComponentPlayerController extends EntityComponent
 
     methodUpdate()
     {
-        // #region precalculation
-        this.methodResolveCameraPivot();
-        // #endregion precalculation
+        // #region lazy
+        this.#methodOnLazyLoadInit();
+        if(!this.#hasOnLazyLoadInit){return;}
+        // #endregion lazy
 
-        // #region early return
-        // this.#cameraPivot begins UNRESOLVED; if we have not resolved it yet, we leave early
-        if(this.#cameraPivot == null){return;}
-        // #endregion early return
 
-        const componentInstanceInput = this.methodGetComponent("EntityComponentPlayerControllerInput");
-        // early return: no entity component instance
-        if(componentInstanceInput == null){return;}
+        // #region body
 
-        //
-        const componentInstanceCameraControllerFirstPerson = this.methodGetComponent("EntityComponentCameraControllerFirstPerson");
-        // early return: no entity component instance
-        if(componentInstanceCameraControllerFirstPerson == null){return;}
+        // at this point, we have resolved:
+        //  * the cameraPivot
+        //  * the entity-component instance of first person camera
+        //  * the entity-component instance of input
+        //  * the entity-component instance of velocity
+        //  * the entity-component instance of gravity
+
+        // does input need to be refereshed each frame???
+        //this.#componentInstanceInput = this.methodGetComponent("EntityComponentPlayerControllerInput");
 
         // a result variable
         // we modify this
@@ -331,11 +348,11 @@ export class EntityComponentPlayerController extends EntityComponent
         // and also
         // the polarity
         var indexMovingOnForwardBackwardAxis = 0;
-        if(componentInstanceInput.keys.forward == true) {indexMovingOnForwardBackwardAxis = 1;}
-        else if(componentInstanceInput.keys.backward == true) {indexMovingOnForwardBackwardAxis = -1;}
+        if(this.#componentInstanceInput.keys.forward == true) {indexMovingOnForwardBackwardAxis = 1;}
+        else if(this.#componentInstanceInput.keys.backward == true) {indexMovingOnForwardBackwardAxis = -1;}
         if(indexMovingOnForwardBackwardAxis != 0)
         {
-            positionResult.addScaledVector(componentInstanceCameraControllerFirstPerson.directionForwardNonvertical, 0.05 * indexMovingOnForwardBackwardAxis);
+            positionResult.addScaledVector(this.#componentInstanceCameraControllerFirstPerson.directionForwardNonvertical, 0.05 * indexMovingOnForwardBackwardAxis);
             //this.#cameraPivot.position.addScaledVector(componentInstanceCameraControllerFirstPerson.directionForwardNonvertical, 0.05 * indexMovingOnForwardBackwardAxis);
         }
 
@@ -345,23 +362,23 @@ export class EntityComponentPlayerController extends EntityComponent
         // and also
         // the polarity
         var indexMovingOnLeftRightAxis = 0;
-        if(componentInstanceInput.keys.left == true) {indexMovingOnLeftRightAxis = 1;}
-        else if(componentInstanceInput.keys.right == true) {indexMovingOnLeftRightAxis = -1;}
+        if(this.#componentInstanceInput.keys.left == true) {indexMovingOnLeftRightAxis = 1;}
+        else if(this.#componentInstanceInput.keys.right == true) {indexMovingOnLeftRightAxis = -1;}
         if(indexMovingOnLeftRightAxis != 0)
         {
-            positionResult.addScaledVector(componentInstanceCameraControllerFirstPerson.directionRightNonvertical, 0.05 * indexMovingOnLeftRightAxis);
+            positionResult.addScaledVector(this.#componentInstanceCameraControllerFirstPerson.directionRightNonvertical, 0.05 * indexMovingOnLeftRightAxis);
             //this.#cameraPivot.position.addScaledVector(componentInstanceCameraControllerFirstPerson.directionRightNonvertical, 0.05 * indexMovingOnLeftRightAxis);
         }
 
         //
-        if(componentInstanceInput.keys.up == true)
+        if(this.#componentInstanceInput.keys.up == true)
         {
             positionResult.addScaledVector(this.methodGetDirUp(), 0.05);
             // outdated : we don't want to travel straight up anymore
             // we want to travel in the CURRENT up direction, which is able to change
             //positionResult.y += 0.05;
         }
-        else if(componentInstanceInput.keys.down == true)
+        else if(this.#componentInstanceInput.keys.down == true)
         {
             positionResult.addScaledVector(this.methodGetDirUp(), -0.05);
             // outdated : we don't want to travel straight up anymore
@@ -369,6 +386,15 @@ export class EntityComponentPlayerController extends EntityComponent
             //positionResult.y -= 0.05;
         }
 
+        //
+        if(this.#componentInstanceInput.keys.jump == true)
+        {
+            this.methodExecuteActionJump();
+        }
+
+        // if we are currently jumping
+        // we need to eventually transition to falling
+        this.methodShouldJumpingTransitionToFalling();
 
         // early return: we don't do anything if we don't have anything
         const isSameX = (this.#cameraPivot.position.x == positionResult.x);
@@ -381,21 +407,70 @@ export class EntityComponentPlayerController extends EntityComponent
         this.methodSetPosition(positionResult);
 
 
+        // #endregion body
 
     }
 
     // #endregion lifecycle
 
-    // #region resolve methods
-    methodResolveCameraPivot()
+    methodExecuteActionJump()
     {
-        // #region early return
-        // if we have already resolved cameraPivot...
-        // ...then we can skip this step
-        if(this.#cameraPivot != null){return;}
-        // #endregion early return
+        // we need the gravity 
+        if(this.#componentInstanceGravity == null){return;}
 
-        // add throttle here
+        // if we are not in the landed state
+        // we cannot jump
+        if(this.#componentInstanceGravity.methodGetState() != "Landed"){return;}
+
+        // we also need the velocity component
+        if(this.#componentInstanceVelocity == null){return;}
+
+        // get planet face's up-direction first
+        const dir = this.#componentInstanceGravity.methodGetCurrentFaceNormal().clone();
+        // we first nullify velocity on the gravity "axis"
+        this.#componentInstanceVelocity.methodNullifyGravity(
+            dir
+        );
+
+        // we now change state
+        // this should avoid some jank with gravity trying to pull us down
+        this.#componentInstanceGravity.methodTransitionTo("Jumping");
+
+        // we scale the direction by our intended speed
+        const scaledDir = dir.multiplyScalar(100.0);
+        // then we apply upwards speed, along the gravity "axis"
+        this.#componentInstanceVelocity.methodAddToVelocity(scaledDir.x, scaledDir.y, scaledDir.z);
+    }
+
+    //
+    methodShouldJumpingTransitionToFalling()
+    {
+        //
+        if(this.#componentInstanceGravity == null){return;}
+        if(this.#componentInstanceGravity.methodGetState() != "Jumping"){return;}
+        if(this.#componentInstanceVelocity == null){return;}
+
+        // we get gravity "axis" direction
+        const dir = this.#componentInstanceGravity.methodGetCurrentFaceNormal().clone();
+        // we use it to check if our velocity along the axis is 0 or negative
+        const isGravityAxisVelocityZeroOrNeg = this.#componentInstanceVelocity.methodGetIsVelocityAlongAxisZeroOrNegative(dir);
+        // we double-check that we are in the right state, too
+        if(this.#componentInstanceGravity.methodGetState() == "Jumping" && isGravityAxisVelocityZeroOrNeg)
+        {
+            // if so
+            // change state to falling again
+            this.#componentInstanceGravity.methodTransitionTo("Falling");
+        }
+    }
+
+    // #region resolve methods
+    #methodOnLazyLoadInit()
+    {
+        // #region lazy
+        if(this.#hasOnLazyLoadInit){return;}
+        // #endregion lazy
+
+        // #region body
 
         // we know that SingletonContextEngine exists
         // and that cameraPivot is in there
@@ -405,6 +480,22 @@ export class EntityComponentPlayerController extends EntityComponent
         // and the method there does the lookup of camera pivot via SingletonContextEngine for us
         // just a shorthand, basically
         this.#cameraPivot = this.methodGetCameraPivot();
+
+        //
+        this.#componentInstanceInput = this.methodGetComponent("EntityComponentPlayerControllerInput");
+        if(this.#componentInstanceInput == null){return;}
+        this.#componentInstanceCameraControllerFirstPerson = this.methodGetComponent("EntityComponentCameraControllerFirstPerson");
+        if(this.#componentInstanceCameraControllerFirstPerson == null){return;}
+        this.#componentInstanceGravity = this.methodGetComponent("EntityComponentGravity");
+        if(this.#componentInstanceGravity == null){return;}
+        this.#componentInstanceVelocity = this.methodGetComponent("EntityComponentVelocity");
+        if(this.#componentInstanceVelocity == null){return;}
+
+        // #endregion body
+
+        // finally, we update the flag so that we don't have to do this again
+        // must be at the very end
+        this.#hasOnLazyLoadInit = true;
     }
     // #endregion resolve methods
 }

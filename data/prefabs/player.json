@@ -3,6 +3,7 @@
     "components": [
         {"type": "EntityComponentCameraControllerFirstPerson"},
         {"type": "EntityComponentPlayerController"},
+        {"type": "EntityComponentVelocity"},
         {"type": "EntityComponentSpawnOnPlanetFace",
         "params": {
             "planet":
