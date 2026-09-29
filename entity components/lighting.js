@@ -5,6 +5,61 @@ import * as THREE from "three";
 import {EntityComponent} from "../classes/ECS/entity_component.js";
 
 //
+export class EntityComponentAmbientLight extends EntityComponent
+{
+
+    // #region bare minimum
+    //
+    #params = null;
+    //
+    #light = null;
+    //
+    #color = "#FFFFFF";
+    #intensity = 0.1;
+    // #endregion bare minimum
+
+    // #region constructor
+    constructor(params)
+    {
+        //
+        super(params);
+
+        //
+        if(params.color != null)
+        {
+            this.#color = params.color;
+        }
+        //
+        if(params.intensity != null)
+        {
+            this.#intensity = params.intensity;
+        }
+    }
+    // #endregion constructor
+
+    // #region lifecycle
+    methodInitialize()
+    {
+        this.#light = new THREE.AmbientLight("#FF0000", 1.0);
+        this.methodGetScene().add(this.#light);
+        console.log("ambient light added!");
+    }
+    methodUpdate(){}
+    methodDispose()
+    {
+        // same as in methodInitialize, but reverse
+        this.methodGetScene().remove(this.#light);
+
+        // and then dispose the light itself
+        this.#light.dispose();
+
+        // remove pointer, so that it can be garbage collected
+        this.#light = null;
+    }
+    // #endregion lifecycle
+}
+
+//
 export class EntityComponentDirectionalLight extends EntityComponent
 {
     // #region bare minimum

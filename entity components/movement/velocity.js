@@ -9,7 +9,7 @@ export class EntityComponentVelocity extends EntityComponent
     #frictionHorizontal = 0.995;
     #frictionVertical = 0.995;
     //
-    #velocityMax = 5.0;
+    #velocityMax = 15.0;
     //
     #zeroEpsilon = 0.001;
 
@@ -41,14 +41,26 @@ export class EntityComponentVelocity extends EntityComponent
         //
         if(this.#velocity == null){console.error("no vel");return;}
 
-        //
+        // we don't need to do anything if velocity is zero
         const isVelocityZero = this.methodGetIsVelocityZero(); 
         if(isVelocityZero){return;}
+
+        // idea : we make a copy of velocity
+        // then we clamp it if too high
+        // so that we only apply a set amount of speed each turn
+        // BUT
+        // we still retain the rest of the speed
+        const clampedSpeedCopy = this.#velocity.clone();
+        if(clampedSpeedCopy.length() > this.#velocityMax)
+        {
+            // .setLength() does this scaling
+            clampedSpeedCopy.setLength(this.#velocityMax);
+        }
 
         // translate the position of the entity thusly
         const pos = this.methodGetPosition().clone();
         pos.addScaledVector(
-            this.#velocity,
+            clampedSpeedCopy,
             timeDelta
         );
 
@@ -92,7 +104,7 @@ export class EntityComponentVelocity extends EntityComponent
     {
         this.#velocity.add(velocityAddend);
         // clamp
-        this.methodClampVelocity();
+        //this.methodClampVelocity();
     }
     methodAddToVelocityComposite(x,y,z)
     {
@@ -101,7 +113,7 @@ export class EntityComponentVelocity extends EntityComponent
         this.#velocity.z += z;
 
         // clamp
-        this.methodClampVelocity();
+        //this.methodClampVelocity();
     }
 
     methodClampVelocity()
@@ -131,6 +143,11 @@ export class EntityComponentVelocity extends EntityComponent
 
     methodNullifyGravity(gravityDir)
     {
+        // rename?
+        // * nullify velocity on the gravity axis
+        // * nullify velocity on the UpDown axis
+
+        // early return (some of these might not be needed)
         if(gravityDir == null){return;}
         if(this.#velocity == null){return;}
         if(this.methodGetIsVelocityZero()){return;}

@@ -53,6 +53,18 @@
             ]
         },
         {
+            "name": "ambientLight",
+            "components": [
+                {
+                    "type": "EntityComponentAmbientLight",
+                    "params": {
+                        "color": "#FF0000",
+                        "intensity": 1.0
+                    }
+                }
+            ]
+        },
+        {
             "name": "player",
             "prefab": "Player",
             "overrideParams": {

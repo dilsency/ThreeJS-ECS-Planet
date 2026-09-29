@@ -294,6 +294,10 @@ export class EntityComponentPlayerController extends EntityComponent
     #componentInstanceVelocity = null;
     // #endregion component instances : lazy loaded
 
+    //
+    #jumpSpeed = 20.0;//100.0
+
+    //
     constructor(params)
     {
         super(params);
@@ -437,7 +441,7 @@ export class EntityComponentPlayerController extends EntityComponent
         this.#componentInstanceGravity.methodTransitionTo("Jumping");
 
         // we scale the direction by our intended speed
-        const scaledDir = dir.multiplyScalar(100.0);
+        const scaledDir = dir.multiplyScalar(this.#jumpSpeed);
         // then we apply upwards speed, along the gravity "axis"
         this.#componentInstanceVelocity.methodAddToVelocity(scaledDir.x, scaledDir.y, scaledDir.z);
     }

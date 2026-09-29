@@ -7,7 +7,7 @@
 // #region prefabs > entities
 
 // name, and import, all entity-components that will be used by /data/worlds/
-import { EntityComponentDirectionalLight } from "../../entity components/lighting.js";
+import { EntityComponentDirectionalLight, EntityComponentAmbientLight } from "../../entity components/lighting.js";
 import { EntityComponentTestCube } from "../../entity components/test_objects.js";
 import { EntityComponentButtonPointerLock, EntityComponentButtonReturnToMainMenu } from "../../entity components/ui/buttons.js";
 import { EntityComponentCameraControllerFirstPerson } from "../../entity components/movement/camera_controller_first_person.js";
@@ -71,6 +71,7 @@ export const prefabRegistry =
 export const entityComponentRegistry =
 {
     "EntityComponentDirectionalLight": EntityComponentDirectionalLight,
+    "EntityComponentAmbientLight": EntityComponentAmbientLight,
     "EntityComponentTestCube": EntityComponentTestCube,
     "EntityComponentButtonPointerLock": EntityComponentButtonPointerLock,
     "EntityComponentButtonReturnToMainMenu": EntityComponentButtonReturnToMainMenu,

@@ -64,9 +64,14 @@ export class EntityComponentPlanetModel extends EntityComponent
 
         // #region body
         //
-        const material = new THREE.MeshStandardMaterial();
-        material.color = new THREE.Color(this.#color);
-        material.flatShading = true;
+        const material = new THREE.MeshStandardMaterial(
+            {
+                color: new THREE.Color("#99FF99"),
+                flatShading: true,
+                metalness: 0.05,
+                roughness: 1.0,
+            }
+        );
         //
         this.#mesh = new THREE.Mesh(this.#geometry, material);
         this.#mesh.scale.setScalar(this.#radius);
@@ -101,6 +106,21 @@ export class EntityComponentPlanetModel extends EntityComponent
         // #endregion body
     }
     // #endregion lifecycle
+
+    //
+    #methodCreateColor(multiplicationFactor)
+    {
+        // we have our base color
+        // this.#color
+        
+        // however
+        // if it is too intense
+        // we will not be able to accept any ambient color
+        // so let's darken it
+        
+        //return null;
+        return new THREE.Color(this.#color).multiplyScalar(multiplicationFactor);
+    }
 
     // #region getters
     methodGetGeometry() { return this.#geometry; }
@@ -342,6 +362,23 @@ export class EntityComponentPlanetFaces extends EntityComponent
             this.#planesWall[index][2].distanceToPoint(position) >= 0.0
             )
             ;
+    }
+    methodGetDistanceToClosestWall(position, index)
+    {
+        //
+        //if(this.#planesWall == null){return;}
+
+        // positive distances are within the wall
+        // so the lowest value
+        // is the wall we are closest to
+        // and if we are negative
+        // we are outside that wall
+        // (here, we only return the distance, we don't return the wall index)
+        return Math.min(
+            this.#planesWall[index][0].distanceToPoint(position),
+            this.#planesWall[index][1].distanceToPoint(position),
+            this.#planesWall[index][2].distanceToPoint(position)
+        );
     }
     
     methodGetMostAlignedFace(position, planetCenter)
@@ -1026,8 +1063,11 @@ export class EntityComponentGravity extends EntityComponent
     #distanceToFloor = false;
     #currentFaceIndex = null;
     //
-    #isWithinFaceWalls = false;
+    #isWithinFaceWallsLeeway = 1.2;
     #isWithinFloorRange = false;
+    //
+    #isWithinFaceWallsWithLeeway = false;
+    #isWithinFaceWallsWithoutLeeway = false;
     //
     #gravitySpeed = 0.5;
     //
@@ -1048,8 +1088,16 @@ export class EntityComponentGravity extends EntityComponent
             console.log("landed from falling!");
             this.methodNullifyGravity();
         });
+        this.#stateMachine.methodRegisterHandler("Landed", "Crossing", () => {
+            console.log("cross!");
+            this.methodOnCrossingOver();
+        });
+        this.#stateMachine.methodRegisterHandler("Crossing", "Landed", () => {
+            console.log("landed from cross!");
+        });
         this.#stateMachine.methodRegisterHandler("Landed", "Jumping", () => {
             console.log("jump!");
+            //this.methodExecuteActionJump();
         });
         this.#stateMachine.methodRegisterHandler("Jumping", "Falling", () => {
             console.log("apex of jump!");
@@ -1085,7 +1133,9 @@ export class EntityComponentGravity extends EntityComponent
         //
         this.#distanceToFloor = this.#componentInstancePlanetFaces.methodGetFloorDistance(prevPosition, this.#currentFaceIndex);
         //
-        this.#isWithinFaceWalls = this.#componentInstancePlanetFaces.methodGetIsWithinFaceWalls(prevPosition, this.#currentFaceIndex)
+        this.#isWithinFaceWallsWithLeeway = this.methodGetIsWithinFaceWallsWithLeeway(prevPosition);
+        this.#isWithinFaceWallsWithoutLeeway = this.methodGetIsWithinFaceWallsWithoutLeeway(prevPosition);
+        //
         this.#isWithinFloorRange = (this.#distanceToFloor >= 0.5 && this.#distanceToFloor <= 2.0);
         
         // #endregion update relative positioning variables
@@ -1106,50 +1156,55 @@ export class EntityComponentGravity extends EntityComponent
                 this.methodUpdateByStateJumping(timeElapsed, timeDelta, prevPosition);
                 break;
         }
+
+        // if we are in any of the "grounded" states
+        // we want to chase the ideal camera y-position
+        // or height or axis-aligned position or whatever
+        this.methodChaseIdealDistanceFromFloor(timeElapsed, timeDelta, prevPosition);
     }
     methodUpdateByStateLanded(timeElapsed, timeDelta, prevPosition)
     {
-        if (!this.#isWithinFaceWalls)
+        if (!this.#isWithinFaceWallsWithLeeway)
         {
-            this.#stateMachine.methodTransitionTo("Falling");
+            this.#stateMachine.methodTransitionTo("Crossing");
         }
     }
     methodUpdateByStateJumping(timeElapsed, timeDelta, prevPosition)
     {
         // if we aren't within the face prism
         // we need to update to the nearest face
-        if(!this.#isWithinFace)
+        if(!this.#isWithinFaceWallsWithLeeway)
         {
             //
             this.methodShouldUpdateToNearestFace(prevPosition);
         }
-        else {
-            // we apply a constant, small amount of gravity
-            // so that we slow down our ascent
-            this.#methodApplyDownwardGravity(this.#gravitySpeed * 0.1);
 
-            // we can do a check here if our speed in axis is zero or negative
-            // and if so, transition to falling
+        // we apply a constant, small amount of gravity
+        // so that we slow down our ascent
+        this.#methodApplyDownwardGravity(this.#gravitySpeed * 1.0);
 
-            //
-            const dir = this.#componentInstancePlanetFaces.methodGetFaceNormal(this.#currentFaceIndex).clone();
+        // we can do a check here if our speed in axis is zero or negative
+        // and if so, transition to falling
 
-            //
-            const isZeroOrNeg = this.#componentInstanceVelocity.methodGetIsVelocityAlongAxisZeroOrNegative(
-                dir
-            );
+        //
+        const dir = this.#componentInstancePlanetFaces.methodGetFaceNormal(this.#currentFaceIndex).clone();
 
-            // we double-check that we are in the right state, too
-            if(this.#stateMachine.methodGetCurrentState() == "Jumping" && isZeroOrNeg)
-            {
-                this.#stateMachine.methodTransitionTo("Falling");
-            }
+        //
+        const isZeroOrNeg = this.#componentInstanceVelocity.methodGetIsVelocityAlongAxisZeroOrNegative(
+            dir
+        );
+
+        // we double-check that we are in the right state, too
+        if(this.#stateMachine.methodGetCurrentState() == "Jumping" && isZeroOrNeg)
+        {
+            this.#stateMachine.methodTransitionTo("Falling");
         }
+        
     }
     methodUpdateByStateFalling(timeElapsed, timeDelta, prevPosition)
     {
-        const currentVelocity = this.#componentInstanceVelocity.methodGetVelocity();
-        console.log("\t[" + this.#currentFaceIndex + "]\t" + currentVelocity.x.toFixed(2) + " , " + currentVelocity.y.toFixed(2) + " , " + currentVelocity.z.toFixed(2));
+        //const currentVelocity = this.#componentInstanceVelocity.methodGetVelocity();
+        //console.log("\t[" + this.#currentFaceIndex + "]\t" + currentVelocity.x.toFixed(2) + " , " + currentVelocity.y.toFixed(2) + " , " + currentVelocity.z.toFixed(2));
 
         // if we aren't within the face prism
         // we need to update to the nearest face
@@ -1159,7 +1214,9 @@ export class EntityComponentGravity extends EntityComponent
             this.methodShouldUpdateToNearestFace(prevPosition);
             // it is possible that we moved below floor peak in doing so
             // we can compensate for this, though
-            this.methodApplyUpwardForceIfBelowFloorPeak();
+            //this.methodApplyUpwardForceIfBelowFloorPeak();
+
+            // but we don't ; instead, landed states will always chase the ideal
         }
 
         //
@@ -1168,7 +1225,7 @@ export class EntityComponentGravity extends EntityComponent
             //
             this.#methodApplyDownwardGravity(this.#gravitySpeed);
         }
-        else if (this.#isWithinFaceWalls && !this.#isWithinFloorRange)
+        else if (this.#isWithinFaceWallsWithoutLeeway && !this.#isWithinFloorRange)
         {
             // we are within the planet
             // apply upwards force
@@ -1199,6 +1256,88 @@ export class EntityComponentGravity extends EntityComponent
         }
     }
 
+    #distanceFromFloorIdeal = 2.0;
+    #distanceFromFloorIdealLeeway = 0.5;
+
+    //
+    methodChaseIdealDistanceFromFloor(timeElapsed, timeDelta, prevPosition)
+    {
+        // only certain states
+        const currentState = this.methodGetCurrentState();
+        if(!(currentState == "Landed" || currentState == "Crossing")){return;}
+
+        // we have already calculated distance, and we don't need to do it again
+        //this.#distanceToFloor = this.#componentInstancePlanetFaces.methodGetFloorDistance(prevPosition, this.#currentFaceIndex);
+        //console.log(this.#distanceToFloor);
+
+        //
+        var polarity = 0;
+
+        //
+        if(this.#distanceToFloor < (this.#distanceFromFloorIdeal - this.#distanceFromFloorIdealLeeway))
+        {
+            polarity = 1;
+        }
+        else if(this.#distanceToFloor > (this.#distanceFromFloorIdeal + this.#distanceFromFloorIdealLeeway))
+        {
+            polarity = -1;
+        }
+
+        if(polarity == 0){return;}
+
+        const dir = this.#componentInstancePlanetFaces.methodGetFaceNormal(this.#currentFaceIndex).clone();
+        this.#componentInstanceVelocity.methodAddToVelocity(dir.multiplyScalar(0.01 * polarity));
+    }
+
+    //
+    methodGetIsWithinFaceWallsWithLeeway(prevPosition)
+    {
+        // a point's distance to a wall is positive if we are within
+        // if 0, we are straight on the edge
+        // if negative, we are outside!
+        // and the further negative, the further out
+        const distanceToClosestWall = this.#componentInstancePlanetFaces.methodGetDistanceToClosestWall(prevPosition, this.#currentFaceIndex);
+        // negative because we are comparing to a negative distance (outside off prism)
+        // and we want to be GREATER than that because are checking if we are INSIDE
+        // the leeway allows for us to have "coyote time" and not update face right away
+        return (distanceToClosestWall >= -this.#isWithinFaceWallsLeeway);
+    }
+    //
+    methodGetIsWithinFaceWallsWithoutLeeway(prevPosition)
+    {
+        // a point's distance to a wall is positive if we are within
+        // if 0, we are straight on the edge
+        // if negative, we are outside!
+        // and the further negative, the further out
+        const distanceToClosestWall = this.#componentInstancePlanetFaces.methodGetDistanceToClosestWall(prevPosition, this.#currentFaceIndex);
+        // we are comparing to a negative distance (outside off prism)
+        // and we want to be GREATER than that because are checking if we are INSIDE
+        // no leeway, no coyote time
+        return (distanceToClosestWall >= 0);
+    }
+
+    //
+    methodOnCrossingOver()
+    {
+        //
+        const prevPosition = this.methodGetPosition();
+
+        //
+        this.methodShouldUpdateToNearestFace(prevPosition);
+
+        // we will be out of our accepted height range
+        // BUT
+        // we always chase the ideal height / distance from floor
+        // so this will settle
+
+        // but what we will do is nullify the gravity-axis velocity
+        // so that we aren't contributing to an already ongoing transition
+        this.methodNullifyGravity();
+
+        //
+        this.methodTransitionTo("Landed");
+    }
+
     //
     methodShouldUpdateToNearestFace(prevPosition)
     {
@@ -1212,7 +1351,7 @@ export class EntityComponentGravity extends EntityComponent
         // update to newest face
         this.methodSetFaceIndex(nearestFaceIndex, true);
         // push the player outwards to the utmost limit
-        
+        // ...nothing here
         // #endregion body
     }
 
@@ -1314,6 +1453,10 @@ export class EntityComponentGravity extends EntityComponent
     }
     methodNullifyGravity()
     {
+        // rename?
+        // * nullify velocity on the gravity axis
+        // * nullify velocity on the UpDown axis
+
         // early return : we need a velocity component
         if(this.#componentInstanceVelocity == null){return;}
 
@@ -1380,7 +1523,7 @@ export class EntityComponentGravity extends EntityComponent
         if(this.#componentInstanceVelocity == null){return;}
 
         // let's double check that we have the same face index
-        console.log("\t[" + this.#currentFaceIndex + "]");
+        //console.log("\t[" + this.#currentFaceIndex + "]");
 
         //
         const dir = this.#componentInstancePlanetFaces.methodGetFaceNormal(this.#currentFaceIndex).clone().negate();
@@ -1555,6 +1698,7 @@ export class EntityComponentSpawnOnPlanetFace extends EntityComponent
         // let's randomize one!
         if(this.#faceIndex == null)
         {
+            //this.#faceIndex = 13;
             this.#faceIndex = Math.floor(Math.random() * this.#componentInstancePlanetFaces.methodGetFaceCount());
         }
 
