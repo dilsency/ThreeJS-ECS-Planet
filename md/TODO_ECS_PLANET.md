@@ -59,3 +59,46 @@ sibling — `methodGetFaceCenter()`, and inside the parse loop
 instead. Removes a few redundant sibling-component lookups; no behavior change, since the
 value is identical either way.
 - **File:** `entity components/environment/planet.js`.
+
+## 4. Scale planet-face-alignment camera rotation speed by distance from planet
+
+When far away from a planet, the camera's rotation to match the current planet-face's
+normal direction should take much longer (slower turn) than when close up. Right now the
+turn speed is presumably fixed regardless of distance — it should scale with (or at least
+step down at) distance from the planet.
+
+- **Files:** likely `entity components/movement/camera_controller_first_person.js` and/or
+  `entity components/environment/planet.js` (wherever the face-normal alignment rotation
+  is driven).
+
+## 5. Centralize the gravity-state distance boundaries in ONE place
+
+The distance boundaries that separate "within floor range", the normal "falling" range,
+"far" falling, and "orbit" are currently scattered as magic numbers across
+`entity components/environment/planet.js` (the gravity state machine there), e.g.:
+
+- `#isWithinFloorRange = (this.#distanceToFloor >= 0.5 && this.#distanceToFloor <= 2.0)`
+- `#distanceFromFloorIdeal = 2.0`, `#distanceFromFloorIdealLeeway = 0.5`
+- the `Falling` ↔ `FallingFar` boundary at `distanceToFloor >= 50.0` (appears at multiple
+  call sites, e.g. `methodUpdateByStateFallingFar()` and `methodUpdateByStateOrbit()`)
+
+These need to be defined in **ONE** place, not re-declared/re-typed at each check site.
+
+**Discussion — is this a Context component's job?**
+
+- A `Context` component (singleton/multi, per `context/` conventions) is the natural home
+  for values that are *shared configuration*, not per-entity state — e.g. a
+  `ContextPlanetDistanceThresholds` (singleton) or fields added to the existing planet-face
+  context. That fits: these boundaries are conceptually planet-wide tuning constants, not
+  something that varies per gravity-component instance today.
+- Counter-consideration: the boundaries might eventually need to vary **per planet**
+  (different planet sizes/masses → different "far"/"orbit" cutoffs), in which case they
+  belong on `EntityComponentPlanetModel` (or `EntityComponentPlanetFaces`) as per-planet
+  fields, with the gravity component reading them off its planet sibling rather than off a
+  global Context.
+- Simplest fix either way: pull the literals (`0.5`, `2.0`, `50.0`, etc.) out of inline
+  checks into named constants/fields declared once at the top of the owning component, then
+  decide Context-vs-per-planet only if/when a second planet with different tuning is
+  actually needed. Avoid the Context indirection until there's a concrete case for it.
+- **File:** `entity components/environment/planet.js` (search for `#isWithinFloorRange`,
+  `#distanceFromFloorIdeal`, `>= 50.0`, `< 50.0`).

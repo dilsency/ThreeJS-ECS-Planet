@@ -375,6 +375,13 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
     #directionForwardNonvertical = null;
     #directionRight = null;
     #directionRightNonvertical = null;
+    
+    // 
+    #gravityTransitionAxis = null;
+    #gravityTransitionRemainingAngle = 0;
+    #gravityTransitionAngularSpeed = Math.PI;
+    #gravityTransitionAngularSpeedMin = Math.PI;
+    #gravityTransitionAngularSpeedMax = Math.PI * 4;
     // #endregion privates
 
     // #region construct
@@ -544,6 +551,28 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
         // update perpendiculars
         this.methodUpdatePerpendiculars(false);
     }
+    methodOnFallingDistanceChanged(index)
+    {
+        // alias function
+        this.methodSetGravityTransitionAngularSpeed(index);
+    }
+    methodSetGravityTransitionAngularSpeed(index)
+    {
+        // todo : just change this ONCE depending on the gravity distance?
+
+        // depending on the distance from the planet
+        switch(index){
+            case 0:
+                this.#gravityTransitionAngularSpeed = this.#gravityTransitionAngularSpeedMax;
+                break;
+            case 1:
+                this.#gravityTransitionAngularSpeed = this.#gravityTransitionAngularSpeedMin;
+                break;
+            case 2:
+                this.#gravityTransitionAngularSpeed = this.#gravityTransitionAngularSpeedMin;
+                break;
+        }
+    }
     methodUpdateUpDirectionTransition(timeElapsed, timeDelta)
     {
         // #region early return
@@ -551,6 +580,10 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
         // #endregion early return
 
         // #region body
+
+        // this would run every frame
+        // we can instead just change this ONCE in gravity?
+        //methodSetGravityTransitionAngularSpeed();
 
         // calculate the step size to take
         // in radian angles
@@ -594,11 +627,6 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
     methodGetCameraQuaternion(){return this.#camera.quaternion;}
 
     // #endregion getters
-
-    // move these to privates
-    #gravityTransitionAxis = null;
-    #gravityTransitionRemainingAngle = 0;
-    #gravityTransitionAngularSpeed = Math.PI;
 
     // move... somewhere
     #methodGetVisualDirUp()

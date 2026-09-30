@@ -37,6 +37,7 @@ export class EntityComponentPlayerControllerInput extends EntityComponent
             up: false,
             down: false,
             jump: false,
+            teleportout: false,
         };
         document.addEventListener('keydown', (e) => this.methodEventOnKeyDown(e), false);
         document.addEventListener('keyup', (e) => this.methodEventOnKeyUp(e), false);
@@ -66,6 +67,9 @@ export class EntityComponentPlayerControllerInput extends EntityComponent
             case 32: // spacebar
                 this.#keys.jump = true;
                 break;
+            case 48: // number 0
+                this.#keys.teleportout = true;
+                break;
         }
     }
     methodEventOnKeyUp(e)
@@ -92,6 +96,9 @@ export class EntityComponentPlayerControllerInput extends EntityComponent
                 break;
             case 32: // spacebar
                 this.#keys.jump = false;
+                break;
+            case 48: // number 0
+                this.#keys.teleportout = false;
                 break;
         }
     }
@@ -322,6 +329,13 @@ export class EntityComponentPlayerController extends EntityComponent
         this.methodGetParent().methodAddComponentWithName("EntityComponentPlayerControllerInput", componentInput);
     }
 
+    #speedLeftRight = 0.05;
+    #speedLeftRightMin = 0.05;
+    #speedLeftRightMax = 1.05;
+    #speedForwardBack = 0.05;
+    #speedForwardBackMin = 0.05;
+    #speedForwardBackMax = 1.05;
+
     methodUpdate()
     {
         // #region lazy
@@ -346,7 +360,13 @@ export class EntityComponentPlayerController extends EntityComponent
         // we modify this
         // and then .SetPosition in the end
         const positionResult = new THREE.Vector3();
-        positionResult.copy(this.#cameraPivot.position);
+        
+        // new test : copy from the entity, not directly from cameraPivot
+        // actually didn't help
+        // our teleportOut needs to modify positionResult, not do its own thing
+        positionResult.copy(this.methodGetPosition());
+        // old & outdated?
+        //positionResult.copy(this.#cameraPivot.position);
         
         // we can use this index to determine if we should move in the first place
         // and also
@@ -356,7 +376,11 @@ export class EntityComponentPlayerController extends EntityComponent
         else if(this.#componentInstanceInput.keys.backward == true) {indexMovingOnForwardBackwardAxis = -1;}
         if(indexMovingOnForwardBackwardAxis != 0)
         {
-            positionResult.addScaledVector(this.#componentInstanceCameraControllerFirstPerson.directionForwardNonvertical, 0.05 * indexMovingOnForwardBackwardAxis);
+            positionResult
+            .addScaledVector(
+                this.#componentInstanceCameraControllerFirstPerson.directionForwardNonvertical,
+                this.#speedForwardBack * indexMovingOnForwardBackwardAxis
+            );
             //this.#cameraPivot.position.addScaledVector(componentInstanceCameraControllerFirstPerson.directionForwardNonvertical, 0.05 * indexMovingOnForwardBackwardAxis);
         }
 
@@ -370,7 +394,11 @@ export class EntityComponentPlayerController extends EntityComponent
         else if(this.#componentInstanceInput.keys.right == true) {indexMovingOnLeftRightAxis = -1;}
         if(indexMovingOnLeftRightAxis != 0)
         {
-            positionResult.addScaledVector(this.#componentInstanceCameraControllerFirstPerson.directionRightNonvertical, 0.05 * indexMovingOnLeftRightAxis);
+            positionResult
+            .addScaledVector(
+                this.#componentInstanceCameraControllerFirstPerson.directionRightNonvertical,
+                this.#speedLeftRight * indexMovingOnLeftRightAxis
+            );
             //this.#cameraPivot.position.addScaledVector(componentInstanceCameraControllerFirstPerson.directionRightNonvertical, 0.05 * indexMovingOnLeftRightAxis);
         }
 
@@ -395,6 +423,11 @@ export class EntityComponentPlayerController extends EntityComponent
         {
             this.methodExecuteActionJump();
         }
+        //
+        if(this.#componentInstanceInput.keys.teleportout == true)
+        {
+            this.methodExecuteActionTeleportOut(positionResult);
+        }
 
         // if we are currently jumping
         // we need to eventually transition to falling
@@ -417,6 +450,32 @@ export class EntityComponentPlayerController extends EntityComponent
 
     // #endregion lifecycle
 
+    //
+    methodOnFallingDistanceChanged(index)
+    {
+        // alias function
+        this.methodSetMovementSpeed(index);
+    }
+    methodSetMovementSpeed(index)
+    {
+        switch(index)
+        {
+            case 0:
+                this.#speedLeftRight = this.#speedLeftRightMin;
+                this.#speedForwardBack = this.#speedForwardBackMin;
+                break;
+            case 1:
+                this.#speedLeftRight = this.#speedLeftRightMin;
+                this.#speedForwardBack = this.#speedForwardBackMin;
+                break;
+            case 2:
+                this.#speedLeftRight = this.#speedLeftRightMax;
+                this.#speedForwardBack = this.#speedForwardBackMax;
+                break;
+        }
+    }
+
+    // #region execute actions
     methodExecuteActionJump()
     {
         // we need the gravity 
@@ -445,6 +504,49 @@ export class EntityComponentPlayerController extends EntityComponent
         // then we apply upwards speed, along the gravity "axis"
         this.#componentInstanceVelocity.methodAddToVelocity(scaledDir.x, scaledDir.y, scaledDir.z);
     }
+    methodExecuteActionTeleportOut(positionResult)
+    {
+        // we don't use velocity for this
+
+        // we need the gravity 
+        if(this.#componentInstanceGravity == null){return;}
+
+        // get planet face's up-direction first
+        const dir = this.#componentInstanceGravity.methodGetCurrentFaceNormal().clone();
+
+        // then we translate our position a huge distance away
+        const pos = this.methodGetPosition().clone();
+        pos.addScaledVector(dir, 10);
+
+        //
+        /*
+        console.log("pos -> pos");
+        console.log("\t"
+            + this.methodGetPosition().x.toFixed(2)
+            + " , "
+            + this.methodGetPosition().y.toFixed(2)
+            + " , "
+            + this.methodGetPosition().z.toFixed(2)
+        );
+        console.log("\t"
+            + pos.x.toFixed(2)
+            + " , "
+            + pos.y.toFixed(2)
+            + " , "
+            + pos.z.toFixed(2)
+        );
+        */
+
+        // and apply, by modifying positionResult, not directly position
+        positionResult.copy(pos);
+        
+        // should we skip manually changing the state?
+        // or do a distance check here?
+        // we can get:
+        // falling, fallingfar, orbit
+        this.#componentInstanceGravity.methodTransitionTo("Orbit");
+    }
+    // #endregion execute actions
 
     //
     methodShouldJumpingTransitionToFalling()

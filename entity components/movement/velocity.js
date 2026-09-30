@@ -9,7 +9,9 @@ export class EntityComponentVelocity extends EntityComponent
     #frictionHorizontal = 0.995;
     #frictionVertical = 0.995;
     //
-    #velocityMax = 15.0;
+    #velocityCap = 15.0;
+    #velocityCapMin = 15.0;
+    #velocityCapMax = 115.0;
     //
     #zeroEpsilon = 0.001;
 
@@ -51,10 +53,10 @@ export class EntityComponentVelocity extends EntityComponent
         // BUT
         // we still retain the rest of the speed
         const clampedSpeedCopy = this.#velocity.clone();
-        if(clampedSpeedCopy.length() > this.#velocityMax)
+        if(clampedSpeedCopy.length() > this.#velocityCap)
         {
             // .setLength() does this scaling
-            clampedSpeedCopy.setLength(this.#velocityMax);
+            clampedSpeedCopy.setLength(this.#velocityCap);
         }
 
         // translate the position of the entity thusly
@@ -82,6 +84,27 @@ export class EntityComponentVelocity extends EntityComponent
     }
     methodDispose(){}
 
+    //
+    methodOnFallingDistanceChanged(index)
+    {
+        // alias function
+        this.methodSetVelocityCap(index);
+    }
+    methodSetVelocityCap(index)
+    {
+        switch(index)
+        {
+            case 0:
+                this.#velocityCap = this.#velocityCapMin;
+                break;
+            case 1:
+                this.#velocityCap = this.#velocityCapMin;
+                break;
+            case 2:
+                this.#velocityCap = this.#velocityCapMax;
+                break;
+        }
+    }
 
     //
     methodAddToVelocity(paramA, paramB, paramC)
@@ -122,10 +145,10 @@ export class EntityComponentVelocity extends EntityComponent
         // aka the "total" speed of the entire vector
         // if that is too high
         // we scale the whole thing down
-        if(this.#velocity.length() > this.#velocityMax)
+        if(this.#velocity.length() > this.#velocityCap)
         {
             // .setLength() does this scaling
-            this.#velocity.setLength(this.#velocityMax);
+            this.#velocity.setLength(this.#velocityCap);
         }
 
         // old & outdated
