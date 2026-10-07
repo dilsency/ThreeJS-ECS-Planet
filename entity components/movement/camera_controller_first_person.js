@@ -716,16 +716,65 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
         // #region directionForward with no vertical component
 
         //
-        this.#directionForwardNonvertical.copy(this.#directionForward);
-        // this gets our current up direction, and zeroes it out
-        this.#directionForwardNonvertical.addScaledVector(this.methodGetDirUp(), -this.#directionForward.dot(this.methodGetDirUp()));
-        this.#directionForwardNonvertical.normalize();
+        this.methodUpdatePerpendicularsForward(paramDebug);
 
         // #endregion directionForward with no vertical component
 
         // when will we use the unformatted version of directionRight? idk, but here it is
         this.#directionRight.crossVectors(this.methodGetDirUp(), this.#directionForward);
         this.#directionRightNonvertical.crossVectors(this.methodGetDirUp(), this.#directionForwardNonvertical);
+    }
+    methodUpdatePerpendicularsForward(paramDebug)
+    {
+        // fallback value
+        // if we were to overshoot during a transition
+        // (untested if this is actually needed, for now)
+        const directionForwardNonverticalPrev = this.#directionForwardNonvertical.clone();
+
+        // instead of using camera forward (the pitch)
+        // (this is what we were doing in the ...OLD version of this method)
+        // we will use the cameraPivot forward (the yaw)
+        this.#directionForwardNonvertical.set(0,0,-1);
+        this.#directionForwardNonvertical.applyQuaternion(this.#cameraPivot.quaternion);
+        //
+        const amountOfVectorThatIsPointingUp = this.#directionForwardNonvertical.dot(this.methodGetDirUp());
+        this.#directionForwardNonvertical.addScaledVector(this.methodGetDirUp(), -amountOfVectorThatIsPointingUp);
+
+        // this fallback value is only used during a camera up-direction transition
+        // we have concluded that looking directly down, or directly up...
+        // ...does no longer cause an error that needs a fallback
+        this.methodUpdatePerpendicularsForwardPreventOvershoot(paramDebug, directionForwardNonverticalPrev);
+    }
+    methodUpdatePerpendicularsForwardPreventOvershoot(paramDebug, directionForwardNonverticalPrev)
+    {
+        // we check
+        // if the cameraPivot's forward (the yaw) is too close to directly up
+        // this can cause an erroneous flip in the "W"/"S" movement direction
+
+        // this fallback value is only used during a camera up-direction transition
+        // we have concluded that looking directly down, or directly up...
+        // ...does no longer cause an error that needs a fallback
+        if(this.#directionForwardNonvertical.length() < 1e-6)
+        {
+            this.#directionForwardNonvertical.copy(directionForwardNonverticalPrev);
+        }
+        else
+        {
+            this.#directionForwardNonvertical.normalize();
+        }
+    }
+    methodUpdatePerpendicularsForwardOLD(paramDebug)
+    {
+        //
+        // TEMPORARY DIAGNOSTIC (see perpendicular-overshoot-when-aiming-down.md) : remember last frame's
+        // result so we can detect a sudden flip
+        const directionForwardNonverticalPrev = this.#directionForwardNonvertical.clone();
+
+        this.#directionForwardNonvertical.copy(this.#directionForward);
+        // this gets our current up direction, and zeroes it out
+        this.#directionForwardNonvertical.addScaledVector(this.methodGetDirUp(), -this.#directionForward.dot(this.methodGetDirUp()));
+
+        this.#directionForwardNonvertical.normalize();
     }
     methodLookInDirection(direction)
     {

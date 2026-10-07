@@ -102,3 +102,20 @@ These need to be defined in **ONE** place, not re-declared/re-typed at each chec
   actually needed. Avoid the Context indirection until there's a concrete case for it.
 - **File:** `entity components/environment/planet.js` (search for `#isWithinFloorRange`,
   `#distanceFromFloorIdeal`, `>= 50.0`, `< 50.0`).
+
+## 6. Fix movement perpendiculars flipping when aiming straight down — done
+
+When the camera was aimed fully down, `directionForwardNonvertical` /
+`directionRightNonvertical` sometimes "overshot", so holding S walked the player diagonally
+*forwards*. Confirmed cause: the nonvertical forward was the camera's pitched forward minus its
+up-component, which is ~0 at pitch `-π/2` (measured `7e-15`), and `.normalize()` turned that
+rounding noise into a random direction.
+
+- **Fix:** the nonvertical forward is now derived from the cameraPivot's yaw (no pitch), with an
+  epsilon (`1e-6`) fallback to the previous frame's vector. Verified by hand: looking straight
+  down and straight up both work. The fallback's up-direction-transition case (e.g. walking
+  straight into a wall) is not yet tested.
+- **File:** `entity components/movement/camera_controller_first_person.js`
+  (`methodUpdatePerpendicularsForward()` / `methodUpdatePerpendicularsForwardPreventOvershoot()`).
+- **Full write-up (issue, root cause, fix options):**
+  `C:\Users\Nils\Syncthing\🗣️ claude conversations\threejs\perpendicular-overshoot-when-aiming-down.md`
