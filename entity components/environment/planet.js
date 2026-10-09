@@ -1750,6 +1750,7 @@ export class EntityComponentSpawnOnPlanetFace extends EntityComponent
     //
     #componentInstancePlanetFaces = null;
     #componentInstanceGravity = null;
+    #componentInstanceCameraControllerFirstPerson = null;
     //
     #faceIndex = null;
     #faceDistance = 100.0;
@@ -1785,6 +1786,18 @@ export class EntityComponentSpawnOnPlanetFace extends EntityComponent
     // #endregion lifecycle
 
     // #region setters that delegate
+    methodSetDirUpWithoutTransition(paramDebug)
+    {
+        // if the entity doesn't have that camera component
+        // it is skipped
+        const cameraController = this.methodGetComponent("EntityComponentCameraControllerFirstPerson");
+        
+        // early return
+        if(cameraController == null){return;}
+        
+        // at this point, we know we have a camera
+        cameraController.methodSetDirUpWithoutTransition(this.#componentInstancePlanetFaces.methodGetFaceNormal(this.#faceIndex), paramDebug);
+    }
     methodSetDirUp(paramDebug)
     {
         // if the entity doesn't have that camera component
@@ -1796,6 +1809,25 @@ export class EntityComponentSpawnOnPlanetFace extends EntityComponent
         
         // at this point, we know we have a camera
         cameraController.methodSetDirUp(this.#componentInstancePlanetFaces.methodGetFaceNormal(this.#faceIndex), paramDebug);
+    }
+    methodLookAt(targetPosition)
+    {
+        // (do we still create a this.#componentInstance for first-person cameras?)
+        // (even if the entity may not have a camera?)
+        // (I mean... we will still check for it?)
+        // (can perhaps name it something different)
+        // (this.#componentInstanceOptionalCameraControllerFirstPerson)
+        // (this.#optionalComponentInstanceCameraControllerFirstPerson)
+
+        // if the entity doesn't have that camera component
+        // it is skipped
+        const cameraController = this.methodGetComponent("EntityComponentCameraControllerFirstPerson");
+        
+        // early return
+        if(cameraController == null){return;}
+        
+        // at this point, we know we have a camera
+        cameraController.methodLookAt(targetPosition);
     }
     // #endregion setters that delegate
 
@@ -1886,11 +1918,16 @@ export class EntityComponentSpawnOnPlanetFace extends EntityComponent
         // based on distance
         this.methodSetStateInitial();
 
+
         // we get the user's camera
         // if they do not have that component, they aren't the user
         // so we skip it, hopefully this test is cheap
-        this.methodSetDirUp(false);
+        //this.methodSetDirUp(false);
+        this.methodSetDirUpWithoutTransition(false);
 
+        // test : look at planet after spawning
+        // will skip entities without a camera :)
+        this.methodLookAt(this.#componentInstancePlanetFaces.methodGetFaceCenter(this.#faceIndex).clone());
 
         // #endregion body
 

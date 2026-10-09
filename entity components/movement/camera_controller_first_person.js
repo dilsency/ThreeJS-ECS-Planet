@@ -649,6 +649,82 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
     }
 
     // #region setters
+    methodSetDirUpWithoutTransition(paramDirUp, paramDebug)
+    {
+        //
+        const visualDirUp = this.#methodGetVisualDirUp();
+        var angle = visualDirUp.angleTo(paramDirUp);
+
+        //
+        this.#gravityTransitionAxis =
+            new THREE.Vector3()
+                .crossVectors(visualDirUp, paramDirUp);
+
+
+        // if we have a useable size
+        // "the cross-product is non-zero"
+        // we can just normalize it, and use our angle calculated previously
+        if(this.#gravityTransitionAxis.lengthSq() > 1e-12)
+        {
+            this.#gravityTransitionAxis.normalize();
+        }
+        // we have an error check to make
+        // antiparallel
+        // if the current up-direction is exactly parallell to the new up-direction...
+        // ...things may go wrong
+        // in this case the "cross product is around zero"
+        // but we need to check the dot product to find out which of case it is:
+        // parallel or opposite
+        else if(visualDirUp.dot(paramDirUp) < 0)
+        {
+            // we have checked that cross product is about zero, and the dot product is negative
+            // this is the direct opposite direction to the up-direction
+            // we don't want to use this; instead, we get another direction
+            // we pick one that is perpendicular
+
+            // here, we need ANY direction that is NOT parallel to visualDirUp
+            var referenceDirection = null;
+            if(Math.abs(visualDirUp.x) < 0.9)
+            {
+                referenceDirection = new THREE.Vector3(1,0,0);
+            }
+            else
+            {
+                referenceDirection = new THREE.Vector3(0,1,0);
+            }
+
+            // then we override transition axis
+            this.#gravityTransitionAxis.crossVectors(visualDirUp, referenceDirection).normalize();
+            // and we set an angle
+            angle = Math.PI;
+        }
+
+        /*
+        const axis =
+            new THREE.Vector3()
+                .crossVectors(visualDirUp, paramDirUp)
+                .normalize();
+        */
+        //const axis = paramDirUp.clone();
+
+        // do a manual, direct rotation
+        // this would otherwise be done every frame in methodUpdate() , via methodUpdateUpDirectionTransition()
+        
+        this.#cameraPivot.rotateOnWorldAxis(
+            this.#gravityTransitionAxis,
+            angle
+        );
+        
+        // we have modified cameraPivot's rotation/quaternion directly
+        // as such
+        // we need to ensure that we do not have any remaining transitional rotation
+        // we therefore reset the "remaining angle"
+        this.#gravityTransitionRemainingAngle = 0;
+
+        //
+        super.methodSetDirUp(paramDirUp);
+        this.methodUpdatePerpendiculars(paramDebug);
+    }
     methodSetDirUp(paramDirUp, paramDebug)
     {
         //
@@ -778,6 +854,185 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
     }
     methodLookInDirection(direction)
     {
+        // early return: our direction is too small
+        // just skip
+        const epsilon = 1e-6;
+        const magnitude = direction.length();
+        if(magnitude < epsilon) { return; }
+
+
+        // test!
+
+        // (1) tilt so that Y becomes up
+        // (2) apply a yaw
+        // (3) set the pitch
+        // (4) update perpendiculars
+
+        //
+        const normalizedDirection = direction.clone().normalize();
+
+        //
+        const upDirection = this.methodGetDirUp().clone();
+
+        // the problem:
+        // we need horizontalLength (or horizontalLengthSquared)
+        // if up-direction is just .y , then this is .x and .z
+        // but up-direction is VARIABLE, it will change frequently
+        // we therefore need a perpendicular vector to the up-direction
+        // and this will be the horizontal vector
+        // (to clarify, specifically the right direction of the CURRENT horizontal plane aligned with the CURRENT up-direction)
+        // the cross product will get us this perpendicular vector
+        //const perpendicularDirectionRight = new THREE.Vector3().crossVectors(normalizedDirection, upDirection);
+        // we now need the length of this perpendicular vector
+        // this is the horizontal length
+        //const horizontalLengthSquared = perpendicularDirectionRight.lengthSq();
+
+        // if our lengthSquared is too small, we are pointing directly up or down
+        // and we can early-return
+        // otherwise the results are too noisy and unstable
+        //const epsilon = 1e-6;
+        //if(horizontalLengthSquared < epsilon)
+        //{
+        //    return;
+        //}
+
+        // we apparently need the forward direction (of the horizontal plane)
+        // what we had above is the rightward direction (of the horizontal plane)
+
+        // .projectOnPlane() has been explained to me as doing
+        // take one direction, and remove from it another direction
+        // directionThatWeWantToRemoveFrom.projectOnPlane(directionThatWeWantToRemove)
+
+        // this is also the "reverse" of updatePerpendiculars()
+        // there, we are already facing the correct direction, and we rotate other attached directions to match
+        // here, we are NOT facing the correct direction, but we know what we want to face
+            // "find the quaternion that turns (0,0,-1) into the forward direction."
+            // "That’s what the basis-vector version does."
+
+        const perpendicularDirectionForward = normalizedDirection.clone().projectOnPlane(upDirection);
+
+        const horizontalLengthSquared = perpendicularDirectionForward.lengthSq();
+
+        // .normalize() has a side effect when the vector points directly up or down
+        // it becomes very noisy and unstable
+        // we ONLY normalize our forward direction vector when we do NOT point as such
+        // and we use the lengthSquared to determine this;
+        // if we are above zero or a very small number, we are safe
+
+        const hasHorizontalPart = horizontalLengthSquared >= epsilon;
+
+        // we can't early return here
+        // since we need to do pitch regardless of if we do yaw or not
+
+        // we could make them separate functions though, hehehehehehe
+        this.#methodLookInDirectionYaw(upDirection, hasHorizontalPart, perpendicularDirectionForward);
+        this.#methodLookInDirectionPitch(upDirection, normalizedDirection, horizontalLengthSquared);
+
+        //
+        this.methodUpdatePerpendiculars(false);
+    }
+    #methodLookInDirectionYaw(upDirection, hasHorizontalPart, perpendicularDirectionForward)
+    {
+        // #region header
+
+        // early return
+        if(!hasHorizontalPart){return;}
+
+        // we are safe to normalize our forward direction vector
+        // if we had done it earlier...
+        // ...it might have been noisy and unstable...
+        // ...since the forward direction vector might have been pointing directly up or down
+        // but at this point we have ensured that it does not
+        perpendicularDirectionForward.normalize();
+
+        // #endregion header
+
+        // #region body
+
+        // this turns the base-up (.y == 1) into our actual upDirection
+        // so this works
+        // but it would only be useful in an outdated version
+        //const yawQuaternion= new THREE.Quaternion()
+        //    .setFromUnitVectors(
+        //        new THREE.Vector3(0, 1, 0),
+        //        upDirection
+        //    )
+        //;
+
+        // the old version assumed .x and .y constitutes the horizontal plane
+        // this would have only been the case if we used the base-up (.y == 1)
+        // we do not
+        //const horizontalAngle = Math.atan2(
+        //    -perpendicularDirectionForward.x,
+        //    -perpendicularDirectionForward.z
+        //);
+
+        // this is apparently also outdated
+        // .setFromAxisAngle().premultiply() will actually tilt our rotation axis FIRST
+        // so even though we use upDirection, that direction will also be tilted
+        //this.#cameraPivot.quaternion
+        //    .setFromAxisAngle(
+        //        upDirection,
+        //        horizontalAngle
+        //    )
+        //    .premultiply(yawQuaternion);
+
+
+        // our new version
+        // instead of angles, we only use directions
+
+        //
+        const directionBackwards = perpendicularDirectionForward.clone().negate();
+
+        // cross product returns a perpendicular vector, mind you, which is the "horizontal" direction
+        const directionRightwards = new THREE.Vector3().crossVectors(upDirection, directionBackwards);
+
+        // set quaternion, aka, rotate the cameraPivot
+        this.#cameraPivot.quaternion
+            .setFromRotationMatrix(
+                new THREE.Matrix4()
+                    .makeBasis(
+                        directionRightwards, upDirection, directionBackwards
+                    )
+            )
+        ;
+
+        // #endregion body
+
+        // #region footer
+
+        // we have modified the cameraPivot's rotation/quaternion directly
+        // as such
+        // we need to ensure that we do not have any remaining transitional rotation
+        // we therefore reset the "remaining angle"
+        this.#gravityTransitionRemainingAngle = 0;
+
+        // #endregion footer
+    }
+    #methodLookInDirectionPitch(upDirection, normalizedDirection, horizontalLengthSquared)
+    {
+        // #region body
+
+        const pitchUnclamped =
+            Math.atan2(
+                normalizedDirection
+                    .dot(upDirection),
+                Math.sqrt(horizontalLengthSquared)
+            );
+        this.#pitch = THREE.MathUtils.clamp(
+            pitchUnclamped,
+            -Math.PI / 2,
+            Math.PI / 2
+        );
+        this.#camera.rotation.x = this.#pitch;
+
+        // #endregion body
+    }
+
+    methodLookInDirectionOLD(direction)
+    {
+        // the OLD version does not take into account the variable up-direction
+
         // create a new dir (to not affect the old one), and make Sure that it is normalized
         const dir = direction.clone().normalize();
 
@@ -806,6 +1061,12 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
     }
     methodLookAt(targetPosition)
     {
+        this.methodLookAtOLD(targetPosition);
+    }
+    methodLookAtOLD(targetPosition)
+    {
+        // the OLD version does not take into account the variable up-direction
+
         // we transform this problem
         // to: "get the direction to the target"
         // and then we invoke our LookInDirection() method...
