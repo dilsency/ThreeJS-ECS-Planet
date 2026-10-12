@@ -1072,8 +1072,9 @@ export class EntityComponentGravity extends EntityComponent
     //
     #componentInstanceSpawnOnPlanetFace = null;
     #componentInstanceVelocity = null;
-    #componentInstancePlayerController = null;
-    #componentInstanceCameraControllerFirstPerson = null;
+    //
+    #componentInstanceOptionalPlayerController = null;
+    #componentInstanceOptionalCameraControllerFirstPerson = null;
     //
     #distanceToPlanetCenter = null;
     //
@@ -1436,15 +1437,16 @@ export class EntityComponentGravity extends EntityComponent
     }
     methodOnFallingDistanceChanged(index)
     {
-        //
-        if(this.#componentInstancePlayerController == null){return;}
-        if(this.#componentInstanceCameraControllerFirstPerson == null){return;}
-        if(this.#componentInstanceVelocity == null){return;}
+        // velocity is a mandatory component
+        // camera controller and player controller , on the other hand, are not
 
-        //
-        this.#componentInstancePlayerController.methodOnFallingDistanceChanged(index);
-        this.#componentInstanceCameraControllerFirstPerson.methodOnFallingDistanceChanged(index);
         this.#componentInstanceVelocity.methodOnFallingDistanceChanged(index);
+
+        // reminder : ?. is shorthand for (if not null do this, otherwise skip)
+        // this lets us ignore all entities without those component, which is most of them :)
+
+        this.#componentInstanceOptionalPlayerController?.methodOnFallingDistanceChanged(index);
+        this.#componentInstanceOptionalCameraControllerFirstPerson?.methodOnFallingDistanceChanged(index);
     }
 
     //
@@ -1473,15 +1475,15 @@ export class EntityComponentGravity extends EntityComponent
 
         // we need to update the camera accordingly
         // keep in mind that entities that do not have a camera should not
-        const componentInstanceFirstPersonCamera = this.methodGetComponent("EntityComponentCameraControllerFirstPerson");
         // most entities will not have a camera, actually
-        if(componentInstanceFirstPersonCamera == null){return;}
+        if(this.#componentInstanceOptionalCameraControllerFirstPerson == null){return;}
         
         // with a new face index, we have a new up direction
         const newUp = this.methodGetGravityDir();
         // and with a new up direction, we can update our camera
         // this will update our perpendiculars for us: great!
-        componentInstanceFirstPersonCamera.methodSetDirUp(newUp, paramDebug);
+        this.#componentInstanceOptionalCameraControllerFirstPerson
+            .methodSetDirUp(newUp, paramDebug);
     }
     // #endregion setters that calculate
 
@@ -1665,35 +1667,39 @@ export class EntityComponentGravity extends EntityComponent
     // #region private methods : lazy
     #methodOnLazyLoadInit()
     {
-        //
+        // #region lazy early return
         if(this.#hasOnLazyLoadInit){return;}
+        // #endregion lazy early return
 
-        //
+        // #region resolve
+        // reminder that this.#planetResolved is actually the component ...PlanetFaces
         const isPlanetResolvedAndReady = this.#methodResolvePlanet();
         if(isPlanetResolvedAndReady != true){return;}
+        // #endregion resolve
 
-        // reminder that this.#planetResolved is actually the component ...PlanetFaces
-
-        // #region body
+        // #region dependent
 
         // we can just assume that this means our spawner is also initialized
         // and we can get our initial spawn face index from it
         this.#componentInstanceSpawnOnPlanetFace = this.methodGetComponent("EntityComponentSpawnOnPlanetFace");
         if(this.#componentInstanceSpawnOnPlanetFace == null){return;}
         if(!this.#componentInstanceSpawnOnPlanetFace.methodGetIsReady()){return;}
-        this.#currentFaceIndex = this.#componentInstanceSpawnOnPlanetFace.methodGetFaceIndex();
 
         // and let's assume our velocity component has been initialized
         this.#componentInstanceVelocity = this.methodGetComponent("EntityComponentVelocity");
         if(this.#componentInstanceVelocity == null){return;}
 
-        //
-        this.#componentInstancePlayerController = this.methodGetComponent("EntityComponentPlayerController");
-        if(this.#componentInstancePlayerController == null){return;}
+        // #endregion dependent
 
-        //
-        this.#componentInstanceCameraControllerFirstPerson = this.methodGetComponent("EntityComponentCameraControllerFirstPerson");
-        if(this.#componentInstanceCameraControllerFirstPerson == null){return;}
+        // #region independent
+        // (reminder : we don't early-return for these)
+        // (we are fine with a null/false result)
+        this.#componentInstanceOptionalPlayerController = this.methodGetComponent("EntityComponentPlayerController");
+        this.#componentInstanceOptionalCameraControllerFirstPerson = this.methodGetComponent("EntityComponentCameraControllerFirstPerson");
+        // #endregion independent
+
+        // #region spawn
+        this.#currentFaceIndex = this.#componentInstanceSpawnOnPlanetFace.methodGetFaceIndex();
 
         // we log our initial velocity
         // should be 0,0,0
@@ -1709,12 +1715,11 @@ export class EntityComponentGravity extends EntityComponent
                 this.#currentFaceIndex
             );
         console.log("\t[" + this.#currentFaceIndex + "]\t" + dist.toFixed(2));
+        // #endregion spawn
 
-        // #endregion body
-
-        // finally, we update the flag so that we don't have to do this again
-        // must be at the very end
+        // #region lazy end
         this.#hasOnLazyLoadInit = true;
+        // #endregion lazy end
     }
     #methodResolvePlanet()
     {
