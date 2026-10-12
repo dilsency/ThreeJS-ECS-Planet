@@ -94,6 +94,9 @@ export class EntityComponentVelocity extends EntityComponent
         if(this.#hasOnLazyLoadInit){return;}
         // #endregion lazy early return
 
+        // #region resolve
+        // #endregion resolve
+
         // #region dependent
         // mandatory component "gets"
         // if ANY component is null after the get
@@ -101,16 +104,19 @@ export class EntityComponentVelocity extends EntityComponent
         // so that we do not change the flag, and so that we can try again next iteration
         // #endregion dependent
 
-        // #region lazy end
-        this.#hasOnLazyLoadInit = true;
-        // #endregion lazy end
-
         // #region independent
         // entities without gravity can still have a velocity (this)
         // so we get the component, but we are fine with a null result
+        // we do NOT early return for these
         this.#componentInstanceGravity = this.methodGetComponent("EntityComponentGravity");
-        //if(this.#componentInstanceGravity == null){return;}
         // #endregion independent
+
+        // #region spawn
+        // #endregion spawn
+
+        // #region lazy end
+        this.#hasOnLazyLoadInit = true;
+        // #endregion lazy end
     }
     
 
