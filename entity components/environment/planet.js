@@ -1750,7 +1750,8 @@ export class EntityComponentSpawnOnPlanetFace extends EntityComponent
     //
     #componentInstancePlanetFaces = null;
     #componentInstanceGravity = null;
-    #componentInstanceCameraControllerFirstPerson = null;
+    //
+    #componentInstanceOptionalCameraControllerFirstPerson = null;
     //
     #faceIndex = null;
     #faceDistance = 100.0;
@@ -1790,44 +1791,40 @@ export class EntityComponentSpawnOnPlanetFace extends EntityComponent
     {
         // if the entity doesn't have that camera component
         // it is skipped
-        const cameraController = this.methodGetComponent("EntityComponentCameraControllerFirstPerson");
-        
         // early return
-        if(cameraController == null){return;}
+        if(this.#componentInstanceOptionalCameraControllerFirstPerson == null){return;}
         
         // at this point, we know we have a camera
-        cameraController.methodSetDirUpWithoutTransition(this.#componentInstancePlanetFaces.methodGetFaceNormal(this.#faceIndex), paramDebug);
+        this.#componentInstanceOptionalCameraControllerFirstPerson
+            .methodSetDirUpWithoutTransition(
+                this.#componentInstancePlanetFaces.methodGetFaceNormal(this.#faceIndex),
+                paramDebug
+            );
     }
     methodSetDirUp(paramDebug)
     {
         // if the entity doesn't have that camera component
         // it is skipped
-        const cameraController = this.methodGetComponent("EntityComponentCameraControllerFirstPerson");
-        
         // early return
-        if(cameraController == null){return;}
+        if(this.#componentInstanceOptionalCameraControllerFirstPerson == null){return;}
         
         // at this point, we know we have a camera
-        cameraController.methodSetDirUp(this.#componentInstancePlanetFaces.methodGetFaceNormal(this.#faceIndex), paramDebug);
+        this.#componentInstanceOptionalCameraControllerFirstPerson
+            .methodSetDirUp(
+                this.#componentInstancePlanetFaces.methodGetFaceNormal(this.#faceIndex),
+                paramDebug
+            );
     }
     methodLookAt(targetPosition)
     {
-        // (do we still create a this.#componentInstance for first-person cameras?)
-        // (even if the entity may not have a camera?)
-        // (I mean... we will still check for it?)
-        // (can perhaps name it something different)
-        // (this.#componentInstanceOptionalCameraControllerFirstPerson)
-        // (this.#optionalComponentInstanceCameraControllerFirstPerson)
-
         // if the entity doesn't have that camera component
         // it is skipped
-        const cameraController = this.methodGetComponent("EntityComponentCameraControllerFirstPerson");
-        
         // early return
-        if(cameraController == null){return;}
+        if(this.#componentInstanceOptionalCameraControllerFirstPerson == null){return;}
         
         // at this point, we know we have a camera
-        cameraController.methodLookAt(targetPosition);
+        this.#componentInstanceOptionalCameraControllerFirstPerson
+            .methodLookAt(targetPosition);
     }
     // #endregion setters that delegate
 
@@ -1836,10 +1833,10 @@ export class EntityComponentSpawnOnPlanetFace extends EntityComponent
     {
         //
         const dist = this.#componentInstancePlanetFaces
-        .methodGetFloorDistance(
-            this.methodGetPosition(),
-            this.#faceIndex
-        );
+            .methodGetFloorDistance(
+                this.methodGetPosition(),
+                this.#faceIndex
+            );
 
         //
         if(dist >= 50.0)
@@ -1875,17 +1872,36 @@ export class EntityComponentSpawnOnPlanetFace extends EntityComponent
     // #region private methods : lazy
     #methodOnLazyLoadInit()
     {
-        // #region lazy
+        // #region lazy early return
         if(this.#hasOnLazyLoadInit){return;}
-        // #endregion lazy
+        // #endregion lazy early return
         
-        // #region body
-
-        //
-        const isPlanetResolvedAndReady = this.#methodResolvePlanet();
-        if(isPlanetResolvedAndReady != true){return;}
+        // #region resolve
+        // (reminder : this region will take some time to be ready)
+        // (it will almost never be done at first lookup)
+        // (so we handle it first, since we will be waiting for it)
 
         // reminder that this.#planetResolved is actually the component ...PlanetFaces
+        const isPlanetResolvedAndReady = this.#methodResolvePlanet();
+        if(isPlanetResolvedAndReady != true){return;}
+        // #endregion resolve
+
+        // #region dependent
+        // (reminder : we are NOT okay with null/false results at ANY "get" here)
+        // (early return after every one, so that the lazy-load-flag does not get a false positive)
+
+        // let's resolve more components on the player
+        this.#componentInstanceGravity = this.methodGetComponent("EntityComponentGravity");
+        // early return
+        if(this.#componentInstanceGravity == null){return;}
+        // #endregion dependent
+
+        // #region independent
+        // (reminder : we are okay with a null result here, so no early returns)
+        this.#componentInstanceOptionalCameraControllerFirstPerson = this.methodGetComponent("EntityComponentCameraControllerFirstPerson");
+        // #endregion independent
+
+        // #region spawn
 
         // now we have the resolved planet, and it is ready
         // we can therefore re-position to the center of the current index
@@ -1898,12 +1914,6 @@ export class EntityComponentSpawnOnPlanetFace extends EntityComponent
             //this.#faceIndex = 13;
             this.#faceIndex = Math.floor(Math.random() * this.#componentInstancePlanetFaces.methodGetFaceCount());
         }
-
-        // let's resolve more components on the player
-        this.#componentInstanceGravity = this.methodGetComponent("EntityComponentGravity");
-
-        // early return
-        if(this.#componentInstanceGravity == null){return;}
 
         //
         this.methodSetPosition(
@@ -1918,7 +1928,6 @@ export class EntityComponentSpawnOnPlanetFace extends EntityComponent
         // based on distance
         this.methodSetStateInitial();
 
-
         // we get the user's camera
         // if they do not have that component, they aren't the user
         // so we skip it, hopefully this test is cheap
@@ -1928,12 +1937,11 @@ export class EntityComponentSpawnOnPlanetFace extends EntityComponent
         // test : look at planet after spawning
         // will skip entities without a camera :)
         this.methodLookAt(this.#componentInstancePlanetFaces.methodGetFaceCenter(this.#faceIndex).clone());
+        // #endregion spawn
 
-        // #endregion body
-
-        // finally, we update the flag so that we don't have to do this again
-        // must be at the very end
+        // #region lazy end
         this.#hasOnLazyLoadInit = true;
+        // #endregion lazy end
     }
     #methodResolvePlanet()
     {
