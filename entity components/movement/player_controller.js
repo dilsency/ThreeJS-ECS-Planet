@@ -303,6 +303,14 @@ export class EntityComponentPlayerController extends EntityComponent
 
     //
     #jumpSpeed = 20.0;//100.0
+    
+    //
+    #speedLeftRight = 0.05;
+    #speedLeftRightMin = 0.05;
+    #speedLeftRightMax = 1.05;
+    #speedForwardBack = 0.05;
+    #speedForwardBackMin = 0.05;
+    #speedForwardBackMax = 1.05;
 
     //
     constructor(params)
@@ -315,26 +323,9 @@ export class EntityComponentPlayerController extends EntityComponent
 
     methodInitialize()
     {
-        // Self-attaches its own Input sibling instead of receiving it from
-        // main.js - same "Pattern C" as
-        // EntityComponentCameraControllerFirstPerson (see
-        // BARE_MINIMUM_THREEJS_EXCEPTION_OR_NOT.md's "Pattern C:
-        // self-attaching sibling components" section). Which concrete class
-        // gets attached depends on EntityComponentSingletonContextEnvironment's
-        // touch-primary detection, but main.js never needs to know that.
-        const componentEnvironment = this.methodGetEntityByName("SingletonContextEnvironment")?.methodGetComponent("EntityComponentSingletonContextEnvironment");
-        const componentInput = componentEnvironment.methodGetIsTouchPrimary()
-            ? new EntityComponentPlayerControllerInputTouch()
-            : new EntityComponentPlayerControllerInput();
-        this.methodGetParent().methodAddComponentWithName("EntityComponentPlayerControllerInput", componentInput);
+        this.methodInitializeAttachment();
     }
 
-    #speedLeftRight = 0.05;
-    #speedLeftRightMin = 0.05;
-    #speedLeftRightMax = 1.05;
-    #speedForwardBack = 0.05;
-    #speedForwardBackMin = 0.05;
-    #speedForwardBackMax = 1.05;
 
     methodUpdate()
     {
@@ -449,6 +440,27 @@ export class EntityComponentPlayerController extends EntityComponent
     }
 
     // #endregion lifecycle
+
+    //
+    methodInitializeAttachment()
+    {
+        // "Pattern C"
+
+        //
+        const componentEnvironment = this.methodGetEntityByName("SingletonContextEnvironment")?.methodGetComponent("EntityComponentSingletonContextEnvironment");
+        const componentInput = componentEnvironment.methodGetIsTouchPrimary()
+            ? new EntityComponentPlayerControllerInputTouch()
+            : new EntityComponentPlayerControllerInput()
+        ;
+
+        //
+        this.methodGetParent()
+            .methodAddComponentWithName
+            (
+                "EntityComponentPlayerControllerInput",
+                componentInput
+            );
+    }
 
     //
     methodOnFallingDistanceChanged(index)
