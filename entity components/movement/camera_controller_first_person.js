@@ -365,7 +365,7 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
     #scene = null;
     #camera = null;
     #cameraPivot = null;
-    
+
     // we accumulate the pitch (up-down rotation)
     // we do this to stop overshooting at 90 degrees
     #pitch = 0;
@@ -376,12 +376,17 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
     #directionRight = null;
     #directionRightNonvertical = null;
     
-    // 
+    //
     #gravityTransitionAxis = null;
     #gravityTransitionRemainingAngle = 0;
     #gravityTransitionAngularSpeed = Math.PI;
     #gravityTransitionAngularSpeedMin = Math.PI;
     #gravityTransitionAngularSpeedMax = Math.PI * 4;
+
+    // lazy
+    #hasOnLazyLoadInit = false;
+    // mandatory components
+    #componentInstanceInput = null;
     // #endregion privates
 
     // #region construct
@@ -394,38 +399,15 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
     // #region lifecycle
     methodInitialize()
     {
-        // Self-attaches its own Input sibling instead of receiving it from
-        // main.js - see BARE_MINIMUM_THREEJS_EXCEPTION_OR_NOT.md's "Pattern
-        // C: self-attaching sibling components" section. Which concrete
-        // class actually gets attached depends on
-        // EntityComponentSingletonContextEnvironment's touch-primary detection, but
-        // main.js never needs to know that, or that there are two classes
-        // to choose between at all.
-        const componentEnvironment = this.methodGetEntityByName("SingletonContextEnvironment")?.methodGetComponent("EntityComponentSingletonContextEnvironment");
-        const componentInput = componentEnvironment.methodGetIsTouchPrimary()
-            ? new EntityComponentCameraControllerFirstPersonInputTouch()
-            : new EntityComponentCameraControllerFirstPersonInputMK();
-        this.methodGetParent().methodAddComponentWithName("EntityComponentCameraControllerFirstPersonInput", componentInput);
-
+        //
+        this.methodInitializeAttachment();
+        
+        //
         this.#scene = this.methodGetScene();
         this.#camera = this.methodGetCamera();
         this.#cameraPivot = this.methodGetCameraPivot();
 
-        // Local player spawn position - self-looked-up rather than received
-        // via constructor params, the same self-lookup shape as
-        // camera/cameraPivot/scene above, just one level further out (this
-        // component doesn't need to know spawn positions come from ground
-        // bounds at all - EntityComponentSingletonContextPlayerInitialization owns
-        // that). See NAMING_CONVENTIONS.md's "A single consumer is fine,
-        // conditionally" section and TODO.md item 6's sub-item 6.
-
-        // comment this out so that it doesn't fight with our planet spawning
-        /*
-        const componentPlayerInitialization = this.methodGetEntityByName("SingletonContextPlayerInitialization")?.methodGetComponent("EntityComponentSingletonContextPlayerInitialization");
-        const spawnPosition = componentPlayerInitialization.methodGetSpawnPosition();
-        this.#cameraPivot.position.set(spawnPosition.x, 0, spawnPosition.z);
-        */
-
+        //
         this.#directionForward = new THREE.Vector3(0,0,-1);
         this.#directionForwardNonvertical = new THREE.Vector3(0,0,-1);
         this.#directionRight = new THREE.Vector3(1,0,0);
@@ -441,21 +423,22 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
     }
     methodUpdate(timeElapsed, timeDelta)
     {
-        //
-        const componentInstanceInput = this.methodGetComponent("EntityComponentCameraControllerFirstPersonInput");
-        // early return: no entity component instance
-        if(componentInstanceInput == null){return;}
-
+        // #region lazy
+        this.#methodOnLazyLoadInit();
+        if(!this.#hasOnLazyLoadInit){return;}
+        // #endregion lazy
 
         // sort of early return
         // if reset is pressed we don't need to do anything below
-        if(componentInstanceInput.keys.reset == true)
+        if(this.#componentInstanceInput.keys.reset == true)
         {
             //
             this.#methodResetCameraRotation();
             //
-            componentInstanceInput.methodResetMouse();
-            componentInstanceInput.methodResetKeys();
+            this.#componentInstanceInput
+                .methodResetMouse();
+            this.#componentInstanceInput
+                .methodResetKeys();
             // the reset key probably shouldn't reset dirUp in the future, but let's try for now
             this.methodSetDirUp(new THREE.Vector3(0,1,0));
             //
@@ -483,18 +466,18 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
         var speedY = 0;
 
         // keyboard support
-        if(componentInstanceInput.keys.left){speedX = 0.02;}
-        else if(componentInstanceInput.keys.right){speedX = -0.02;}
-        else {speedX = componentInstanceInput.mouseX * -0.001;}
+        if(this.#componentInstanceInput.keys.left){speedX = 0.02;}
+        else if(this.#componentInstanceInput.keys.right){speedX = -0.02;}
+        else {speedX = this.#componentInstanceInput.mouseX * -0.001;}
         //
-        if(componentInstanceInput.keys.up){speedY = 0.02;}
-        else if(componentInstanceInput.keys.down){speedY = -0.02;}
-        else{speedY = componentInstanceInput.mouseY * -0.001;}
+        if(this.#componentInstanceInput.keys.up){speedY = 0.02;}
+        else if(this.#componentInstanceInput.keys.down){speedY = -0.02;}
+        else{speedY = this.#componentInstanceInput.mouseY * -0.001;}
 
         // clear the mouse deltas, always! will lead to severe bugs otherwise
-        componentInstanceInput.methodResetMouse();
+        this.#componentInstanceInput.methodResetMouse();
         // just the mouse though; not the keys
-        //componentInstanceInput.methodResetKeys();
+        //this.#componentInstanceInput.methodResetKeys();
 
         // early return: we don't do anything if we don't have anything
         if(speedX == 0 && speedY == 0){return;}
@@ -544,13 +527,62 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
 
         // when we are done with using mouse
         // we reset it
-        componentInstanceInput.methodResetMouse();
+        this.#componentInstanceInput.methodResetMouse();
         // just reset the mouse; not the keys
-        //componentInstanceInput.methodResetKeys();
+        //this.#componentInstanceInput.methodResetKeys();
 
         // update perpendiculars
         this.methodUpdatePerpendiculars(false);
     }
+
+    //
+    methodInitializeAttachment()
+    {
+        // "Pattern C"
+
+        //
+        const componentEnvironment = this.methodGetEntityByName("SingletonContextEnvironment")?.methodGetComponent("EntityComponentSingletonContextEnvironment");
+        const componentInput = componentEnvironment.methodGetIsTouchPrimary()
+            ? new EntityComponentCameraControllerFirstPersonInputTouch()
+            : new EntityComponentCameraControllerFirstPersonInputMK()
+        ;
+        
+        //
+        this.methodGetParent()
+            .methodAddComponentWithName
+            (
+                "EntityComponentCameraControllerFirstPersonInput",
+                componentInput
+            );
+    }
+
+    //
+    #methodOnLazyLoadInit()
+    {
+        // #region lazy early return
+        if(this.#hasOnLazyLoadInit){return;}
+        // #endregion lazy early return
+
+        // #region resolve
+        // #endregion resolve
+
+        // #region dependent
+        this.#componentInstanceInput = this.methodGetComponent("EntityComponentCameraControllerFirstPersonInput");
+        if(this.#componentInstanceInput == null){return;}
+        // #endregion dependent
+
+        // #region independent
+        // #endregion independent
+
+        // #region spawn
+        // #endregion spawn
+
+        // #region lazy end
+        this.#hasOnLazyLoadInit = true;
+        // #endregion lazy end
+    }
+
+    //
     methodOnFallingDistanceChanged(index)
     {
         // alias function
