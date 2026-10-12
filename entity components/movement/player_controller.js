@@ -599,9 +599,13 @@ export class EntityComponentPlayerController extends EntityComponent
 
         // #endregion body
 
+        // #region footer
+
         // finally, we update the flag so that we don't have to do this again
         // must be at the very end
         this.#hasOnLazyLoadInit = true;
+
+        // #endregion footer
     }
     // #endregion resolve methods
 }
