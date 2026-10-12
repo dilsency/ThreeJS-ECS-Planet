@@ -369,6 +369,9 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
     // we accumulate the pitch (up-down rotation)
     // we do this to stop overshooting at 90 degrees
     #pitch = 0;
+    // most of the time, we want to stop pitch from overshooting
+    // but if we are in orbit, we should be allowed to freely rotate
+    #pitchShouldClamp = true;
 
     //
     #directionForward = null;
@@ -486,9 +489,19 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
 
         // orientation independent
 
+        //
+        const pitchUnclamped = this.#pitch + speedY;
         // we first accumulate the pitch (up-down rotation)
         // and then we clamp it, to prevent overshooting
-        this.#pitch = THREE.MathUtils.clamp(this.#pitch + speedY, -Math.PI / 2, Math.PI / 2);
+        // unless we are in orbit
+        if(this.#pitchShouldClamp)
+        {
+            this.#pitch = THREE.MathUtils.clamp(pitchUnclamped, -Math.PI / 2, Math.PI / 2);
+        }
+        else 
+        {
+            this.#pitch = pitchUnclamped;
+        }
         // then we apply it
         this.#camera.rotation.x = this.#pitch;
 
@@ -540,14 +553,15 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
     {
         // "Pattern C"
 
-        //
+        // we get which class of entity component that we want to add...
+        // ...based on what input method is used by the device running the app
         const componentEnvironment = this.methodGetEntityByName("SingletonContextEnvironment")?.methodGetComponent("EntityComponentSingletonContextEnvironment");
         const componentInput = componentEnvironment.methodGetIsTouchPrimary()
             ? new EntityComponentCameraControllerFirstPersonInputTouch()
             : new EntityComponentCameraControllerFirstPersonInputMK()
         ;
         
-        //
+        // add entity component to parent, it becomes a sibling to this
         this.methodGetParent()
             .methodAddComponentWithName
             (
@@ -595,12 +609,15 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
         // depending on the distance from the planet
         switch(index){
             case 0:
+                this.#pitchShouldClamp = true;
                 this.#gravityTransitionAngularSpeed = this.#gravityTransitionAngularSpeedMax;
                 break;
             case 1:
+                this.#pitchShouldClamp = true;
                 this.#gravityTransitionAngularSpeed = this.#gravityTransitionAngularSpeedMin;
                 break;
             case 2:
+                this.#pitchShouldClamp = false;
                 this.#gravityTransitionAngularSpeed = this.#gravityTransitionAngularSpeedMin;
                 break;
         }
@@ -1051,11 +1068,24 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
                     .dot(upDirection),
                 Math.sqrt(horizontalLengthSquared)
             );
-        this.#pitch = THREE.MathUtils.clamp(
-            pitchUnclamped,
-            -Math.PI / 2,
-            Math.PI / 2
-        );
+
+        // most of the time, we want to clamp pitch
+        // to prevent overshooting at the poles (directly up and/or directly down)
+        // but while in orbit
+        // we want to be able to rotate freely
+        if(this.#pitchShouldClamp)
+        {
+            this.#pitch = THREE.MathUtils.clamp(
+                pitchUnclamped,
+                -Math.PI / 2,
+                Math.PI / 2
+            );
+        }
+        else {
+            this.#pitch = pitchUnclamped;
+        }
+
+        // set the rotation component directly
         this.#camera.rotation.x = this.#pitch;
 
         // #endregion body
@@ -1085,7 +1115,18 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
         
         // pitch: elevation above/below the horizontal plane, same clamp as mouse-look uses
         const horizontalLength = Math.sqrt(horizontalLengthSquared);
-        this.#pitch = THREE.MathUtils.clamp(Math.atan2(dir.y, horizontalLength), -Math.PI / 2, Math.PI / 2);
+        const pitchUnclamped = Math.atan2(dir.y, horizontalLength);
+        // we clamp pitch
+        // unless we are in orbit
+        if(this.#pitchShouldClamp)
+        {
+            this.#pitch = THREE.MathUtils.clamp(pitchUnclamped, -Math.PI / 2, Math.PI / 2);
+        }
+        else {
+            this.#pitch = pitchUnclamped;
+        }
+
+        // set rotation component directly
         this.#camera.rotation.x = this.#pitch;
         
         //
