@@ -119,3 +119,63 @@ rounding noise into a random direction.
   (`methodUpdatePerpendicularsForward()` / `methodUpdatePerpendicularsForwardPreventOvershoot()`).
 - **Full write-up (issue, root cause, fix options):**
   `C:\Users\Nils\Syncthing\🗣️ claude conversations\threejs\perpendicular-overshoot-when-aiming-down.md`
+
+## 7. `Orbit` state: free camera look, up-direction, and movement
+
+When the player is far from the planet (`Orbit`, further out than `FallingFar`; currently
+`distanceToPlanetCenter > 100.0`), the player should be able to look and fall freely:
+
+- **Camera look (implemented, needs polish):** pitch is no longer clamped while in `Orbit`.
+  `EntityComponentCameraControllerFirstPerson` has `#pitchShouldClamp`, set by
+  `methodOnFallingDistanceChanged(index)` (`false` for index 2 = `Orbit`, `true` otherwise) and
+  checked in mouse-look and in the look-in-direction pitch. Decision: **unclamped pitch**, not
+  a free quaternion rotation (no roll, no poles-free orientation). Known issues with it:
+  - **Snap when leaving `Orbit`:** `#pitch` keeps accumulating (it can be 7.0 or -9.5). When
+    clamping comes back on, the next mouse move clamps straight to `±π/2`. Wrap `#pitch` into
+    `(-π, π]` when re-enabling the clamp, then ease it into range instead of snapping.
+  - **Yaw feels reversed while upside-down** (`cos(pitch) < 0`): negate the horizontal mouse
+    speed while unclamped and upside-down.
+  - The pitch-clamp logic is repeated in three places; a small private helper
+    (e.g. `#methodApplyPitch(pitchUnclamped)`) would be the one place to put the wrap fix.
+- **Gravity (already done):** `Orbit` already applies gravity towards the planet center
+  (`#methodApplyGravityTowardsPlanetCenter()`), not along the current face's normal.
+- **Nearest face (already skipped in `Orbit`):** `methodShouldUpdateToNearestFace` is not called
+  in `Orbit`; on dropping into `FallingFar` its update picks the nearest face up again once the
+  player is outside the current face. Optionally compute the nearest face once on that
+  transition instead.
+- **Up-direction (to try):** the camera's up still follows the stale face's normal while in
+  `Orbit`, so the horizontal plane that WASD moves in stays fixed instead of following the
+  planet's curvature. Try updating it each frame to the direction from the planet center to
+  the player (`methodSetDirUp(radialDirection)`, e.g. from `methodUpdateByStateOrbit()`); the
+  existing smooth up-transition then tracks it and the heading stays consistent. This should
+  make WASD move in the plane tangent to the planet. It will probably help, but it does NOT
+  change the movement issues in the next bullet.
+- **Movement in `Orbit` (consider changing it entirely):** WASD currently moves along the
+  *pivot's* yaw projected onto the horizontal plane (TODO 6), not along where the camera looks.
+  In `Orbit` that means:
+  - Looking up or down does not change where W takes you; it never moves you towards where you
+    are aiming.
+  - Past the poles (pitch beyond `±π/2`) the camera looks backwards horizontally while the
+    pivot's forward does not change, so **W moves away from where you look**.
+  - (This corrects an earlier note here: removing the clamp does not bring back the old random
+    direction bug from TODO 6, but it does introduce this consistent reversal.)
+  Suggestions:
+  - While in `Orbit`, move along the camera's **full forward** (`#directionForward`, including
+    pitch) and the camera's right, i.e. "fly where you look", instead of the horizontal-plane
+    vectors. Gate it with the same `#pitchShouldClamp` / index-2 hook, so landed and falling
+    movement is unchanged.
+  - Optionally give `Orbit` a distinct movement scheme altogether (e.g. thrust along view
+    direction as velocity, rather than direct position offsets), since gravity already applies
+    velocity there.
+  - Decide this together with the up-direction bullet above: if movement follows the camera's
+    full forward, a stale up direction matters much less.
+- **Per-frame work (not done):** `EntityComponentGravity.methodUpdate()` computes
+  `#isWithinFace`, the floor distance and the face-wall checks every frame for every state,
+  against the stale face. Skipping them in `Orbit` is where the performance would actually be
+  saved.
+- **Related:** the `Orbit` / `FallingFar` boundary is one hard threshold (`> 100.0` / `< 100.0`),
+  so a player hovering at ~100 could flip between the two. See item 5 (named thresholds); a
+  hysteresis gap would also fix this.
+- **Files:** `entity components/movement/camera_controller_first_person.js`,
+  `entity components/movement/player_controller.js`,
+  `entity components/environment/planet.js` (`EntityComponentGravity`).
