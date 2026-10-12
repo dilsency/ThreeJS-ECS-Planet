@@ -446,14 +446,15 @@ export class EntityComponentPlayerController extends EntityComponent
     {
         // "Pattern C"
 
-        //
+        // we get which class of entity component that we want to add...
+        // ...based on what input method is used by the device running the app
         const componentEnvironment = this.methodGetEntityByName("SingletonContextEnvironment")?.methodGetComponent("EntityComponentSingletonContextEnvironment");
         const componentInput = componentEnvironment.methodGetIsTouchPrimary()
             ? new EntityComponentPlayerControllerInputTouch()
             : new EntityComponentPlayerControllerInput()
         ;
 
-        //
+        // add entity component to parent, it becomes a sibling to this
         this.methodGetParent()
             .methodAddComponentWithName
             (
