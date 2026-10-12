@@ -1140,6 +1140,8 @@ export class EntityComponentGravity extends EntityComponent
             this.methodOnFallingDistanceChanged(2);
         });
         this.#stateMachine.methodRegisterHandler("Orbit", "FallingFar", () => {
+            // we need to also update the current up direction according to the face, in this case
+            this.methodSetFaceIndexToNearest(false);
             this.methodOnFallingDistanceChanged(1);
         });
         this.#stateMachine.methodRegisterHandler("None", "FallingFar", () => {
@@ -1266,6 +1268,10 @@ export class EntityComponentGravity extends EntityComponent
             this.#stateMachine.methodTransitionTo("FallingFar");
         }
         else {
+            //
+            this.methodSetDirUpOrbit();
+
+            //
             this.#methodApplyGravityTowardsPlanetCenter();
         }
     }
@@ -1485,7 +1491,59 @@ export class EntityComponentGravity extends EntityComponent
         this.#componentInstanceOptionalCameraControllerFirstPerson
             .methodSetDirUp(newUp, paramDebug);
     }
+    methodSetFaceIndexToNearest(paramDebug)
+    {
+        // we need to calculate the nearest face index
+        const nearestFaceIndex = this.#componentInstancePlanetFaces
+            .methodGetNearestFace(
+                this.methodGetPosition().clone(),
+                this.#componentInstancePlanetFaces.methodGetPlanetCenter()
+            );
+
+        // then we can use the other method within this same class
+        this.methodSetFaceIndex(nearestFaceIndex, paramDebug);
+    }
     // #endregion setters that calculate
+
+    // categorize this within a region somewhere
+    methodGetPlanetCenter()
+    {
+        // early return
+        if(this.#componentInstancePlanetFaces == null){return;}
+
+        //
+        return this.#componentInstancePlanetFaces.methodGetPlanetCenter();
+    }
+    // categorize this within a region somewhere
+    methodSetDirUpOrbit(paramDebug)
+    {
+        // early return
+        if(this.#componentInstanceOptionalCameraControllerFirstPerson == null){return;}
+
+        // we are in orbit
+        // we do not consider planet faces at the moment
+        // instead, we just set the direction to the planet center...
+        // ...as the current up direction
+
+        const planetCenter = this.methodGetPlanetCenter();
+        if(planetCenter == null){return;}
+
+        //
+        const dir = new THREE.Vector3()
+            .subVectors
+            (
+                this.methodGetPosition().clone(),
+                planetCenter
+            )
+            .normalize();
+
+        //
+        this.#componentInstanceOptionalCameraControllerFirstPerson
+            .methodSetDirUp(
+                dir,
+                paramDebug
+            );
+    }
 
     // categorize as... something
     methodApplyUpwardForceIfBelowFloorPeak()
