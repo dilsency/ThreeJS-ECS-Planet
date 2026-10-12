@@ -7,6 +7,7 @@ export class EntityComponentVelocity extends EntityComponent
     #velocity = null;
     //
     #frictionHorizontal = 0.995;
+    #frictionHorizontalMultiplierLanded = 0.1;
     #frictionVertical = 0.995;
     //
     #velocityCap = 15.0;
@@ -14,6 +15,10 @@ export class EntityComponentVelocity extends EntityComponent
     #velocityCapMax = 115.0;
     //
     #zeroEpsilon = 0.001;
+    // lazy
+    #hasOnLazyLoadInit = false;
+    //
+    #componentInstanceGravity = null;
 
     //
     constructor(params)
@@ -38,10 +43,15 @@ export class EntityComponentVelocity extends EntityComponent
     }
     methodUpdate(timeElapsed, timeDelta)
     {
-        // early return
+        // #region lazy
+        this.#methodOnLazyLoadInit();
+        if(!this.#hasOnLazyLoadInit){return;}
+        // #endregion lazy
+
+        // #region body
 
         //
-        if(this.#velocity == null){console.error("no vel");return;}
+        //if(this.#velocity == null){console.error("no vel");return;}
 
         // we don't need to do anything if velocity is zero
         const isVelocityZero = this.methodGetIsVelocityZero(); 
@@ -69,12 +79,68 @@ export class EntityComponentVelocity extends EntityComponent
         // and apply
         this.methodSetPosition(pos);
 
+        // finally (I think at least, that this needs to be placed last)
+        // decay velocity
+        this.methodDecayVelocity();
+        
+        // #endregion body
+    }
+    methodDispose(){}
+
+    //
+    #methodOnLazyLoadInit()
+    {
+        // #region lazy early return
+        if(this.#hasOnLazyLoadInit){return;}
+        // #endregion lazy early return
+
+        // #region dependent
+        // mandatory component "gets"
+        // if ANY component is null after the get
+        // we early return out immediately
+        // so that we do not change the flag, and so that we can try again next iteration
+        // #endregion dependent
+
+        // #region lazy end
+        this.#hasOnLazyLoadInit = true;
+        // #endregion lazy end
+
+        // #region independent
+        // entities without gravity can still have a velocity (this)
+        // so we get the component, but we are fine with a null result
+        this.#componentInstanceGravity = this.methodGetComponent("EntityComponentGravity");
+        //if(this.#componentInstanceGravity == null){return;}
+        // #endregion independent
+    }
+    
+
+    //
+    methodDecayVelocity()
+    {
+        // we want to decay velocity DIFFERENTLY based on our gravity STATE
+        // while we are on the ground, horizontal velocity should decay almost instantly
+        // (reminder that not all entities with a velocity (this), has a gravity component)
+
+        //
+        var frictionResult = this.#frictionHorizontal;
+
+        // some components do not have gravity component
+        // despite having a velocity (this)
+        // so we skip those here
+        if(
+            this.#componentInstanceGravity != null &&
+            this.#componentInstanceGravity.methodGetState() == "Landed"
+        )
+        {
+            frictionResult *= this.#frictionHorizontalMultiplierLanded;
+        }
+
         // then we scale down velocity based on friction
         // to-do : get the current planet face's up direction
         // and scale down vertical friction in that direction
 
         // let's make it simple for ourselves when testing, first
-        this.#velocity.multiplyScalar(this.#frictionHorizontal);
+        this.#velocity.multiplyScalar(frictionResult);
 
         // do not round velocities down to 0
         // and absolutely do not round them composite -style (.x, .y, .z)
@@ -82,7 +148,6 @@ export class EntityComponentVelocity extends EntityComponent
         // we can give it some (epsilon) leeway
         // very low velocities can be rounded down to 0
     }
-    methodDispose(){}
 
     //
     methodOnFallingDistanceChanged(index)
