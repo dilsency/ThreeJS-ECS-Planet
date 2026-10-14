@@ -103,6 +103,61 @@ These need to be defined in **ONE** place, not re-declared/re-typed at each chec
 - **File:** `entity components/environment/planet.js` (search for `#isWithinFloorRange`,
   `#distanceFromFloorIdeal`, `>= 50.0`, `< 50.0`).
 
+**Update — leaning decision: per-planet, on the planet (not a Context singleton)**
+
+The cutoffs depend on the planet's size, which is the concrete case the counter-consideration
+above was waiting for. (Current planet: radius 20 in `worldDefault.json`; the `Orbit` cutoff of
+100 from the center is 5x the radius, and the `FallingFar` cutoff of 50 from the floor is
+2.5x the radius.)
+
+- **Two kinds of cutoff:**
+  - *Planet-scale* (should scale with the planet): the `Orbit` boundary
+    (`distanceToPlanetCenter` vs `100.0`, in `methodUpdateByStateOrbit` / `methodUpdateByStateFallingFar`),
+    the `Falling` / `FallingFar` boundary (`distanceToFloor` vs `50.0`), and the initial-state
+    values (`100.0`, `30.0`, `2.0` in gravity's lazy-load `spawn` region).
+  - *Player-scale* (same on any planet): the ideal height above the floor (`2.0`, leeway `0.5`),
+    the floor range (`0.5`..`2.0`) and the crossing / floor checks (`dist >= 2.0`). These stay as
+    named fields in `EntityComponentGravity`.
+- **Where:** `EntityComponentPlanetFaces` already knows the radius (via its `PlanetModel` sibling)
+  and owns the distance queries, so it holds the planet-scale ranges as the single source:
+  - optional per-planet params in the world JSON (e.g. `orbitDistance`, `fallingFarDistance`),
+    defaulting to multiples of the radius so a bigger planet gets bigger ranges automatically;
+  - getters such as `methodGetOrbitDistanceFromCenter()` and `methodGetFallingFarDistanceFromFloor()`;
+  - `EntityComponentGravity` reads them once in its lazy-load (it already depends on the planet
+    faces) and caches them in private fields; the spawn logic uses the same values.
+- **One measure per cutoff:** the `Orbit` boundary is checked against the **distance to the
+  planet center** (faces are not tracked there); the other boundaries are checked against the
+  **distance to the current face's floor**. Define each cutoff against the measure it is checked
+  with, and use that same measure everywhere. At the moment gravity's initial-state check uses the
+  *floor* distance for the `Orbit` threshold (`dist >= 100.0`), while the runtime update uses the
+  *center* distance. With `faceDistance: 100` the initial floor distance is exactly on that
+  cutoff, so floating-point error can put the player in `FallingFar` or `Orbit`, and the first
+  update may then flip the state. A single shared method that takes both distances and returns the
+  state would remove the duplicated logic between the initial state and the runtime updates.
+- **Hysteresis:** give `Orbit` separate enter and exit distances (a small gap), so a player
+  hovering near the boundary does not flip between `Orbit` and `FallingFar` (see item 7).
+- **Files:** `entity components/environment/planet.js` (`EntityComponentPlanetFaces`,
+  `EntityComponentGravity`, `EntityComponentSpawnOnPlanetFace`), `data/worlds/*.json` (planet params).
+
+**Still under consideration — where the player-scale defaults and their overrides live**
+
+Undecided. The planet-scale cutoffs above go on the planet. For the player-scale values (ideal
+height above the floor `2.0`, leeway `0.5`, floor range, crossing checks), the options are:
+- **Option A (leaning, not decided): default in `EntityComponentGravity`, override via its own
+  `params`.** These values describe the *entity* (e.g. the player's eye height), not the planet,
+  and a different kind of entity on the same planet may want a different height. Gravity is
+  per-entity and already takes `params` in the prefab (`data/prefabs/player.json`), so a param like
+  `distanceFromFloorIdeal` is the natural override, with the current private fields as the default.
+  Layering: gravity default -> gravity `params` override -> (only if ever needed, e.g. a "floaty"
+  planet) a planet-level override on top.
+- **Option B: default in `EntityComponentPlanetFaces`, overridden when necessary.** Not strange,
+  but it ties a player dimension to the planet, so every entity on that planet shares the planet's
+  default. This fits only if the value is really a property of the *surface* (e.g. deep snow that
+  makes everything stand higher), which a `2.0` eye height is not.
+- **Side finding for either option:** `#isWithinFloorRange` checks `0.5..2.0`, while ideal +/-
+  leeway is `1.5..2.5`. They may be intentionally different, but once the numbers are named fields
+  in one place, decide whether the range should be derived from the ideal and the leeway.
+
 ## 6. Fix movement perpendiculars flipping when aiming straight down — done
 
 When the camera was aimed fully down, `directionForwardNonvertical` /
@@ -179,3 +234,209 @@ When the player is far from the planet (`Orbit`, further out than `FallingFar`; 
 - **Files:** `entity components/movement/camera_controller_first_person.js`,
   `entity components/movement/player_controller.js`,
   `entity components/environment/planet.js` (`EntityComponentGravity`).
+
+## 8. `EntityComponentGravity.methodOnFallingDistanceChanged` crashed on its first call — done
+
+The first time `methodOnFallingDistanceChanged(index)` ran, it threw, because
+`this.#componentInstanceVelocity` was still `null` (it calls
+`this.#componentInstanceVelocity.methodOnFallingDistanceChanged(index)` unguarded, since velocity
+is mandatory).
+
+Cause: the two components waited on each other.
+- `EntityComponentSpawnOnPlanetFace`'s lazy-load called `methodSetStateInitial()`, which called
+  `EntityComponentGravity.methodSetState(...)`; the state machine's `None -> X` handler then
+  called `methodOnFallingDistanceChanged(...)`.
+- Gravity's own lazy-load resolves `#componentInstanceVelocity`, but its `dependent` region first
+  waited for the spawn component to be ready, which only happens after that same call finished.
+- So the first falling-distance notification always arrived before gravity had resolved velocity
+  (and before it had resolved the optional player controller and camera, which the `?.` calls
+  then skipped silently).
+
+Fix (both parts were needed):
+- Gravity now resolves velocity **before** the "spawn component is ready" wait, so the unguarded
+  call is safe.
+- `EntityComponentSpawnOnPlanetFace` no longer sets the gravity state (`methodSetStateInitial()`
+  removed). Gravity decides its own initial state in the `spawn` region of its lazy-load, after
+  velocity and the optional components are resolved, so the first notification reaches all of
+  them. (Before, a second `methodSetState` with the same state was a no-op because
+  `methodTransitionTo` returns early on an unchanged state, and the camera / player controller
+  never got the initial index.)
+- Behavior change: the initial state is now `Orbit` / `FallingFar` / `Falling`; `Landed` is no
+  longer chosen at spawn (the state update lands the player from `Falling`).
+- Remaining: the initial-state thresholds use the floor distance, while the runtime `Orbit` /
+  `FallingFar` boundary uses the distance to the planet center. See item 5.
+- **File:** `entity components/environment/planet.js` (`EntityComponentGravity`,
+  `EntityComponentSpawnOnPlanetFace`).
+
+## 9. Pivot / camera rotation changes are not broadcast to other components
+
+Position and up-direction changes are broadcast within the entity (`Entity.methodSetPosition` ->
+`update.position`, `Entity.methodSetDirUp` -> `update.dir.up`). Rotation is only broadcast from
+**one** place: mouse/keyboard look in `EntityComponentCameraControllerFirstPerson.methodUpdate()`
+(`methodSetRotations(...)` -> `update.rotations`, which also stores `#rotationA` / `#rotationB` on
+the entity).
+
+Every other path that rotates the cameraPivot or camera does **not** broadcast, and does not
+update the entity's stored rotations:
+- `methodUpdateUpDirectionTransition()` (the smooth up-direction transition, every frame while it runs)
+- `methodSetDirUpWithoutTransition()`
+- `#methodLookInDirectionYaw()` / `#methodLookInDirectionPitch()` (and so `methodLookAt()` /
+  `methodLookInDirection()`), plus the `...OLD` versions
+- `#methodResetCameraRotation()`
+
+Today nothing seems to listen: no component registers a handler for `update.rotations` (the
+camera controller's own registration is commented out, and `methodHandleUpdateRotations()`
+returns immediately), and `methodGetCameraPivotQuaternion()` / `methodGetCameraQuaternion()`
+(meant for network sync, see `MULTIPLAYER_TOPOLOGY_AND_SYNC.md`) have no callers in the JS. So it
+is not causing a visible bug yet. **To do: decide whether it should be, and what the rule is.**
+Anything that relies on the entity's stored rotation, or on `update.rotations` (e.g. multiplayer
+remote-player facing, or a future component that follows the player's orientation), would miss
+the changes listed above, most noticeably the up-direction transition, which rotates the pivot
+without any message.
+
+Questions to settle:
+- Should the look-in-direction / up-direction methods call `methodSetRotations(...)` after they
+  change the pivot (the `...Delta` arguments are speeds for mouse-look; what should they be here)?
+- Or should rotation be read by consumers straight from the pivot/camera (the getters above)
+  instead of via messages, which would make the broadcast unnecessary?
+- Whichever it is, it should be consistent: either every rotation change is broadcast, or none are.
+- **File:** `entity components/movement/camera_controller_first_person.js` (and
+  `classes/ECS/entity.js` for `methodSetRotations`).
+
+## 10. PRIORITY: player stuck in the air — the "nearest face" and "within the face" checks can disagree
+
+**Symptom:** the player hangs in mid-air in the `Falling` state and never falls.
+
+**Reproduction (found with the debug snapshot, `window.debugSnapshot()` / key `P`, 2026-10-13):**
+- Planet at `(0,0,-50)`, radius 20 (`worldDefault.json`).
+- `gravityState: "Falling"`, `currentFaceIndex: 7`, position `(-14.56, -1.47, -32.56)`,
+  `distanceToPlanetCenter: 22.77`, `distanceToPlanetFace: 6.02` (above the floor),
+  `isCurrentFaceWithinWalls: "N"`, `isCurrentFaceAboveFloor: "Y"`, `velocity: (0,0,0)`.
+- No `nearestFaceIndex` key in the snapshot, so the nearest face **is** the current face (face 7).
+- Two snapshots 1.5 s apart were identical (position, state, face): genuinely stuck.
+
+**Cause (read from the code, matches the snapshot):** `methodUpdateByStateFalling` is one
+`else if` chain. After the `FallingFar` check, the branch `else if(!this.#isWithinFace)` only calls
+`methodShouldUpdateToNearestFace(...)`, which returns immediately when the nearest face equals the
+current face. Nothing after that branch can run, so **no gravity is applied**. The branch that
+would apply a weak gravity for exactly this case (`else if(!this.#isWithinFace) {... * 0.1}`) has the
+same condition and is **unreachable (dead code)**. This chain predates the 2026-10 changes
+(present in commit `dfa7722`).
+
+**Why the two answers disagree:**
+- *Nearest face* is chosen by direction from the planet center (`methodGetMostAlignedFace`; "we do
+  not care about distances"): a clean partition of space, no gaps.
+- *Within the face* (`#isWithinFace`) = above the floor AND within the walls: a triangular **prism
+  extruded along the face normal**. Above a convex edge or corner, neighbouring prisms diverge and
+  leave a wedge-shaped gap that grows with height. A player in the gap is outside both prisms, while
+  the direction-based nearest face is still the current one.
+- Other states use the same pattern: `FallingFar` (and `Jumping`) also do "outside the prism -> update
+  the nearest face" with nothing else, and the gap is widest at the heights `FallingFar` runs at, so
+  the same freeze is likely possible there.
+
+**Plan, in this order:**
+1. **Safety net (do first, small):** no state may leave the player with nothing acting on them. In
+   the "outside the walls and the nearest face is unchanged" case, apply the weak downward gravity
+   (what the dead branch was meant to do), and remove the dead branch. Expectation (reasoning, not
+   yet tested): falling along the face normal keeps the sideways offset but changes the direction
+   from the center, so the nearest face eventually flips to the neighbour, the face index changes
+   and the player lands. Verify with the snapshot. Check `FallingFar` and `Jumping` for the same shape.
+2. **Fix the face selection (root cause):** a method on `EntityComponentPlanetFaces`, e.g.
+   `methodGetFaceContaining(position, hintIndex)`, used by `EntityComponentGravity.methodShouldUpdateToNearestFace`
+   instead of `methodGetNearestFace`:
+   1. check the **current face's prism** (stay on it if still inside: avoids flip-flopping between
+      faces and the up-direction transition each switch triggers);
+   2. else check the **neighbouring faces' prisms**: `#faceNeighborsDirect` (share an edge) first,
+      then `#faceNeighborsDiagonal` (share only a corner), because above a corner several faces meet
+      (5 on an icosahedron), not just two. Together the two lists are exactly the faces sharing a
+      corner with the current face. (The lists are private fields; the new method lives in the same
+      class, so no getters needed.);
+   3. else **fall back to the most-aligned face** (the existing check).
+   Above the surface on a convex planet a position is inside at most one prism (prisms diverge);
+   below the floor they can overlap, which is why "within" also requires "above the floor".
+   The fallback can still pick a face whose prism does not contain the player (they may be in a gap),
+   so step 1 (the safety net) is still needed; the two fixes do not replace each other. Selection
+   fixes how often it happens, the safety net guarantees nothing can freeze.
+3. **Coverage check (debug tool):** a debug function that samples many points around the planet at
+   several heights and counts how many are in a blind spot (no containing prism, and the nearest
+   face's own prism does not contain them). Turns "this can happen" into a number, and shows whether
+   step 2 closes the gaps. Could live next to the debug snapshot (`entity components/debug/`).
+4. **Re-test** with the original reproduction position above, then walk the player over several
+   edges and corners at different heights.
+
+- **Files:** `entity components/environment/planet.js` (`EntityComponentGravity`:
+  `methodUpdateByStateFalling`, `methodUpdateByStateFallingFar`, `methodUpdateByStateJumping`,
+  `methodShouldUpdateToNearestFace`; `EntityComponentPlanetFaces`: `methodGetMostAlignedFace` /
+  `methodGetNearestFace`, `methodGetIsWithinFace`, the neighbour lists),
+  `entity components/debug/debug_snapshot.js`.
+
+## 11. Replace "string indices" / magic numbers with `Object.freeze({...})` constants
+
+Several places identify a case by a bare string or a bare number. Replace them with frozen constant
+objects (e.g. `const GravityStates = Object.freeze({ Landed: "Landed", Falling: "Falling", FallingFar: "FallingFar", Orbit: "Orbit", ... })`),
+and use `GravityStates.Orbit` instead of `"Orbit"` / `2`. A typo in a raw string or a wrong number fails
+silently; a typo in a frozen-object property is at least visible in a search, and the definition lives in one place.
+No behaviour change; do it **after** the fall-through investigation (item 10) and the situation switch.
+
+- **The falling-distance index — done (numbers -> state-name strings):** `methodOnFallingDistanceChanged` now takes
+  `"Falling"` / `"FallingFar"` / `"Orbit"` (parameter `nameOfState`) in `EntityComponentGravity` (the seven handler
+  calls and the receiver) and in the three components that `switch` on it: `EntityComponentVelocity.methodSetVelocityCap`,
+  `EntityComponentPlayerController.methodSetMovementSpeed`,
+  `EntityComponentCameraControllerFirstPerson.methodSetGravityTransitionAngularSpeed` (and its `#pitchShouldClamp`).
+  What is left here is only replacing those raw string literals with the frozen constants below.
+- **`EntityComponentPlanetFaces.methodGetDistanceState(index)` — still numeric:** its numbering is the opposite of the old
+  falling-distance index (`1` = the `Orbit` cutoff, `0` = the `FallingFar` cutoff), and now that the falling-distance
+  argument is a state name it is the one remaining place that still takes a number. Take a name
+  (`methodGetDistanceState("Orbit")`) so the two cannot be mixed up. Call sites: the `Orbit` / `FallingFar` / `Falling`
+  updates and the lazy-load `spawn` region in `EntityComponentGravity` (five calls, with `1` or `0`).
+- **The state machine's own state strings** (`"Landed"`, `"Crossing"`, `"Jumping"`, `"None"`, ...): same frozen object,
+  shared by the gravity component and everything that reads the state (`methodGetState() == "Landed"` in `velocity.js`,
+  the debug snapshot).
+- **The new "situation" values** from the branch-chain rewrite (`OutsideWalls`, `BelowFloor`, `BelowRange`, `InRange`,
+  `AboveRange`): define them as a frozen object from the start (`FaceSituation`), not as raw strings.
+- **Where the constants live:** decide on a shared module (e.g. next to `classes/state-machine/`, or an
+  `environment/` file) that gravity, velocity, the player controller, the camera controller and `PlanetFaces`
+  can all import without circular imports.
+- **Precedent already in the repo:** `entity components/context/singleton/context_hud_layout.js` exports
+  `Object.freeze` enums named `...Enum` (`HUDCubeHorizontalAlignmentEnum`, `HUDPanelYawBehaviorEnum`). Follow that
+  naming (`GravityStateEnum`, `FaceSituationEnum`) and the same export style, so the new ones match.
+- **A reminder:** a `switch` over these values still will not warn about a missing case in JavaScript; keep a
+  `default:` that logs an error.
+
+## 12. Gravity direction jumps at the `Orbit` -> `FallingFar` boundary: smooth it (two states, or a blend)
+
+**Problem:** in `Orbit`, gravity points at the planet center (`#methodApplyGravityTowardsPlanetCenter()`). One frame later, in
+`FallingFar`, it points along the current face's normal (`#methodApplyDownwardGravity()`). For the same position the two directions
+can differ by several degrees (it depends on where the player is above the face). The velocity carried out of `Orbit` is aimed at the
+center and only slowly bends towards the face normal; the camera's up direction also swings from "away from the center" to the face
+normal at that moment (see the re-level discussion in item 7).
+
+**Idea from the user (two states):** split `FallingFar` by how it was reached.
+- `FallingFarFromOrbit` (temporary name): still has some velocity towards the planet center (as `Orbit` does), combined with some
+  velocity along the current face normal (as `Falling` does).
+- `FallingFarFromSurface` (temporary name): only velocity along the current face normal.
+
+**Alternative (suggested, not decided): one `FallingFar` state, with the gravity direction blended by position.**
+- Blend between the two directions only inside the `FallingFar` band:
+  weight = smoothstep(distanceToPlanetCenter, nearCenterDistance, orbitCenterDistance); direction = normalize(lerp(-faceNormal,
+  towardsPlanetCenter, weight)). Weight 1 at the `Orbit` boundary (central gravity), 0 at the `Falling` boundary (face-normal gravity).
+- Why prefer it: a state per history multiplies states (handlers in the state machine's `prev -> new` table, a falling-distance
+  notification for each, a rule for when "from Orbit" ends), while the history is already in the velocity (an inward velocity from
+  `Orbit`, an upward one after a jump). A position-only law has no extra state and no hysteresis.
+- A player who jumped up from the surface would get a little central pull at the top of the band (physically consistent). If that
+  should never be felt, narrow the blend range.
+- The same blend could drive the camera's up direction ("up = opposite the blended gravity"): up then fades from radial to face
+  normal while descending through the band, instead of swinging at the `Orbit` exit. Goes naturally with the `Frozen` up-transition
+  mode in `Orbit` (item 7): frozen in `Orbit`, then a gradual re-alignment through `FallingFar`.
+- Two distance measures at the band's ends: the `Orbit` boundary is a distance from the center, the `Falling` boundary a distance from
+  the floor. Use the center distance for the blend; the lower end is the `Falling` cutoff converted to a center distance (about the
+  inradius plus that cutoff). Item 5 (named, per-planet thresholds) would make this cleaner.
+- It is tuning rather than logic: the blend curve and range are to be adjusted by feel.
+
+**Decide after trying `Frozen` in `Orbit` (item 7).** If the two-state version is preferred, use the enum style from item 11 for the
+new state names.
+
+- **Files:** `entity components/environment/planet.js` (`EntityComponentGravity`: `methodUpdateByStateOrbit`,
+  `methodUpdateByStateFallingFar`, the `Orbit` -> `FallingFar` handler, `#methodApplyGravityTowardsPlanetCenter`,
+  `#methodApplyDownwardGravity`), `entity components/movement/camera_controller_first_person.js` (up direction, if the blend also
+  drives up).
