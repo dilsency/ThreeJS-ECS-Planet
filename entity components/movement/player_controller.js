@@ -464,24 +464,24 @@ export class EntityComponentPlayerController extends EntityComponent
     }
 
     //
-    methodOnFallingDistanceChanged(index)
+    methodOnFallingDistanceChanged(nameOfState)
     {
         // alias function
-        this.methodSetMovementSpeed(index);
+        this.methodSetMovementSpeed(nameOfState);
     }
-    methodSetMovementSpeed(index)
+    methodSetMovementSpeed(nameOfState)
     {
-        switch(index)
+        switch(nameOfState)
         {
-            case 0:
+            case "Falling":
                 this.#speedLeftRight = this.#speedLeftRightMin;
                 this.#speedForwardBack = this.#speedForwardBackMin;
                 break;
-            case 1:
+            case "FallingFar":
                 this.#speedLeftRight = this.#speedLeftRightMin;
                 this.#speedForwardBack = this.#speedForwardBackMin;
                 break;
-            case 2:
+            case "Orbit":
                 this.#speedLeftRight = this.#speedLeftRightMax;
                 this.#speedForwardBack = this.#speedForwardBackMax;
                 break;
