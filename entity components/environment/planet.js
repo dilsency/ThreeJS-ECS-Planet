@@ -126,6 +126,9 @@ export class EntityComponentPlanetModel extends EntityComponent
     methodGetGeometry() { return this.#geometry; }
     methodGetPosition() {return this.#position;}
     methodGetRadius() { return this.#radius; }
+
+    methodGetPlanetCenter(){return this.methodGetPosition();}
+    methodGetPlanetRadius(){return this.methodGetRadius();}
     // #endregion getters
 }
 
@@ -144,6 +147,8 @@ export class EntityComponentPlanetFaces extends EntityComponent
     #faceNeighborsDiagonal = [];
     //
     #planetCenter = null;
+    #planetRadius = null;
+    #planetInradius = null;
     //
     #faceCenters = null;
     #faceNormals = null;
@@ -164,6 +169,13 @@ export class EntityComponentPlanetFaces extends EntityComponent
     #debugPlanesFloor = [];
     // reminder : each item in this array will contain its own array of 3 items; each wall
     #debugPlanesWall = [];
+
+    //
+    #componentInstancePlanetModel = null;
+    //
+    #distanceState1 = null;
+    #distanceState0 = null;
+
     // #endregion privates
 
     // #region construct
@@ -186,7 +198,6 @@ export class EntityComponentPlanetFaces extends EntityComponent
         // and when we have
         // we early-out every frame
         this.#methodOnLazyLoadInit();
-
         if(!this.#hasOnLazyLoadInit){return;}
 
         // #endregion lazy
@@ -272,11 +283,61 @@ export class EntityComponentPlanetFaces extends EntityComponent
     methodGetFaceNormal(index){return this.#faceNormals[index];}
     methodGetIsReady(){return this.#hasOnLazyLoadInit;}
     methodHasOnLazyLoadInit(){return this.#hasOnLazyLoadInit;}
-    methodGetPlanetPosition(){return this.#planetCenter;}
-    methodGetPlanetCenter(){return this.#planetCenter;}
     // #endregion getters
 
+    // #region getters aliases
+    methodGetPlanetPosition(){return this.methodGetPlanetCenter();}
+    methodGetIsWithinWalls(position, index){return this.methodGetIsWithinFaceWalls(position, index);}
+    methodGetIsAboveFloor(position, index){return this.methodGetIsAboveFaceFloor(position, index);}
+    // #endregion getters aliases
+
+    // #region getters that cache
+    methodGetPlanetCenter()
+    {
+        // "cache" style
+        if(this.#planetCenter != null){return this.#planetCenter;}
+        // early return : planet may not be readied yet
+        if(this.#componentInstancePlanetModel == null){return;}
+
+        this.#planetCenter = this.#componentInstancePlanetModel.methodGetPlanetCenter();
+
+        return this.#planetCenter;
+    }
+    methodGetPlanetInradius()
+    {
+        // "inradius" describes distance from planet face center, to planet center
+
+        // we should precalculate it when we generate planes and such
+        
+        return this.#planetInradius;
+
+    }
+    methodGetPlanetRadius()
+    {
+        // "cache" style
+        if(this.#planetRadius != null){return this.#planetRadius;}
+        // early return : planet may not be readied yet
+        if(this.#componentInstancePlanetModel == null){return;}
+
+        this.#planetRadius = this.#componentInstancePlanetModel.methodGetPlanetRadius();
+
+        return this.#planetRadius;
+    }
+    // #endregion getters that cache
+
     // #region getters that calculate
+    methodGetDistanceState(index)
+    {
+        switch(index)
+        {
+            case 1:
+                return this.#distanceState1;
+                break;
+            default:
+                return this.#distanceState0;
+                break;
+        }
+    }
     methodGetMatchingCornersCount(cornersA, cornersB)
     {
         // our input parameters are a set of arrays
@@ -317,21 +378,26 @@ export class EntityComponentPlanetFaces extends EntityComponent
 
         return matchingCornersCount;
     }
-    methodGetFaceCenter(index){
+    methodGetFaceCenter(index)
+    {
+        //
+        if(this.#componentInstancePlanetModel == null){return;}
+        if(this.#planetCenter == null){return;}
+        if(this.#planetRadius == null){return;}
+
         // our stored face center is in the (normalized) object-space of the triangle
         // so it ranges from -1 to 1
 
         // when this method is invoked
         // we do really want the world space of the face
 
-        const entityComponent = this.methodGetComponent("EntityComponentPlanetModel");
-        const position = entityComponent?.methodGetPosition() ?? new THREE.Vector3(0, 0, 0);
-        const radius = entityComponent?.methodGetRadius() ?? 1.0;
+        //const position = entityComponent?.methodGetPosition() ?? new THREE.Vector3(0, 0, 0);
+        //const radius = entityComponent?.methodGetRadius() ?? 1.0;
 
         return new THREE.Vector3()
         .copy(this.#faceCenters[index])
-        .multiplyScalar(radius)
-        .add(position);
+        .multiplyScalar(this.#planetRadius)
+        .add(this.#planetCenter);
     }
     methodGetIsWithinFace(position, index)
     {
@@ -354,10 +420,6 @@ export class EntityComponentPlanetFaces extends EntityComponent
         const d = c.normalize();
 
         return d;
-    }
-    methodGetFloorDistance(position, index)
-    {
-        return this.#planesFloor[index].distanceToPoint(position);
     }
     methodGetIsAboveFaceFloor(position, index)
     {
@@ -433,30 +495,91 @@ export class EntityComponentPlanetFaces extends EntityComponent
         //
         return mostAlignedDirectionIndex;
     }
+    methodGetNearestFaceWithIndex(index, position, planetCenter)
+    {
+        // here's the plan
+        // in order, we return as early as we have a valid result
+
+        // (1) compare the "prism" of the current index
+        // if (1) does not return a valid index, try the next
+
+        // (2) compare the "prisms" of all direct neighboring indeces
+        // if (2) does not return a valid index, try the next
+
+        // (3) compare the "prisms" of all diagonal neighboring indeces
+        // if (3) does not return a valid index, try the next
+
+        // (4) compare the "most aligned face" of all indeces
+        // methodGetMostAlignedFace
+        
+        // #region no index, fallback
+        if(index == null)
+        {
+            return this.methodGetMostAlignedFace(position, planetCenter);
+        }
+        // #endregion no index, fallback
+
+        // #region (1)
+        if(this.methodGetIsWithinFace(position, index)){return index;}
+        // #endregion (1)
+
+        // #region (2)
+        for(var iteratorIndex = 0; iteratorIndex < this.#faceNeighborsDirect[index].length; iteratorIndex++)
+        {
+            if(this.methodGetIsWithinFace(position, this.#faceNeighborsDirect[index][iteratorIndex])){return this.#faceNeighborsDirect[index][iteratorIndex];}
+        }
+        // #endregion (2)
+
+        // #region (3)
+        for(var iteratorIndex = 0; iteratorIndex < this.#faceNeighborsDiagonal[index].length; iteratorIndex++)
+        {
+            if(this.methodGetIsWithinFace(position, this.#faceNeighborsDiagonal[index][iteratorIndex])){return this.#faceNeighborsDiagonal[index][iteratorIndex];}
+        }
+        // #endregion (3)
+
+        // #region (4)
+        return this.methodGetMostAlignedFace(position, planetCenter);
+        // #endregion (4)
+    }
+    methodGetNearestFaceIndex(position, planetCenter)
+    {
+        // alias function
+        // we don't have a current index, so we have to use (4)
+        return this.methodGetMostAlignedFace(position, planetCenter);
+    } 
     methodGetNearestFace(position, planetCenter)
     {
         // alias function
-        // because we actually compare directions to find the best match
-        // we do not care about distances
+        // we don't have a current index, so we have to use (4)
         return this.methodGetMostAlignedFace(position, planetCenter);
     } 
     // #endregion getters that calculate
+
+    // #region getters that calculate : distances
+    methodGetFloorDistance(position, index)
+    {
+        return this.#planesFloor[index].distanceToPoint(position);
+    }
+    methodGetDistanceToFloor(position, index)
+    {
+        // alias function
+        return this.methodGetFloorDistance(position, index);
+    }
+    methodGetDistanceToPlanetFace(position, index)
+    {
+        // alias function
+        return this.methodGetFloorDistance(position, index);
+    }
+    methodGetDistanceToPlanetCenter(position)
+    {
+        return Math.abs(position.distanceTo(this.#planetCenter));
+    }
+    // #endregion getters that calculate : distances
 
     // #region private methods
     #methodOnLazyLoadInit()
     {
         // #region lazy
-
-        // consider rename
-        // this method does not JUST check if we are ready
-        // it also does everything at the first initialization
-        // so...
-        // ...rename it to that?
-        // methodOneShotInit
-        // or something like that
-        // methodOnLoadInit is whack, though
-
-
 
         // "lazy" : we check every frame if we have it
         // and when we do, we early return out of this function every frame
@@ -464,31 +587,62 @@ export class EntityComponentPlanetFaces extends EntityComponent
 
         // #endregion lazy
 
-        // #region body
+        // #region dependent
 
         // here, we need to get the planet geometry
 
         // we first need the component (a sibling to the current component)
-        const componentInstancePlanetModel = this.methodGetComponent("EntityComponentPlanetModel");
-
-        // #region early return
-        if(componentInstancePlanetModel == null){return;}
-        // #endregion early return
+        this.#componentInstancePlanetModel = this.methodGetComponent("EntityComponentPlanetModel");
+        if(this.#componentInstancePlanetModel == null){return;}
 
         // then we get the geometry
-        this.#geometry = componentInstancePlanetModel.methodGetGeometry();
-
-        // #region early return
+        this.#geometry = this.#componentInstancePlanetModel.methodGetGeometry();
         if(this.#geometry == null){return;}
-        // #endregion early return
 
+        // #endregion dependent
+
+        // #region independent
+        // #endregion independent
+
+        // #region spawn
+        
         // set planet center, for later
-        this.#planetCenter = componentInstancePlanetModel.methodGetPosition();
+        this.#planetCenter = this.methodGetPlanetCenter();
+        // set planet radius, for later
+        this.#planetRadius = this.methodGetPlanetRadius();
+
+        // set distances, for later
+        this.#distanceState1 = this.#planetRadius * 5;
+        this.#distanceState0 = this.#planetRadius * 2.5;
+
+        //
+        console.log("distanceState(s) :");
+        console.log("\t" + this.#distanceState1);
+        console.log("\t" + this.#distanceState0);
 
         // the main loop
         // is responsible for creating planes for floors, planes for walls, ...
         // and the edge data that is required to create them
         this.#methodParseFaceData();
+
+        // #region inradius
+        // we loop through all face planes, once
+        // and check the minimum distance from the planet center to the plane
+        // that is our "inradius", the radius we have is actually to the outmost vertices, we need the smallest
+        let inradius = Infinity;
+        for(const iteratorPlane of this.#planesFloor)
+        {
+            inradius = Math.min(
+                inradius,
+                Math.abs(
+                    iteratorPlane.distanceToPoint(
+                        this.#planetCenter
+                    )
+                )
+            );
+        }
+        this.#planetInradius = inradius;
+        // #endregion inradius
 
         // a secondary loop
         // will check the neighboring relationship between all faces
@@ -504,10 +658,11 @@ export class EntityComponentPlanetFaces extends EntityComponent
             //this.#methodCreateDebugPlanesWall();
         }
 
-        // #endregion body
+        // #endregion spawn
 
-        // finally, we update the flag so that we don't have to do this again
+        // #region lazy end
         this.#hasOnLazyLoadInit = true;
+        // #endregion lazy end
     }
 
     // #region face data
@@ -608,6 +763,7 @@ export class EntityComponentPlanetFaces extends EntityComponent
             this.#faceCenters.push(centerLocal);
             this.#faceNormals.push(normal);
         }
+
 
         console.dir(this.#faceCenters);
     }
@@ -1128,27 +1284,27 @@ export class EntityComponentGravity extends EntityComponent
 
         // test
         this.#stateMachine.methodRegisterHandler("Falling", "FallingFar", () => {
-            this.methodOnFallingDistanceChanged(1);
+            this.methodOnFallingDistanceChanged("FallingFar");
         });
         this.#stateMachine.methodRegisterHandler("FallingFar", "Falling", () => {
-            this.methodOnFallingDistanceChanged(0);
+            this.methodOnFallingDistanceChanged("Falling");
         });
         this.#stateMachine.methodRegisterHandler("FallingFar", "Orbit", () => {
-            this.methodOnFallingDistanceChanged(2);
+            this.methodOnFallingDistanceChanged("Orbit");
         });
         this.#stateMachine.methodRegisterHandler("None", "Orbit", () => {
-            this.methodOnFallingDistanceChanged(2);
+            this.methodOnFallingDistanceChanged("Orbit");
         });
         this.#stateMachine.methodRegisterHandler("Orbit", "FallingFar", () => {
             // we need to also update the current up direction according to the face, in this case
             this.methodSetFaceIndexToNearest(false);
-            this.methodOnFallingDistanceChanged(1);
+            this.methodOnFallingDistanceChanged("FallingFar");
         });
         this.#stateMachine.methodRegisterHandler("None", "FallingFar", () => {
-            this.methodOnFallingDistanceChanged(1);
+            this.methodOnFallingDistanceChanged("FallingFar");
         });
         this.#stateMachine.methodRegisterHandler("None", "Falling", () => {
-            this.methodOnFallingDistanceChanged(0);
+            this.methodOnFallingDistanceChanged("Falling");
         });
     }
     methodInitialize()
@@ -1262,7 +1418,7 @@ export class EntityComponentGravity extends EntityComponent
         // see state "Falling" for commentary
 
         //
-        if (this.#distanceToPlanetCenter < 100.0)
+        if (this.#distanceToPlanetCenter < this.#componentInstancePlanetFaces.methodGetDistanceState(1))
         {
             //
             this.#stateMachine.methodTransitionTo("FallingFar");
@@ -1280,7 +1436,7 @@ export class EntityComponentGravity extends EntityComponent
         // see state "Falling" for commentary
 
         // 
-        if(this.#distanceToPlanetCenter > 100.0)
+        if(this.#distanceToPlanetCenter >= this.#componentInstancePlanetFaces.methodGetDistanceState(1))
         {
             //
             this.#stateMachine.methodTransitionTo("Orbit");
@@ -1289,6 +1445,9 @@ export class EntityComponentGravity extends EntityComponent
         {
             //
             this.methodShouldUpdateToNearestFace(prevPosition);
+            
+            //
+            this.#methodApplyDownwardGravity(this.#gravitySpeed * 0.1);
         }
         //
         else if(this.#isWithinFace && !this.#isWithinFloorRange)
@@ -1296,69 +1455,54 @@ export class EntityComponentGravity extends EntityComponent
             //
             this.#methodApplyDownwardGravity(this.#gravitySpeed);
         }
-        else if (this.#isWithinFace && (this.#distanceToFloor < 50.0))
+        else if (this.#isWithinFace && (this.#distanceToFloor < this.#componentInstancePlanetFaces.methodGetDistanceState(0)))
         {
             //
             this.#stateMachine.methodTransitionTo("Falling");
         }
     }
+    methodGetSubstateFalling()
+    {
+        // return a string of the "substate" we are in
+        if(this.#distanceToPlanetCenter < this.#componentInstancePlanetFaces.methodGetPlanetInradius()){return "WithinPlanetRadius";}
+        if(this.#distanceToFloor >= this.#componentInstancePlanetFaces.methodGetDistanceState(0)){return "AboveRange";}
+        if(!this.#isWithinFaceWallsWithoutLeeway){return "OutsideWalls";}
+        if(this.#distanceToFloor < 0.0){return "BelowFloor";}
+        if(this.#distanceToFloor < 0.5){return "BelowRange";}
+        if(this.#distanceToFloor <= 2.0){return "WithinRange";}
+        return "Default";
+    }
     methodUpdateByStateFalling(timeElapsed, timeDelta, prevPosition)
     {
-        //const currentVelocity = this.#componentInstanceVelocity.methodGetVelocity();
-        //console.log("\t[" + this.#currentFaceIndex + "]\t" + currentVelocity.x.toFixed(2) + " , " + currentVelocity.y.toFixed(2) + " , " + currentVelocity.z.toFixed(2));
+        const substate = this.methodGetSubstateFalling();
 
-        if (this.#distanceToFloor >= 50.0)
+        switch(substate)
         {
-            //
-            this.#stateMachine.methodTransitionTo("FallingFar");
-        }
-        // if we aren't within the face prism
-        // we need to update to the nearest face
-        else if(!this.#isWithinFace)
-        {
-            //
-            this.methodShouldUpdateToNearestFace(prevPosition);
-            // it is possible that we moved below floor peak in doing so
-            // we can compensate for this, though
-            //this.methodApplyUpwardForceIfBelowFloorPeak();
-
-            // but we don't ; instead, landed states will always chase the ideal
-        }
-
-        //
-        else if(this.#isWithinFace && !this.#isWithinFloorRange)
-        {
-            //
-            this.#methodApplyDownwardGravity(this.#gravitySpeed);
-        }
-        else if (this.#isWithinFaceWallsWithoutLeeway && !this.#isWithinFloorRange)
-        {
-            // we are within the planet
-            // apply upwards force
-
-            //
-            this.methodApplyUpwardForceIfBelowFloorPeak();
-
-            // too forceful and rigid, but does work
-            //this.methodPushUpToFloor();
-        }
-        else if (!this.#isWithinFace)
-        {
-            //
-            this.#methodApplyDownwardGravity(this.#gravitySpeed * 0.1);
-        }
-        else if (this.#isWithinFace && this.#isWithinFloorRange)
-        {
-            // we kind of only want to do this once, though
-            // we do need a statemachine for each entity
-            // wether they are landed, etc.
-            // currently this will run every frame
-
-            // with our new state machine, we can :)
-            this.#stateMachine.methodTransitionTo("Landed");
-
-            // old & outdated
-            //this.methodNullifyGravity();
+            case "WithinPlanetRadius":
+                this.methodApplyUpwardForceIfBelowFloorPeak();
+                break;
+            case "AboveRange":
+                this.#stateMachine.methodTransitionTo("FallingFar");
+                break;
+            case "OutsideWalls":
+                this.methodShouldUpdateToNearestFace(prevPosition);
+                this.#methodApplyDownwardGravity(this.#gravitySpeed * 0.1);
+                break;
+            case "BelowFloor":
+                this.methodApplyUpwardForceIfBelowFloorPeak();
+                break;
+            case "BelowRange":
+                this.#stateMachine.methodTransitionTo("Landed");
+                break;
+            case "WithinRange":
+                this.#stateMachine.methodTransitionTo("Landed");
+                break;
+            case "Default":
+                this.#methodApplyDownwardGravity(this.#gravitySpeed);
+                break;
+            default:
+                console.error("() methodUpdateByStateFalling\n\tunknown substate");
+                break;
         }
     }
 
@@ -1441,25 +1585,35 @@ export class EntityComponentGravity extends EntityComponent
         //
         this.methodTransitionTo("Landed");
     }
-    methodOnFallingDistanceChanged(index)
+    methodOnFallingDistanceChanged(nameOfState)
     {
+        // todo to-do to do : is this not what the broadcast message system and handlers is for!?
+
         // velocity is a mandatory component
         // camera controller and player controller , on the other hand, are not
 
-        this.#componentInstanceVelocity.methodOnFallingDistanceChanged(index);
+        this.#componentInstanceVelocity.methodOnFallingDistanceChanged(nameOfState);
 
         // reminder : ?. is shorthand for (if not null do this, otherwise skip)
         // this lets us ignore all entities without those component, which is most of them :)
 
-        this.#componentInstanceOptionalPlayerController?.methodOnFallingDistanceChanged(index);
-        this.#componentInstanceOptionalCameraControllerFirstPerson?.methodOnFallingDistanceChanged(index);
+        this.#componentInstanceOptionalPlayerController?.methodOnFallingDistanceChanged(nameOfState);
+        this.#componentInstanceOptionalCameraControllerFirstPerson?.methodOnFallingDistanceChanged(nameOfState);
     }
 
     //
     methodShouldUpdateToNearestFace(prevPosition)
     {
         //
-        const nearestFaceIndex = this.#componentInstancePlanetFaces.methodGetNearestFace(prevPosition, this.#componentInstancePlanetFaces.methodGetPlanetCenter());
+        const nearestFaceIndex =
+            this.#componentInstancePlanetFaces
+                .methodGetNearestFaceWithIndex(
+                    this.#currentFaceIndex,
+                    prevPosition,
+                    this.#componentInstancePlanetFaces.methodGetPlanetCenter()
+                )
+        ;
+        //const nearestFaceIndex = this.#componentInstancePlanetFaces.methodGetNearestFace(prevPosition, this.#componentInstancePlanetFaces.methodGetPlanetCenter());
         //
         if(nearestFaceIndex == this.#currentFaceIndex){return;}
 
@@ -1491,7 +1645,7 @@ export class EntityComponentGravity extends EntityComponent
         this.#componentInstanceOptionalCameraControllerFirstPerson
             .methodSetDirUp(newUp, paramDebug);
     }
-    methodSetFaceIndexToNearest(paramDebug)
+    methodGetNearestFaceIndex()
     {
         // we need to calculate the nearest face index
         const nearestFaceIndex = this.#componentInstancePlanetFaces
@@ -1499,6 +1653,12 @@ export class EntityComponentGravity extends EntityComponent
                 this.methodGetPosition().clone(),
                 this.#componentInstancePlanetFaces.methodGetPlanetCenter()
             );
+
+        return nearestFaceIndex;
+    }
+    methodSetFaceIndexToNearest(paramDebug)
+    {
+        const nearestFaceIndex = this.methodGetNearestFaceIndex();
 
         // then we can use the other method within this same class
         this.methodSetFaceIndex(nearestFaceIndex, paramDebug);
@@ -1522,7 +1682,8 @@ export class EntityComponentGravity extends EntityComponent
 
         // we are in orbit
         // we do not consider planet faces at the moment
-        // instead, we just set the direction to the planet center...
+        // instead, we just set the direction...
+        // ...that is from the planet center, towards the player position...
         // ...as the current up direction
 
         const planetCenter = this.methodGetPlanetCenter();
@@ -1635,40 +1796,34 @@ export class EntityComponentGravity extends EntityComponent
     }
 
     // #region getters
+    methodGetFaceIndex()
+    {
+        return this.#currentFaceIndex;
+    }
     methodGetFaceNormal()
     {
-        // #region lazy
+        // #region early return
         if(this.#currentFaceIndex == null){return;}
         if(this.#componentInstancePlanetFaces == null){return;}
-        // #endregion lazy
+        // #endregion early return
         return this.#componentInstancePlanetFaces.methodGetFaceNormal(this.#currentFaceIndex);
     }
-    methodGetCurrentFaceNormal()
-    {
-        // alias function
-        return this.methodGetFaceNormal();
-    }
-    methodGetGravityDir()
-    {
-        // alias function
-        return this.methodGetFaceNormal();
-    }
-    methodGetDirUp()
-    {
-        // alias function
-        return this.methodGetFaceNormal();
-    }
+    
+    methodGetIsReady(){return this.#hasOnLazyLoadInit;}
     // #endregion getters
+
+    // #region getters aliases
+    methodGetCurrentFaceIndex(){return this.methodGetFaceIndex();}
+    methodGetCurrentFaceNormal(){return this.methodGetFaceNormal();}
+    methodGetGravityDir(){return this.methodGetFaceNormal();}
+    methodGetDirUpFromGravity(){return this.methodGetFaceNormal();}
+    methodGetCurrentState(){return this.methodGetState();}
+    // #endregion getters aliases
 
     // #region getters that delegate : state machine
     methodGetState()
     {
         return this.#stateMachine.methodGetState();
-    }
-    methodGetCurrentState()
-    {
-        // alias function
-        return this.methodGetState();
     }
     // #endregion getters that delegate : state machine
 
@@ -1677,12 +1832,11 @@ export class EntityComponentGravity extends EntityComponent
     {
         this.#stateMachine.methodTransitionTo(newState);
     }
-    methodSetState(newState)
-    {
-        // alias function
-        this.methodTransitionTo(newState);
-    }
     // #endregion setters that delegate : state machine
+
+    // #region setters aliases
+    methodSetState(newState){this.methodTransitionTo(newState);}
+    // #endregion setters aliases
 
     // #region private methods : gravity
     #methodApplyGravityTowardsPlanetCenter()
@@ -1737,15 +1891,15 @@ export class EntityComponentGravity extends EntityComponent
 
         // #region dependent
 
+        // let's assume our velocity component has been initialized
+        this.#componentInstanceVelocity = this.methodGetComponent("EntityComponentVelocity");
+        if(this.#componentInstanceVelocity == null){return;}
+
         // we can just assume that this means our spawner is also initialized
         // and we can get our initial spawn face index from it
         this.#componentInstanceSpawnOnPlanetFace = this.methodGetComponent("EntityComponentSpawnOnPlanetFace");
         if(this.#componentInstanceSpawnOnPlanetFace == null){return;}
         if(!this.#componentInstanceSpawnOnPlanetFace.methodGetIsReady()){return;}
-
-        // and let's assume our velocity component has been initialized
-        this.#componentInstanceVelocity = this.methodGetComponent("EntityComponentVelocity");
-        if(this.#componentInstanceVelocity == null){return;}
 
         // #endregion dependent
 
@@ -1766,13 +1920,39 @@ export class EntityComponentGravity extends EntityComponent
         console.log("\t[" + this.#currentFaceIndex + "]\t" + initialVelocity.x.toFixed(2) + " , " + initialVelocity.y.toFixed(2) + " , " + initialVelocity.z.toFixed(2));
 
         //
-        console.log("initial distance:");
-        const dist = this.#componentInstancePlanetFaces
-            .methodGetFloorDistance(
+        console.log("initial distance to planet center:");
+        const distanceToPlanetCenter = this.#componentInstancePlanetFaces
+            .methodGetDistanceToPlanetCenter(
+                this.methodGetPosition()
+            );
+        console.log("\t[" + this.#currentFaceIndex + "]\t" + distanceToPlanetCenter.toFixed(2));
+        
+        //
+        console.log("initial distance to planet face:");
+        const distanceToPlanetFace = this.#componentInstancePlanetFaces
+            .methodGetDistanceToPlanetFace(
                 this.methodGetPosition(),
                 this.#currentFaceIndex
             );
-        console.log("\t[" + this.#currentFaceIndex + "]\t" + dist.toFixed(2));
+        console.log("\t[" + this.#currentFaceIndex + "]\t" + distanceToPlanetFace.toFixed(2));
+
+        // we use dist to set our initial gravity state
+        if(distanceToPlanetCenter >= this.#componentInstancePlanetFaces.methodGetDistanceState(1))
+        {
+            this.methodSetState("Orbit");
+        }
+        else if (distanceToPlanetFace >= this.#componentInstancePlanetFaces.methodGetDistanceState(0))
+        {
+            this.methodSetState("FallingFar");
+        }
+        else if (distanceToPlanetFace >= this.#distanceFromFloorIdeal)
+        {
+            this.methodSetState("Falling");
+        }
+        else
+        {
+            this.methodSetState("Landed");
+        }
         // #endregion spawn
 
         // #region lazy end
@@ -1781,6 +1961,8 @@ export class EntityComponentGravity extends EntityComponent
     }
     #methodResolvePlanet()
     {
+        // this.#planet is set by the constructor params
+
         // #region early return
         if(this.#planet == null){return;}
         if(this.#planet["$ref"] == null){return;}
@@ -1891,32 +2073,6 @@ export class EntityComponentSpawnOnPlanetFace extends EntityComponent
     }
     // #endregion setters that delegate
 
-    // #region setters that calculate
-    methodSetStateInitial()
-    {
-        //
-        const dist = this.#componentInstancePlanetFaces
-            .methodGetFloorDistance(
-                this.methodGetPosition(),
-                this.#faceIndex
-            );
-
-        //
-        if(dist >= 50.0)
-        {
-            this.#componentInstanceGravity.methodSetState("FallingFar");
-        }
-        else if(dist >= 2.0)
-        {
-            this.#componentInstanceGravity.methodSetState("Falling");
-        }
-        else if(dist >= 0.0)
-        {
-            this.#componentInstanceGravity.methodSetState("Landed");
-        }
-    }
-    // #endregion setters that calculate
-
     // #region getters
     methodGetFaceIndex(){return this.#faceIndex;}
     methodGetIsReady(){return this.#hasOnLazyLoadInit;}
@@ -1954,9 +2110,9 @@ export class EntityComponentSpawnOnPlanetFace extends EntityComponent
         // (early return after every one, so that the lazy-load-flag does not get a false positive)
 
         // let's resolve more components on the player
-        this.#componentInstanceGravity = this.methodGetComponent("EntityComponentGravity");
+        //this.#componentInstanceGravity = this.methodGetComponent("EntityComponentGravity");
         // early return
-        if(this.#componentInstanceGravity == null){return;}
+        //if(this.#componentInstanceGravity == null){return;}
         // #endregion dependent
 
         // #region independent
@@ -1987,9 +2143,11 @@ export class EntityComponentSpawnOnPlanetFace extends EntityComponent
             )
         );
 
-        // we set the inital state
-        // based on distance
-        this.methodSetStateInitial();
+        // we do not set gravity state here
+        // we let the on-lazy-load of the gravity component do that instead
+        // the simple reason for this is that the state needs velocity to function
+        // and we only initialize that in gravity, not here
+        //this.methodSetStateInitial();
 
         // we get the user's camera
         // if they do not have that component, they aren't the user
