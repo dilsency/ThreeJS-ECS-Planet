@@ -20,6 +20,14 @@
                     "entity": "planet",
                     "component": "EntityComponentPlanetFaces"
                 }}
+        }},
+        {"type": "EntityComponentDebugSnapshot",
+        "params": {
+            "planet":
+                {"$ref": {
+                    "entity": "planet",
+                    "component": "EntityComponentPlanetFaces"
+                }}
         }}
     ]
 }
