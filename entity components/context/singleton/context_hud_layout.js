@@ -3,24 +3,8 @@
 import * as THREE from "three";
 // ECS
 import {EntityComponent} from "../../../classes/ECS/entity_component.js";
-
-// Horizontal alignment of cubeHUD within the viewport - CENTER keeps it
-// centered (x offset 0); LEFT/RIGHT solve for an offset that puts the
-// *panel's* edge (not necessarily the cube's) flush with the corresponding
-// screen edge.
-export const HUDCubeHorizontalAlignmentEnum = Object.freeze({
-    CENTER: "CENTER",
-    LEFT: "LEFT",
-    RIGHT: "RIGHT",
-});
-
-// Whether the HUD panel's yaw follows cubeHUD's own yaw correction
-// (MATCH_CUBE - looks like one coherent object) or stays an axis-aligned
-// rectangle regardless of the cube's own yaw (RECTANGULAR).
-export const HUDPanelYawBehaviorEnum = Object.freeze({
-    MATCH_CUBE: "MATCH_CUBE",
-    RECTANGULAR: "RECTANGULAR",
-});
+//
+import {EnumHUDCubeHorizontalAlignment, EnumHUDPanelYawBehavior} from "../../../classes/enums.js";
 
 // Solves cubeHUD's own position/yaw and the HUD backdrop panel's
 // position/size, both through cameraHUD's actual projection (see
@@ -52,7 +36,7 @@ export class EntityComponentSingletonContextHUDLayout extends EntityComponent
     #tiltFactor = 0.265;
     #tiltRadians = null; // derived, see methodInitialize()
 
-    #panelYawBehavior = HUDPanelYawBehaviorEnum.RECTANGULAR;
+    #panelYawBehavior = EnumHUDPanelYawBehavior.RECTANGULAR;
 
     // Only depend on #size, so these are safe to compute in methodInitialize()
     // before any cube/panel exists yet.
@@ -119,7 +103,7 @@ export class EntityComponentSingletonContextHUDLayout extends EntityComponent
         const panelZ = this.#panelZ;
 
         let offsetX = 0;
-        if (alignment === HUDCubeHorizontalAlignmentEnum.LEFT)
+        if (alignment === EnumHUDCubeHorizontalAlignment.LEFT)
         {
             // Solves for offsetX AND the yaw correction (see yawRadians below)
             // together, iteratively: the yaw needed to face cameraHUD depends on
@@ -157,7 +141,7 @@ export class EntityComponentSingletonContextHUDLayout extends EntityComponent
                 const alignProxy = new THREE.Object3D();
                 alignProxy.position.set(offsetX, cubeHUDBaseOffset.y, cubeHUDBaseOffset.z);
                 alignProxy.rotation.x = cubeHUDTiltRadians;
-                alignProxy.rotation.y = (hudPanelYawBehavior === HUDPanelYawBehaviorEnum.MATCH_CUBE) ? yawGuess : 0;
+                alignProxy.rotation.y = (hudPanelYawBehavior === EnumHUDPanelYawBehavior.MATCH_CUBE) ? yawGuess : 0;
                 alignProxy.updateMatrixWorld(true);
 
                 let minNdcX = Infinity, minCornerWorldZ = 0;
@@ -181,7 +165,7 @@ export class EntityComponentSingletonContextHUDLayout extends EntityComponent
                 offsetX += targetWorldX - currentWorldX;
             }
         }
-        else if (alignment === HUDCubeHorizontalAlignmentEnum.RIGHT)
+        else if (alignment === EnumHUDCubeHorizontalAlignment.RIGHT)
         {
             // Mirrors the LEFT branch above exactly, for the screen's right edge:
             // same iterative solve, same reasoning for why NDC x must be compared
@@ -202,7 +186,7 @@ export class EntityComponentSingletonContextHUDLayout extends EntityComponent
                 const alignProxy = new THREE.Object3D();
                 alignProxy.position.set(offsetX, cubeHUDBaseOffset.y, cubeHUDBaseOffset.z);
                 alignProxy.rotation.x = cubeHUDTiltRadians;
-                alignProxy.rotation.y = (hudPanelYawBehavior === HUDPanelYawBehaviorEnum.MATCH_CUBE) ? yawGuess : 0;
+                alignProxy.rotation.y = (hudPanelYawBehavior === EnumHUDPanelYawBehavior.MATCH_CUBE) ? yawGuess : 0;
                 alignProxy.updateMatrixWorld(true);
 
                 let maxNdcX = -Infinity, maxCornerWorldZ = 0;
@@ -266,7 +250,7 @@ export class EntityComponentSingletonContextHUDLayout extends EntityComponent
         // axis-aligned rectangle regardless of the cube's own yaw.
         const cubeProxy = new THREE.Object3D();
         cubeProxy.position.set(positionOffset.x, positionOffset.y, positionOffset.z);
-        cubeProxy.rotation.y = (hudPanelYawBehavior === HUDPanelYawBehaviorEnum.MATCH_CUBE) ? yawRadians : 0;
+        cubeProxy.rotation.y = (hudPanelYawBehavior === EnumHUDPanelYawBehavior.MATCH_CUBE) ? yawRadians : 0;
         cubeProxy.rotation.x = cubeHUDTiltRadians;
         cubeProxy.updateMatrixWorld(true);
 
