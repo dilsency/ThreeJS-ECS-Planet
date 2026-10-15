@@ -440,3 +440,39 @@ new state names.
   `methodUpdateByStateFallingFar`, the `Orbit` -> `FallingFar` handler, `#methodApplyGravityTowardsPlanetCenter`,
   `#methodApplyDownwardGravity`), `entity components/movement/camera_controller_first_person.js` (up direction, if the blend also
   drives up).
+
+## 13. Arrival speed when falling in from `Orbit`: make the velocity cap follow the height
+
+**Measured (2026-10-15, hold `0` to go out to `Orbit`, then wait; sampled every 40 ms):** after `Orbit`, the player enters
+`Stratosphere` at about 90 from the planet center (floor distance about 75) with the stored velocity clamped to about 114
+(`methodClampVelocity()` in gravity's generic transition callback; before the clamp it was over 6000). The descent to the floor
+then takes under a second, and the player lands at about **77 units per second** of actual movement (`Falling` at floor 49,
+`Landed` at floor 2).
+
+**Why it does not slow down:**
+- **The stored speed holds at about 110.** Gravity adds roughly 0.5 per frame (0.25 down + 0.25 towards the center in the mixed
+  gravity from `Orbit`, 0.5 down otherwise), and friction removes 0.5% per frame; they balance at 0.5 / 0.005 = about 100. So a
+  stronger or weaker pull changes the stored speed, but the *actual* speed is limited by the cap.
+- **The velocity cap eases too slowly for this drop.** `methodChaseVelocityCap` moves the cap at 50 units per second, so from
+  115 it reaches only about 75 in 0.8 s. The whole descent is shorter than that, so the cap never gets near 15.
+- `Falling` does not change it: its cap target (`#velocityCapMin`) is the same as `Stratosphere`'s.
+
+**Options (not decided):**
+- **Height-based cap (preferred idea):** compute the cap from the distance, e.g. 115 at the top of the `Stratosphere` band and 15 at
+  the `Falling` boundary (about floor distance 50), using the center distance like the `Orbit` boundary. History-free (no
+  "from Orbit" flag needed in Velocity), and it ties in with the gravity blend in item 12: the same weight could drive both.
+  Velocity would take a target cap (or the weight) from gravity each frame instead of a per-state value.
+- **Faster time-based easing:** raise the chase speed in `methodChaseVelocityCap`. Simple, but tuned to this drop's duration only.
+- **Also clamp the stored velocity to the cap** each frame (soft clamp) so a high stored speed cannot sit behind a low cap.
+- Small related fix: `methodChaseVelocityCap` runs after the "velocity is zero" early return in `methodUpdate`, so the cap does
+  not ease while the player is still. Move it above that return.
+
+**Naming to tidy when touching this** (`methodGetSubstateStratosphere`): its `"AboveRange"` / `"BelowRange"` mean "go to `Orbit`" /
+"go to `Falling`", while the same names in `methodGetSubstateFalling` mean "go up to `Stratosphere`" / "land". Names like
+`TransitionToOrbit` and `TransitionToFalling` would not clash. Also decide whether the `BelowRange` check in `Stratosphere`
+should keep requiring `isWithinFace` (within the walls and above the floor): without it, `Falling` would take over as soon as
+the floor distance drops below 50, even slightly outside a face's walls.
+
+- **Files:** `entity components/movement/velocity.js` (`methodChaseVelocityCap`, `methodSetVelocityCap`, `methodUpdate`),
+  `entity components/environment/planet.js` (`methodGetSubstateStratosphere`, `#methodApplyMixedGravity`,
+  `#methodApplyDownwardGravity`, gravity's generic transition callback).
