@@ -1,4 +1,7 @@
+// ECS
 import { EntityComponent } from "../../classes/ECS/entity_component.js";
+//
+import { EnumStateGravity } from "../../classes/enums.js";
 
 export class EntityComponentDebugSnapshot extends EntityComponent
 {
@@ -211,6 +214,10 @@ export class EntityComponentDebugSnapshot extends EntityComponent
             .methodGetDirUp()
                 .clone();
 
+        const dirUpVisual = this.#componentInstanceCamera
+            .methodGetVisualDirUp()
+                .clone();
+
         const cameraYaw = this.#componentInstanceCamera
             .methodGetYaw()
                 .clone();
@@ -218,60 +225,63 @@ export class EntityComponentDebugSnapshot extends EntityComponent
         const velocity = this.#componentInstanceVelocity
             .methodGetVelocity()
                 .clone();
+
+        const dotEntityVSGravity = dirUpEntity.dot(dirUpGravity);
+        const dotVisualVSGravity = dirUpVisual.dot(dirUpGravity);
         // #endregion consts
 
         // #region add fields
-        this.#consoleObjectResult.gravityState =
+        this.#consoleObjectResult["_0_gravityState"] =
             gravityState;
 
-        if(gravityState == "Falling")
+        if(gravityState == EnumStateGravity.Falling)
         {
-            this.#consoleObjectResult.gravityStateFallingSubstate =
+            this.#consoleObjectResult["_0_gravityStateFallingSubstate"] =
                 this.#componentInstanceGravity
                     .methodGetSubstateFalling();
         }
 
-        this.#consoleObjectResult.modeDirUpTransition =
+        this.#consoleObjectResult["_0_modeDirUpTransition"] =
             this.#componentInstanceCamera
                 .methodGetModeDirUpTransition()
         ;
 
-        this.#consoleObjectResult.currentPosition =
+        this.#consoleObjectResult["_1_currentPosition"] =
             this.methodVec3Rounding(
                 currentPosition
             )
         ;
 
-        this.#consoleObjectResult.planetRadius =
+        this.#consoleObjectResult["_1_planetRadius"] =
             planetRadius
                 .toFixed(2)
         ;
 
-        this.#consoleObjectResult.planetInradius =
+        this.#consoleObjectResult["_1_planetInradius"] =
             planetInradius
                 .toFixed(2)
         ;
 
-        this.#consoleObjectResult.distanceToPlanetCenter =
+        this.#consoleObjectResult["_1_distanceToPlanetCenter"] =
              this.#componentInstancePlanetFaces
                 .methodGetDistanceToPlanetCenter(currentPosition)
                     .toFixed(2);
 
-        this.#consoleObjectResult.currentFaceIndex = currentFaceIndex;
+        this.#consoleObjectResult["_1_currentFaceIndex"] = currentFaceIndex;
 
-        this.#consoleObjectResult.distanceToPlanetFace =
+        this.#consoleObjectResult["_1_distanceToPlanetFace"] =
              this.#componentInstancePlanetFaces
                 .methodGetDistanceToPlanetFace(currentPosition, currentFaceIndex)
                     .toFixed(2);
 
-        this.#consoleObjectResult.isCurrentFaceWithinWalls =
+        this.#consoleObjectResult["_1_isCurrentFaceWithinWalls"] =
             (
                 this.#componentInstancePlanetFaces
                     .methodGetIsWithinWalls(currentPosition, currentFaceIndex)
             ? "Y" : "N")
         ;
 
-        this.#consoleObjectResult.isCurrentFaceAboveFloor =
+        this.#consoleObjectResult["_1_isCurrentFaceAboveFloor"] =
             (    
                 this.#componentInstancePlanetFaces
                     .methodGetIsAboveFloor(currentPosition, currentFaceIndex)
@@ -280,21 +290,21 @@ export class EntityComponentDebugSnapshot extends EntityComponent
 
         if(currentFaceIndex != nearestFaceIndex)
         {
-            this.#consoleObjectResult.nearestFaceIndex = nearestFaceIndex;
+            this.#consoleObjectResult["_1_nearestFaceIndex"] = nearestFaceIndex;
 
-            this.#consoleObjectResult.distanceToPlanetFaceNearest =
+            this.#consoleObjectResult["_1_distanceToPlanetFaceNearest"] =
                 this.#componentInstancePlanetFaces
                     .methodGetDistanceToPlanetFace(currentPosition, nearestFaceIndex)
                         .toFixed(2);
 
-            this.#consoleObjectResult.isNearestFaceWithinWalls =
+            this.#consoleObjectResult["_1_isNearestFaceWithinWalls"] =
                 (
                     this.#componentInstancePlanetFaces
                         .methodGetIsWithinWalls(currentPosition, nearestFaceIndex)
                 ? "Y" : "N")
             ;
 
-            this.#consoleObjectResult.isNearestFaceAboveFloor =
+            this.#consoleObjectResult["_1_isNearestFaceAboveFloor"] =
                 (
                     this.#componentInstancePlanetFaces
                         .methodGetIsAboveFloor(currentPosition, nearestFaceIndex)
@@ -304,21 +314,21 @@ export class EntityComponentDebugSnapshot extends EntityComponent
 
         if(nearestFaceIndex != mostAlignedFaceIndex)
         {
-            this.#consoleObjectResult.mostAlignedFaceIndex = mostAlignedFaceIndex;
+            this.#consoleObjectResult["_1_mostAlignedFaceIndex"] = mostAlignedFaceIndex;
 
-            this.#consoleObjectResult.distanceToPlanetFaceMostAligned =
+            this.#consoleObjectResult["_1_distanceToPlanetFaceMostAligned"] =
                 this.#componentInstancePlanetFaces
                     .methodGetDistanceToPlanetFace(currentPosition, mostAlignedFaceIndex)
                         .toFixed(2);
 
-            this.#consoleObjectResult.isMostAlignedFaceWithinWalls =
+            this.#consoleObjectResult["_1_isMostAlignedFaceWithinWalls"] =
                 (
                     this.#componentInstancePlanetFaces
                         .methodGetIsWithinWalls(currentPosition, mostAlignedFaceIndex)
                 ? "Y" : "N")
             ;
 
-            this.#consoleObjectResult.isMostAlignedFaceAboveFloor =
+            this.#consoleObjectResult["_1_isMostAlignedFaceAboveFloor"] =
                 (
                     this.#componentInstancePlanetFaces
                         .methodGetIsAboveFloor(currentPosition, mostAlignedFaceIndex)
@@ -326,54 +336,78 @@ export class EntityComponentDebugSnapshot extends EntityComponent
             ;
         }
 
-        this.#consoleObjectResult.dirUpGravity =
+        this.#consoleObjectResult["_2_dirUpGravity"] =
             this.methodVec3Rounding(
                 dirUpGravity
             )
         ;
 
-        this.#consoleObjectResult.dirUpEntity =
+        this.#consoleObjectResult["_2_dirUpEntity"] =
             this.methodVec3Rounding(
                 dirUpEntity
             )
         ;
 
-        this.#consoleObjectResult.transitionRemainingAngles =
+        this.#consoleObjectResult["_2_dirUpVisual"] =
+            this.methodVec3Rounding(
+                dirUpVisual
+            )
+        ;
+
+        this.#consoleObjectResult["_2_dotEntityVSGravity"] =
+            dotEntityVSGravity.toFixed(2)
+        ;
+        
+        if(dotEntityVSGravity <= 0.9)
+        {
+            this.#consoleObjectResult["_2_dotEntityVSGravityWarning"] = "dotEntityVSGravity too far off!";
+        }
+
+        this.#consoleObjectResult["_2_dotVisualVSGravity"] =
+            dotVisualVSGravity.toFixed(2)
+        ;
+        
+        if(dotVisualVSGravity <= 0.9)
+        {
+            this.#consoleObjectResult["_2_dotVisualVSGravityWarning"] = "dotVisualVSGravity too far off!";
+        }
+
+        this.#consoleObjectResult["_2_transitionRemainingAngles"] =
             this.#componentInstanceCamera
                 .methodGetTransitionRemainingAngle()
                     .toFixed(2);
 
-        this.#consoleObjectResult.cameraPitch =
+        this.#consoleObjectResult["_3_cameraPitch"] =
             this.#componentInstanceCamera
                 .methodGetPitch()
                     .toFixed(2);
 
-        this.#consoleObjectResult.cameraYaw =
+        this.#consoleObjectResult["_3_cameraYaw"] =
             this.methodVec3Rounding(
                 cameraYaw
             )
         ;
 
-        this.#consoleObjectResult.velocity =
+        this.#consoleObjectResult["_3_velocity"] =
             this.methodVec3Rounding(
                 velocity
             )
         ;
 
-        this.#consoleObjectResult.velocityScalarAlongUp =
+        this.#consoleObjectResult["_3_velocityScalarAlongUp"] =
             this.#componentInstanceVelocity
                 .methodGetVelocityAlongAxisScalar(dirUpGravity)
                     .toFixed(2)
         ;
 
-        this.#consoleObjectResult.velocityAlongUp =
+        this.#consoleObjectResult["_3_velocityAlongUp"] =
             this.methodVec3Rounding(
                 this.#componentInstanceVelocity
                     .methodGetVelocityAlongAxis(dirUpGravity)
             )
         ;
 
-        this.#consoleObjectResult.velocityAcrossUp =
+        this.#consoleObjectResult["_3_velocityAcrossUp"] =
             this.methodVec3Rounding(
                 this.#componentInstanceVelocity
                     .methodGetVelocityAcrossAxis(dirUpGravity)
@@ -464,6 +498,11 @@ export class EntityComponentDebugSnapshot extends EntityComponent
         const dirUpEntity = this
                 .methodGetDirUp();
         this.#consoleStringResult += "\n\tentity dir up : " + this.methodVec3ToString(dirUpEntity);
+
+        //
+        const dirUpVisual = this
+                .methodGetVisualDirUp();
+        this.#consoleStringResult += "\n\visual dir up : " + this.methodVec3ToString(dirUpVisual);
 
         //
         const transitionRemainingAngles = this.#componentInstanceCamera

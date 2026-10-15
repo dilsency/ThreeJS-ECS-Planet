@@ -1,19 +1,12 @@
+// base
 import * as THREE from "three";
+// ECS
 import {EntityComponent} from "../../classes/ECS/entity_component.js";
+//
+import { EnumModeDirUpTransition, EnumStateGravity } from "../../classes/enums.js";
 /*
 import {debugOverlaySetLine} from "./temp_debug_overlay.js"; // TEMPORARY - see that file's header comment
 */
-
-// #region enum
-
-// possible rename : EnumModeDirUpTransition
-export const EnumModeDirUpTransition = Object.freeze({
-    Rigid: "Rigid",
-    KeepPitch: "KeepPitch",
-    KeepView: "KeepView",
-    Frozen: "Frozen",
-});
-// #endregion enum
 
 export class EntityComponentCameraControllerFirstPersonInputMK extends EntityComponent
 {
@@ -394,8 +387,8 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
     #gravityTransitionAxis = null;
     #gravityTransitionRemainingAngle = 0;
     #gravityTransitionAngularSpeed = Math.PI;
-    #gravityTransitionAngularSpeedMin = Math.PI;
-    #gravityTransitionAngularSpeedMax = Math.PI * 4;
+    #gravityTransitionAngularSpeedMin = Math.PI / 4;
+    #gravityTransitionAngularSpeedMax = Math.PI * 2;
 
     // possible rename : modeDirUpTransition
     #modeDirUpTransition = EnumModeDirUpTransition.Rigid;
@@ -633,33 +626,53 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
     
 
     //
-    methodOnFallingDistanceChanged(nameOfState)
-    {
-        // alias function
-        this.methodSetGravityTransitionAngularSpeed(nameOfState);
-    }
-    methodSetGravityTransitionAngularSpeed(nameOfState)
-    {
-        // todo : just change this ONCE depending on the gravity distance?
-
-        // depending on the distance from the planet
-        switch(nameOfState){
-            case "Falling":
-                this.#pitchShouldClamp = true;
-                this.#gravityTransitionAngularSpeed = this.#gravityTransitionAngularSpeedMax;
-                break;
-            case "FallingFar":
-                this.#pitchShouldClamp = true;
-                this.#gravityTransitionAngularSpeed = this.#gravityTransitionAngularSpeedMin;
-                break;
-            case "Orbit":
-                this.#pitchShouldClamp = false;
-                this.#gravityTransitionAngularSpeed = this.#gravityTransitionAngularSpeedMin;
-                break;
-        }
-    }
     methodUpdateUpDirectionTransition(timeElapsed, timeDelta)
     {
+        // #region debug
+        if(import.meta.env.DEV)
+        {
+            if(
+                this.#gravityTransitionRemainingAngle <= 0
+                && this.#modeDirUpTransition != EnumModeDirUpTransition.Frozen
+            )
+            {
+                const dirUp = this.methodGetDirUp().clone();
+                const dot = this
+                    .methodGetVisualDirUp()
+                        .dot(
+                            dirUp
+                        )
+                ;
+                if(dot <= 0.9)
+                {
+                    console.error("we aren't aligned, but we have no remaining angles");
+
+                    //
+                    const consoleLogObject = {};
+                    consoleLogObject.dot = dot;
+                    consoleLogObject.modeDirUpTransition = this.#modeDirUpTransition;
+                    consoleLogObject.gravityTransitionRemainingAngle = this.#gravityTransitionRemainingAngle;
+                    consoleLogObject.visualDirUp = this
+                        .methodGetVisualDirUp();
+                    consoleLogObject.dirUp = dirUp;
+
+                    //
+                    if(this.#gravityTransitionAxis != null)
+                    {
+                        const axisTransition = this.#gravityTransitionAxis.clone();
+                        const axisTransitionLengthSquared = axisTransition.lengthSq();
+                        consoleLogObject.gravityTransitionAxis = axisTransition;
+                        consoleLogObject.gravityTransitionAxisLengthSq = axisTransitionLengthSquared;
+                    }
+
+                    //
+                    console.log(consoleLogObject);
+                    console.log("[ALIGN]", JSON.stringify(consoleLogObject));
+                }
+            }
+        }
+        // #endregion debug
+
         // #region early return
         if(this.#modeDirUpTransition == EnumModeDirUpTransition.Frozen)
         {
@@ -735,7 +748,7 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
                 break;
             case EnumModeDirUpTransition.KeepView:
                 //
-                this.#methodLookInDirectionWithDirUp(this.#methodGetVisualDirUp(), prevForward, false);
+                this.#methodLookInDirectionWithDirUp(this.methodGetVisualDirUp(), prevForward, false);
 
                 //
                 break;
@@ -775,7 +788,7 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
     // #endregion getters that calculate
 
     // move... somewhere
-    #methodGetVisualDirUp()
+    methodGetVisualDirUp()
     {
         // we don't need the current planet-face's normal direction
         // we need the actual live up direction of the cameraPivot
@@ -801,8 +814,9 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
         //if(this.#modeDirUpTransition == EnumModeDirUpTransition.Frozen){return;}
 
         //
-        const visualDirUp = this.#methodGetVisualDirUp();
+        const visualDirUp = this.methodGetVisualDirUp();
         var angle = visualDirUp.angleTo(paramDirUp);
+        const epsilon = 1e-12;
 
         //
         this.#gravityTransitionAxis =
@@ -813,7 +827,7 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
         // if we have a useable size
         // "the cross-product is non-zero"
         // we can just normalize it, and use our angle calculated previously
-        if(this.#gravityTransitionAxis.lengthSq() > 1e-12)
+        if(this.#gravityTransitionAxis.lengthSq() > epsilon)
         {
             this.#gravityTransitionAxis.normalize();
         }
@@ -880,7 +894,8 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
         //if(this.#modeDirUpTransition == EnumModeDirUpTransition.Frozen){return;}
 
         //
-        const visualDirUp = this.#methodGetVisualDirUp();
+        const visualDirUp = this.methodGetVisualDirUp();
+        const epsilon = 1e-12;
 
         // the cross product creates a perpendicular / orthogonal vector to those
         // what this will accomplish, I do not know
@@ -889,10 +904,20 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
         this.#gravityTransitionAxis =
             new THREE.Vector3()
                 .crossVectors(visualDirUp, paramDirUp)
-                .normalize();
+        ;
+        const squareLength = this.#gravityTransitionAxis.lengthSq();
+        this.#gravityTransitionAxis.normalize()
 
         // how many degrees we have left to rotate / transition
         this.#gravityTransitionRemainingAngle = visualDirUp.angleTo(paramDirUp);
+
+        // error handling : antiparallell
+        // note that this is already handled in methodSetDirUpWithoutTransition()
+        // for now we just console.error
+        if(squareLength <= epsilon && visualDirUp.dot(paramDirUp) < 0)
+        {
+            console.error("() methodSetDirUp antiparallell");
+        }
 
         // we update our perpendiculars immediately
         // this will cause our movement to be accurate immediately
@@ -1287,6 +1312,70 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
             this.methodUpdatePerpendiculars(false);
     }
     // #endregion methods private
+
+    // #region state machine
+
+    methodOnStateGravityChanged(prevState, newState)
+    {
+        // our main handler
+        // changed from before, where each pair of states had their own handler
+        // now we can just use a switch-case structure
+
+        switch(newState)
+        {
+            case EnumStateGravity.Orbit:
+                this.#modeDirUpTransition = EnumModeDirUpTransition.Frozen;
+                this.#pitchShouldClamp = false;
+                this.#gravityTransitionAngularSpeed = this.#gravityTransitionAngularSpeedMin;
+                break;
+            case EnumStateGravity.Stratosphere:
+                this.#modeDirUpTransition =
+                    (prevState == EnumStateGravity.Orbit
+                        ? EnumModeDirUpTransition.Frozen
+                        : EnumModeDirUpTransition.KeepPitch
+                    );
+                this.#pitchShouldClamp = true;
+                this.#gravityTransitionAngularSpeed = this.#gravityTransitionAngularSpeedMin;
+                break;
+            default:
+                this.#modeDirUpTransition = EnumModeDirUpTransition.KeepPitch;
+                this.#pitchShouldClamp = true;
+                if(prevState == EnumStateGravity.Stratosphere)
+                {
+                    this.#gravityTransitionAngularSpeed = this.#gravityTransitionAngularSpeedMin;
+                }
+                else {
+                    this.#gravityTransitionAngularSpeed = this.#gravityTransitionAngularSpeedMax;
+                }
+                break;
+        }
+    }
+    methodOnFallingDistanceChanged(timeElapsed, timeDelta, nameOfState)
+    {
+        // alias function
+        this.methodSetGravityTransitionAngularSpeed(timeElapsed, timeDelta, nameOfState);
+    }
+    methodSetGravityTransitionAngularSpeed(timeElapsed, timeDelta, nameOfState)
+    {
+        // todo : just change this ONCE depending on the gravity distance?
+
+        // depending on the distance from the planet
+        switch(nameOfState){
+            case EnumStateGravity.Falling:
+                this.#pitchShouldClamp = true;
+                this.#gravityTransitionAngularSpeed = this.#gravityTransitionAngularSpeedMax;
+                break;
+            case EnumStateGravity.Stratosphere:
+                this.#pitchShouldClamp = true;
+                this.#gravityTransitionAngularSpeed = this.#gravityTransitionAngularSpeedMin;
+                break;
+            case EnumStateGravity.Orbit:
+                this.#pitchShouldClamp = false;
+                this.#gravityTransitionAngularSpeed = this.#gravityTransitionAngularSpeedMin;
+                break;
+        }
+    }
+    // #endregion state machine
 
     // #region handlers
     methodHandleUpdatePosition(paramMessage)

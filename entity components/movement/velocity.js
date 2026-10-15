@@ -1,5 +1,9 @@
+// base
 import * as THREE from "three";
+// ECS
 import { EntityComponent } from "../../classes/ECS/entity_component";
+//
+import { EnumStateGravity } from "../../classes/enums.js";
 
 export class EntityComponentVelocity extends EntityComponent
 {
@@ -11,6 +15,7 @@ export class EntityComponentVelocity extends EntityComponent
     #frictionVertical = 0.995;
     //
     #velocityCap = 15.0;
+    #velocityCapChase = 15.0;
     #velocityCapMin = 15.0;
     #velocityCapMax = 115.0;
     //
@@ -54,7 +59,9 @@ export class EntityComponentVelocity extends EntityComponent
         // #region body
 
         //
-        //if(this.#velocity == null){console.error("no vel");return;}
+
+        // we chase/lerp/ease velocityCap here
+        this.methodChaseVelocityCap(timeElapsed, timeDelta);
 
         // we don't need to do anything if velocity is zero
         const isVelocityZero = this.methodGetIsVelocityZero(); 
@@ -123,6 +130,31 @@ export class EntityComponentVelocity extends EntityComponent
         // #endregion lazy end
     }
     // #endregion lazy
+
+    // #region methodUpdate delegates/extracts
+    methodChaseVelocityCap(timeElapsed, timeDelta)
+    {
+        if(this.#velocityCap == this.#velocityCapChase){return;}
+
+        //
+        const diff = Math.abs(this.#velocityCap - this.#velocityCapChase);
+
+        //
+        var stepSpeed = 50.0;
+
+        //
+        var stepSize =
+            Math.min(
+                diff,
+                stepSpeed * timeDelta
+            );
+
+        if(this.#velocityCap > this.#velocityCapChase){stepSize *= -1;}
+
+        //
+        this.#velocityCap += stepSize;
+    }
+    // #endregion methodUpdate delegates/extracts
     
     // #region getters that calculate
     methodGetDirUpFromGravity()
@@ -174,7 +206,7 @@ export class EntityComponentVelocity extends EntityComponent
         var frictionHorizontalResult = this.#frictionHorizontal;
 
         //
-        if(this.#componentInstanceGravity.methodGetState() == "Landed")
+        if(this.#componentInstanceGravity.methodGetState() == EnumStateGravity.Landed)
         {
             frictionHorizontalResult *= this.#frictionHorizontalMultiplierLanded;
         }
@@ -198,25 +230,45 @@ export class EntityComponentVelocity extends EntityComponent
     }
 
     //
-    methodOnFallingDistanceChanged(nameOfState)
+    methodOnFallingDistanceChanged(timeElapsed, timeDelta, nameOfState)
     {
         // alias function
-        this.methodSetVelocityCap(nameOfState);
+        this.methodSetVelocityCap(timeElapsed, timeDelta, nameOfState);
     }
-    methodSetVelocityCap(nameOfState)
+    methodSetVelocityCap(timeElapsed, timeDelta, nameOfState)
     {
+        // new idea
+        // instead of hard-setting velocity cap
+        // we chase it in methodUpdate()
+        // aka lerp
+
         switch(nameOfState)
         {
-            case "Falling":
+            case EnumStateGravity.Falling:
+                this.#velocityCapChase = this.#velocityCapMin;
+                break;
+            case EnumStateGravity.Stratosphere:
+                this.#velocityCapChase = this.#velocityCapMin;
+                break;
+            case EnumStateGravity.Orbit:
+                this.#velocityCapChase = this.#velocityCapMax;
+                break;
+        }
+        
+        /*
+        switch(nameOfState)
+        {
+            case EnumStateGravity.Falling:
                 this.#velocityCap = this.#velocityCapMin;
                 break;
-            case "FallingFar":
-                this.#velocityCap = this.#velocityCapMin;
+            case EnumStateGravity.Stratosphere:
+                this.#velocityCap = clampedRes;
                 break;
-            case "Orbit":
+            case EnumStateGravity.Orbit:
                 this.#velocityCap = this.#velocityCapMax;
                 break;
         }
+                */
     }
 
     //

@@ -1,5 +1,9 @@
+// base
 import * as THREE from "three";
+// ECS
 import {EntityComponent} from "../../classes/ECS/entity_component.js";
+//
+import { EnumStateGravity } from "../../classes/enums.js";
 /*
 import {debugOverlaySetLine} from "./temp_debug_overlay.js"; // TEMPORARY - see that file's header comment
 */
@@ -327,7 +331,7 @@ export class EntityComponentPlayerController extends EntityComponent
     }
 
 
-    methodUpdate()
+    methodUpdate(timeElapsed, timeDelta)
     {
         // #region lazy
         this.#methodOnLazyLoadInit();
@@ -412,17 +416,17 @@ export class EntityComponentPlayerController extends EntityComponent
         //
         if(this.#componentInstanceInput.keys.jump == true)
         {
-            this.methodExecuteActionJump();
+            this.methodExecuteActionJump(timeElapsed, timeDelta);
         }
         //
         if(this.#componentInstanceInput.keys.teleportout == true)
         {
-            this.methodExecuteActionTeleportOut(positionResult);
+            this.methodExecuteActionTeleportOut(timeElapsed, timeDelta, positionResult);
         }
 
         // if we are currently jumping
         // we need to eventually transition to falling
-        this.methodShouldJumpingTransitionToFalling();
+        this.methodShouldJumpingTransitionToFalling(timeElapsed, timeDelta);
 
         // early return: we don't do anything if we don't have anything
         const isSameX = (this.#cameraPivot.position.x == positionResult.x);
@@ -464,24 +468,24 @@ export class EntityComponentPlayerController extends EntityComponent
     }
 
     //
-    methodOnFallingDistanceChanged(nameOfState)
+    methodOnFallingDistanceChanged(timeElapsed, timeDelta, nameOfState)
     {
         // alias function
-        this.methodSetMovementSpeed(nameOfState);
+        this.methodSetMovementSpeed(timeElapsed, timeDelta, nameOfState);
     }
-    methodSetMovementSpeed(nameOfState)
+    methodSetMovementSpeed(timeElapsed, timeDelta, nameOfState)
     {
         switch(nameOfState)
         {
-            case "Falling":
+            case EnumStateGravity.Falling:
                 this.#speedLeftRight = this.#speedLeftRightMin;
                 this.#speedForwardBack = this.#speedForwardBackMin;
                 break;
-            case "FallingFar":
+            case EnumStateGravity.Stratosphere:
                 this.#speedLeftRight = this.#speedLeftRightMin;
                 this.#speedForwardBack = this.#speedForwardBackMin;
                 break;
-            case "Orbit":
+            case EnumStateGravity.Orbit:
                 this.#speedLeftRight = this.#speedLeftRightMax;
                 this.#speedForwardBack = this.#speedForwardBackMax;
                 break;
@@ -489,14 +493,14 @@ export class EntityComponentPlayerController extends EntityComponent
     }
 
     // #region execute actions
-    methodExecuteActionJump()
+    methodExecuteActionJump(timeElapsed, timeDelta)
     {
         // we need the gravity 
         if(this.#componentInstanceGravity == null){return;}
 
         // if we are not in the landed state
         // we cannot jump
-        if(this.#componentInstanceGravity.methodGetState() != "Landed"){return;}
+        if(this.#componentInstanceGravity.methodGetState() != EnumStateGravity.Landed){return;}
 
         // we also need the velocity component
         if(this.#componentInstanceVelocity == null){return;}
@@ -510,14 +514,14 @@ export class EntityComponentPlayerController extends EntityComponent
 
         // we now change state
         // this should avoid some jank with gravity trying to pull us down
-        this.#componentInstanceGravity.methodTransitionTo("Jumping");
+        this.#componentInstanceGravity.methodTransitionTo(timeElapsed, timeDelta, EnumStateGravity.Jumping);
 
         // we scale the direction by our intended speed
         const scaledDir = dir.multiplyScalar(this.#jumpSpeed);
         // then we apply upwards speed, along the gravity "axis"
         this.#componentInstanceVelocity.methodAddToVelocity(scaledDir.x, scaledDir.y, scaledDir.z);
     }
-    methodExecuteActionTeleportOut(positionResult)
+    methodExecuteActionTeleportOut(timeElapsed, timeDelta, positionResult)
     {
         // we don't use velocity for this
 
@@ -557,16 +561,16 @@ export class EntityComponentPlayerController extends EntityComponent
         // or do a distance check here?
         // we can get:
         // falling, fallingfar, orbit
-        this.#componentInstanceGravity.methodTransitionTo("Orbit");
+        this.#componentInstanceGravity.methodTransitionTo(timeElapsed, timeDelta, EnumStateGravity.Orbit);
     }
     // #endregion execute actions
 
     //
-    methodShouldJumpingTransitionToFalling()
+    methodShouldJumpingTransitionToFalling(timeElapsed, timeDelta)
     {
         //
         if(this.#componentInstanceGravity == null){return;}
-        if(this.#componentInstanceGravity.methodGetState() != "Jumping"){return;}
+        if(this.#componentInstanceGravity.methodGetState() != EnumStateGravity.Jumping){return;}
         if(this.#componentInstanceVelocity == null){return;}
 
         // we get gravity "axis" direction
@@ -574,11 +578,11 @@ export class EntityComponentPlayerController extends EntityComponent
         // we use it to check if our velocity along the axis is 0 or negative
         const isGravityAxisVelocityZeroOrNeg = this.#componentInstanceVelocity.methodGetIsVelocityAlongAxisZeroOrNegative(dir);
         // we double-check that we are in the right state, too
-        if(this.#componentInstanceGravity.methodGetState() == "Jumping" && isGravityAxisVelocityZeroOrNeg)
+        if(this.#componentInstanceGravity.methodGetState() == EnumStateGravity.Jumping && isGravityAxisVelocityZeroOrNeg)
         {
             // if so
             // change state to falling again
-            this.#componentInstanceGravity.methodTransitionTo("Falling");
+            this.#componentInstanceGravity.methodTransitionTo(timeElapsed, timeDelta, EnumStateGravity.Falling);
         }
     }
 

@@ -3,7 +3,10 @@
 import * as THREE from "three";
 // ECS
 import {EntityComponent} from "../../classes/ECS/entity_component.js";
+//
 import { StateMachine } from "../../classes/state-machine/state_machine.js";
+//
+import { EnumStateGravity } from "../../classes/enums.js";
 
 //
 export class EntityComponentPlanetModel extends EntityComponent
@@ -1262,49 +1265,68 @@ export class EntityComponentGravity extends EntityComponent
         if(params.planet != null){this.#planet = params.planet;}
 
         // state machine
-        this.#stateMachine = new StateMachine("None");
-        this.#stateMachine.methodRegisterHandler("Falling", "Landed", () => {
+        this.#stateMachine = new StateMachine(EnumStateGravity.None);
+
+        // generic handler callback : will be invoked on any change
+        // allows the componentInstance to handle it as they see fit
+        this.#stateMachine.methodRegisterHandlerOnAny(
+            (timeElapsed, timeDelta, prevState, newState) =>
+            {
+                this.#componentInstanceOptionalCameraControllerFirstPerson
+                    ?.methodOnStateGravityChanged(prevState, newState)
+                ;
+
+                if(prevState == EnumStateGravity.Orbit && newState == EnumStateGravity.Stratosphere)
+                {
+                    console.log("entered!");
+                    this.#componentInstanceVelocity.methodClampVelocity();
+                }
+            }
+        );
+
+        //
+        this.#stateMachine.methodRegisterHandler(EnumStateGravity.Falling, EnumStateGravity.Landed, (timeElapsed, timeDelta) => {
             console.log("landed from falling!");
-            this.methodNullifyGravity();
+            this.methodNullifyGravity(timeElapsed, timeDelta);
         });
-        this.#stateMachine.methodRegisterHandler("Landed", "Crossing", () => {
+        this.#stateMachine.methodRegisterHandler(EnumStateGravity.Landed, EnumStateGravity.CrossingOver, (timeElapsed, timeDelta) => {
             console.log("cross!");
-            this.methodOnCrossingOver();
+            this.methodOnCrossingOver(timeElapsed, timeDelta);
         });
-        this.#stateMachine.methodRegisterHandler("Crossing", "Landed", () => {
+        this.#stateMachine.methodRegisterHandler(EnumStateGravity.CrossingOver, EnumStateGravity.Landed, (timeElapsed, timeDelta) => {
             console.log("landed from cross!");
         });
-        this.#stateMachine.methodRegisterHandler("Landed", "Jumping", () => {
+        this.#stateMachine.methodRegisterHandler(EnumStateGravity.Landed, EnumStateGravity.Jumping, (timeElapsed, timeDelta) => {
             console.log("jump!");
-            //this.methodExecuteActionJump();
+            //this.methodExecuteActionJump(timeElapsed, timeDelta);
         });
-        this.#stateMachine.methodRegisterHandler("Jumping", "Falling", () => {
+        this.#stateMachine.methodRegisterHandler(EnumStateGravity.Jumping, EnumStateGravity.Falling, (timeElapsed, timeDelta) => {
             console.log("apex of jump!");
         });
 
         // test
-        this.#stateMachine.methodRegisterHandler("Falling", "FallingFar", () => {
-            this.methodOnFallingDistanceChanged("FallingFar");
+        this.#stateMachine.methodRegisterHandler(EnumStateGravity.Falling, EnumStateGravity.Stratosphere, (timeElapsed, timeDelta) => {
+            this.methodOnFallingDistanceChanged(timeElapsed, timeDelta, EnumStateGravity.Stratosphere);
         });
-        this.#stateMachine.methodRegisterHandler("FallingFar", "Falling", () => {
-            this.methodOnFallingDistanceChanged("Falling");
+        this.#stateMachine.methodRegisterHandler(EnumStateGravity.Stratosphere, EnumStateGravity.Falling, (timeElapsed, timeDelta) => {
+            this.methodOnFallingDistanceChanged(timeElapsed, timeDelta, EnumStateGravity.Falling);
         });
-        this.#stateMachine.methodRegisterHandler("FallingFar", "Orbit", () => {
-            this.methodOnFallingDistanceChanged("Orbit");
+        this.#stateMachine.methodRegisterHandler(EnumStateGravity.Stratosphere, EnumStateGravity.Orbit, (timeElapsed, timeDelta) => {
+            this.methodOnFallingDistanceChanged(timeElapsed, timeDelta, EnumStateGravity.Orbit);
         });
-        this.#stateMachine.methodRegisterHandler("None", "Orbit", () => {
-            this.methodOnFallingDistanceChanged("Orbit");
+        this.#stateMachine.methodRegisterHandler(EnumStateGravity.None, EnumStateGravity.Orbit, (timeElapsed, timeDelta) => {
+            this.methodOnFallingDistanceChanged(timeElapsed, timeDelta, EnumStateGravity.Orbit);
         });
-        this.#stateMachine.methodRegisterHandler("Orbit", "FallingFar", () => {
+        this.#stateMachine.methodRegisterHandler(EnumStateGravity.Orbit, EnumStateGravity.Stratosphere, (timeElapsed, timeDelta) => {
             // we need to also update the current up direction according to the face, in this case
             this.methodSetFaceIndexToNearest(false);
-            this.methodOnFallingDistanceChanged("FallingFar");
+            this.methodOnFallingDistanceChanged(timeElapsed, timeDelta, EnumStateGravity.Stratosphere);
         });
-        this.#stateMachine.methodRegisterHandler("None", "FallingFar", () => {
-            this.methodOnFallingDistanceChanged("FallingFar");
+        this.#stateMachine.methodRegisterHandler(EnumStateGravity.None, EnumStateGravity.Stratosphere, (timeElapsed, timeDelta) => {
+            this.methodOnFallingDistanceChanged(timeElapsed, timeDelta, EnumStateGravity.Stratosphere);
         });
-        this.#stateMachine.methodRegisterHandler("None", "Falling", () => {
-            this.methodOnFallingDistanceChanged("Falling");
+        this.#stateMachine.methodRegisterHandler(EnumStateGravity.None, EnumStateGravity.Falling, (timeElapsed, timeDelta) => {
+            this.methodOnFallingDistanceChanged(timeElapsed, timeDelta, EnumStateGravity.Falling);
         });
     }
     methodInitialize()
@@ -1352,19 +1374,19 @@ export class EntityComponentGravity extends EntityComponent
         //
         switch(currentState)
         {
-            case "Orbit":
+            case EnumStateGravity.Orbit:
                 this.methodUpdateByStateOrbit(timeElapsed, timeDelta, prevPosition);
                 break;
-            case "FallingFar":
-                this.methodUpdateByStateFallingFar(timeElapsed, timeDelta, prevPosition);
+            case EnumStateGravity.Stratosphere:
+                this.methodUpdateByStateStratosphere(timeElapsed, timeDelta, prevPosition);
                 break;
-            case "Falling":
+            case EnumStateGravity.Falling:
                 this.methodUpdateByStateFalling(timeElapsed, timeDelta, prevPosition);
                 break;
-            case "Landed":
+            case EnumStateGravity.Landed:
                 this.methodUpdateByStateLanded(timeElapsed, timeDelta, prevPosition);
                 break;
-            case "Jumping":
+            case EnumStateGravity.Jumping:
                 this.methodUpdateByStateJumping(timeElapsed, timeDelta, prevPosition);
                 break;
         }
@@ -1378,7 +1400,7 @@ export class EntityComponentGravity extends EntityComponent
     {
         if (!this.#isWithinFaceWallsWithLeeway)
         {
-            this.#stateMachine.methodTransitionTo("Crossing");
+            this.#stateMachine.methodTransitionTo(timeElapsed, timeDelta, EnumStateGravity.CrossingOver);
         }
     }
     methodUpdateByStateJumping(timeElapsed, timeDelta, prevPosition)
@@ -1407,9 +1429,9 @@ export class EntityComponentGravity extends EntityComponent
         );
 
         // we double-check that we are in the right state, too
-        if(this.#stateMachine.methodGetCurrentState() == "Jumping" && isZeroOrNeg)
+        if(this.#stateMachine.methodGetCurrentState() == EnumStateGravity.Jumping && isZeroOrNeg)
         {
-            this.#stateMachine.methodTransitionTo("Falling");
+            this.#stateMachine.methodTransitionTo(timeElapsed, timeDelta, EnumStateGravity.Falling);
         }
         
     }
@@ -1421,7 +1443,7 @@ export class EntityComponentGravity extends EntityComponent
         if (this.#distanceToPlanetCenter < this.#componentInstancePlanetFaces.methodGetDistanceState(1))
         {
             //
-            this.#stateMachine.methodTransitionTo("FallingFar");
+            this.#stateMachine.methodTransitionTo(timeElapsed, timeDelta, EnumStateGravity.Stratosphere);
         }
         else {
             //
@@ -1431,15 +1453,53 @@ export class EntityComponentGravity extends EntityComponent
             this.#methodApplyGravityTowardsPlanetCenter();
         }
     }
-    methodUpdateByStateFallingFar(timeElapsed, timeDelta, prevPosition)
+    methodGetSubstateStratosphere()
+    {
+        // return a string of the "substate" we are in
+        if(this.#distanceToPlanetCenter >= this.#componentInstancePlanetFaces.methodGetDistanceState(1)){return "AboveRange";}
+        if(this.#distanceToFloor < this.#componentInstancePlanetFaces.methodGetDistanceState(0)){return "BelowRange";}
+        if(!this.#isWithinFace){return "OutsideWalls";}
+        return "Default";
+    }
+    methodUpdateByStateStratosphere(timeElapsed, timeDelta, prevPosition)
     {
         // see state "Falling" for commentary
+        
+        //
+        const substate = this.methodGetSubstateStratosphere();
+
+        //
+        switch(substate)
+        {
+            case "AboveRange":
+                this.#stateMachine.methodTransitionTo(timeElapsed, timeDelta, EnumStateGravity.Orbit);
+                break;
+            case "BelowRange":
+                this.#stateMachine.methodTransitionTo(timeElapsed, timeDelta, EnumStateGravity.Falling);
+                break;
+            case "OutsideWalls":
+                this.methodShouldUpdateToNearestFace(prevPosition);
+                this.#methodApplyDownwardGravity(this.#gravitySpeed * 0.1);
+                break;
+            default:
+                if(this.#stateMachine.methodGetPrevState() == EnumStateGravity.Orbit)
+                {
+                    this.#methodApplyMixedGravity(0.5, this.#gravitySpeed);
+                }
+                else
+                {
+                    this.#methodApplyDownwardGravity(this.#gravitySpeed);
+                }
+                break;
+        }
+
+        /*
 
         // 
         if(this.#distanceToPlanetCenter >= this.#componentInstancePlanetFaces.methodGetDistanceState(1))
         {
             //
-            this.#stateMachine.methodTransitionTo("Orbit");
+            this.#stateMachine.methodTransitionTo(timeElapsed, timeDelta, EnumStateGravity.Orbit);
         }
         else if(!this.#isWithinFace)
         {
@@ -1452,14 +1512,23 @@ export class EntityComponentGravity extends EntityComponent
         //
         else if(this.#isWithinFace && !this.#isWithinFloorRange)
         {
-            //
-            this.#methodApplyDownwardGravity(this.#gravitySpeed);
+            // we handle this differently based on the previous state
+            if(this.#stateMachine.methodGetPrevState() == EnumStateGravity.Orbit)
+            {
+                this.#methodApplyMixedGravity(0.5, this.#gravitySpeed);
+            }
+            else
+            {
+                this.#methodApplyDownwardGravity(this.#gravitySpeed);
+            }
         }
         else if (this.#isWithinFace && (this.#distanceToFloor < this.#componentInstancePlanetFaces.methodGetDistanceState(0)))
         {
             //
-            this.#stateMachine.methodTransitionTo("Falling");
+            this.#stateMachine.methodTransitionTo(timeElapsed, timeDelta, EnumStateGravity.Falling);
         }
+
+        */
     }
     methodGetSubstateFalling()
     {
@@ -1482,7 +1551,7 @@ export class EntityComponentGravity extends EntityComponent
                 this.methodApplyUpwardForceIfBelowFloorPeak();
                 break;
             case "AboveRange":
-                this.#stateMachine.methodTransitionTo("FallingFar");
+                this.#stateMachine.methodTransitionTo(timeElapsed, timeDelta, EnumStateGravity.Stratosphere);
                 break;
             case "OutsideWalls":
                 this.methodShouldUpdateToNearestFace(prevPosition);
@@ -1492,10 +1561,10 @@ export class EntityComponentGravity extends EntityComponent
                 this.methodApplyUpwardForceIfBelowFloorPeak();
                 break;
             case "BelowRange":
-                this.#stateMachine.methodTransitionTo("Landed");
+                this.#stateMachine.methodTransitionTo(timeElapsed, timeDelta, EnumStateGravity.Landed);
                 break;
             case "WithinRange":
-                this.#stateMachine.methodTransitionTo("Landed");
+                this.#stateMachine.methodTransitionTo(timeElapsed, timeDelta, EnumStateGravity.Landed);
                 break;
             case "Default":
                 this.#methodApplyDownwardGravity(this.#gravitySpeed);
@@ -1512,7 +1581,7 @@ export class EntityComponentGravity extends EntityComponent
     {
         // only certain states
         const currentState = this.methodGetCurrentState();
-        if(!(currentState == "Landed" || currentState == "Crossing")){return;}
+        if(!(currentState == EnumStateGravity.Landed || currentState == EnumStateGravity.CrossingOver)){return;}
 
         // we have already calculated distance, and we don't need to do it again
         //this.#distanceToFloor = this.#componentInstancePlanetFaces.methodGetFloorDistance(prevPosition, this.#currentFaceIndex);
@@ -1565,7 +1634,7 @@ export class EntityComponentGravity extends EntityComponent
     }
 
     //
-    methodOnCrossingOver()
+    methodOnCrossingOver(timeElapsed, timeDelta)
     {
         //
         const prevPosition = this.methodGetPosition();
@@ -1583,22 +1652,22 @@ export class EntityComponentGravity extends EntityComponent
         this.methodNullifyGravity();
 
         //
-        this.methodTransitionTo("Landed");
+        this.methodTransitionTo(timeElapsed, timeDelta, EnumStateGravity.Landed);
     }
-    methodOnFallingDistanceChanged(nameOfState)
+    methodOnFallingDistanceChanged(timeElapsed, timeDelta, nameOfState)
     {
         // todo to-do to do : is this not what the broadcast message system and handlers is for!?
 
         // velocity is a mandatory component
         // camera controller and player controller , on the other hand, are not
 
-        this.#componentInstanceVelocity.methodOnFallingDistanceChanged(nameOfState);
+        this.#componentInstanceVelocity.methodOnFallingDistanceChanged(timeElapsed, timeDelta, nameOfState);
 
         // reminder : ?. is shorthand for (if not null do this, otherwise skip)
         // this lets us ignore all entities without those component, which is most of them :)
 
-        this.#componentInstanceOptionalPlayerController?.methodOnFallingDistanceChanged(nameOfState);
-        this.#componentInstanceOptionalCameraControllerFirstPerson?.methodOnFallingDistanceChanged(nameOfState);
+        this.#componentInstanceOptionalPlayerController?.methodOnFallingDistanceChanged(timeElapsed, timeDelta, nameOfState);
+        this.#componentInstanceOptionalCameraControllerFirstPerson?.methodOnFallingDistanceChanged(timeElapsed, timeDelta, nameOfState);
     }
 
     //
@@ -1828,25 +1897,30 @@ export class EntityComponentGravity extends EntityComponent
     // #endregion getters that delegate : state machine
 
     // #region setters that delegate : state machine
-    methodTransitionTo(newState)
+    methodTransitionTo(timeElapsed, timeDelta, newState)
     {
-        this.#stateMachine.methodTransitionTo(newState);
+        this.#stateMachine.methodTransitionTo(timeElapsed, timeDelta, newState);
     }
     // #endregion setters that delegate : state machine
 
     // #region setters aliases
-    methodSetState(newState){this.methodTransitionTo(newState);}
+    methodSetState(timeElapsed, timeDelta, newState){this.methodTransitionTo(timeElapsed, timeDelta, newState);}
     // #endregion setters aliases
 
     // #region private methods : gravity
-    #methodApplyGravityTowardsPlanetCenter()
+    #methodApplyMixedGravity(alpha, gravitySpeed)
+    {
+        this.#methodApplyDownwardGravity(alpha * gravitySpeed);
+        this.#methodApplyGravityTowardsPlanetCenter((1 - alpha) * gravitySpeed);
+    }
+    #methodApplyGravityTowardsPlanetCenter(gravitySpeed = 100.0)
     {
         //
         if(this.#componentInstanceVelocity == null){return;}
 
         //
         const dir = this.#componentInstancePlanetFaces.methodGetDirectionToPlanetCenter(this.methodGetPosition());
-        dir.multiplyScalar(100);
+        dir.multiplyScalar(gravitySpeed);
 
         //
         this.#componentInstanceVelocity.methodAddToVelocityVector3(dir);
@@ -1939,19 +2013,19 @@ export class EntityComponentGravity extends EntityComponent
         // we use dist to set our initial gravity state
         if(distanceToPlanetCenter >= this.#componentInstancePlanetFaces.methodGetDistanceState(1))
         {
-            this.methodSetState("Orbit");
+            this.methodSetState(null, null, EnumStateGravity.Orbit);
         }
         else if (distanceToPlanetFace >= this.#componentInstancePlanetFaces.methodGetDistanceState(0))
         {
-            this.methodSetState("FallingFar");
+            this.methodSetState(null, null, EnumStateGravity.Stratosphere);
         }
         else if (distanceToPlanetFace >= this.#distanceFromFloorIdeal)
         {
-            this.methodSetState("Falling");
+            this.methodSetState(null, null, EnumStateGravity.Falling);
         }
         else
         {
-            this.methodSetState("Landed");
+            this.methodSetState(null, null, EnumStateGravity.Landed);
         }
         // #endregion spawn
 
@@ -2147,7 +2221,7 @@ export class EntityComponentSpawnOnPlanetFace extends EntityComponent
         // we let the on-lazy-load of the gravity component do that instead
         // the simple reason for this is that the state needs velocity to function
         // and we only initialize that in gravity, not here
-        //this.methodSetStateInitial();
+        //this.methodSetStateInitial(null, null);
 
         // we get the user's camera
         // if they do not have that component, they aren't the user
