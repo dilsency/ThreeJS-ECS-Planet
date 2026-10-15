@@ -11,7 +11,7 @@
                     "entity": "planet",
                     "component": "EntityComponentPlanetFaces"
                 }},
-                "faceDistance": 100.0
+                "faceDistance": 300.0
         }},
         {"type": "EntityComponentGravity",
         "params": {
