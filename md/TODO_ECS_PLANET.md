@@ -476,3 +476,44 @@ the floor distance drops below 50, even slightly outside a face's walls.
 - **Files:** `entity components/movement/velocity.js` (`methodChaseVelocityCap`, `methodSetVelocityCap`, `methodUpdate`),
   `entity components/environment/planet.js` (`methodGetSubstateStratosphere`, `#methodApplyMixedGravity`,
   `#methodApplyDownwardGravity`, gravity's generic transition callback).
+
+## 14. After picking a world on the main menu, the player flashes close to the planet, then jumps far away
+
+**Symptom (reported 2026-10-15):** for a split second after pressing a world selection, the player appears very close to the planet.
+The next split second, they appear to have been moved far away from it.
+
+**Likely cause (read from the code, not yet confirmed at runtime):** the camera pivot is created at the origin and given no position
+(`main.js`, `cameraPivot = new THREE.Object3D()`; the `position.z = 5` line is commented out). `EntityComponentSpawnOnPlanetFace` only
+places the player once its lazy-load completes, and that waits until the planet's face data is ready (the planet model has to load and
+be parsed first), which takes some frames. Until then the scene renders from `(0, 0, 0)`. In `worldDefault.json` the planet is at
+`(0, 0, -50)` with radius 20, so the origin is only about 30 from its surface ("very close"). When the spawn finally runs, it moves the
+player to the face center plus the normal times `faceDistance` (now 300), and the view jumps far away.
+
+**To confirm:** sample the camera pivot's position on each of the first frames after the world loads (a `requestAnimationFrame` loop
+started on the menu click), and see which frame the position changes from the origin to the spawn position. The debug snapshot only
+exists after the lazy-load, so it cannot show this.
+
+**Options (not decided):**
+- **Don't render the world until the spawn has happened:** keep the menu or a loading screen up until `EntityComponentSpawnOnPlanetFace`
+  reports `methodGetIsReady()` (it already exposes it), then show the world. Probably the cleanest.
+- **Start the camera in a sensible place:** give the pivot an initial position that matches where the spawn will put it (e.g. read
+  `faceDistance` and the planet position), so the first frames are already roughly right. Fragile: the spawn face can be random.
+- **Hide the canvas for the first frames** (CSS opacity or the renderer skipping drawing) until the spawn has run. The smallest change,
+  but it hides the problem instead of fixing the ordering.
+- The same ordering issue may affect other entities that wait for the planet (gravity waits for the spawn component), so check that
+  the first frames are not also running gravity or camera logic with default values.
+
+**Direction chosen (2026-10-15): a rudimentary loading screen while we wait.** Sketch:
+- **Where it hooks in:** `EntityComponentSingletonContextInitialization.methodConfirm()` broadcasts `initialization.confirmed`
+  (the world generator builds the world on it, and `main_menu.js` listens to it to leave the menu); `methodReturnToMainMenu()`
+  broadcasts `initialization.returnedToMenu`. A small UI component, in the style of `main_menu.js`, would show a plain "loading"
+  overlay on `initialization.confirmed` and remove it on `initialization.returnedToMenu`.
+- **When it goes away:** each frame it checks that the local player entity's `EntityComponentSpawnOnPlanetFace.methodGetIsReady()` is
+  true (that flag already exists), then removes itself, so the first frame the player sees is already the spawn.
+- **Worlds without a spawn component** (non-planet worlds) must not wait forever: treat "no such component" as ready, and
+  consider a timeout that logs a warning.
+- Keep it rudimentary: an opaque full-screen element and some text. No progress bar needed.
+
+- **Files:** `main.js` (`cameraPivot` creation), `entity components/environment/planet.js` (`EntityComponentSpawnOnPlanetFace`
+  lazy-load), the world load / menu code (`entity components/generation/world_generator.js`, `main_menu.js`,
+  `context/singleton/context_initialization.js`) and a new small UI component for the loading screen (registered in `registry.js`).
