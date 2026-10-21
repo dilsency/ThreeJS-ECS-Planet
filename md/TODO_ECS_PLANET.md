@@ -514,6 +514,75 @@ exists after the lazy-load, so it cannot show this.
   consider a timeout that logs a warning.
 - Keep it rudimentary: an opaque full-screen element and some text. No progress bar needed.
 
+**Decision (2026-10-21): "version A", the initialization context is the hub.** `EntityComponentSingletonContextInitialization` already
+owns the confirm -> return lifecycle, and `EntityComponentMainMenu` already reacts to it; "ready" is the missing step.
+1. **Context:** add `methodReportReady(reason)` next to `methodConfirm()` in `context_initialization.js`. It ignores the call if the world
+   is not confirmed, and otherwise broadcasts `initialization.ready` (value: the reason, e.g. `"player.spawned"`) with
+   `methodSendMessageToEntitiesWithComponent("EntityComponentMainMenu", ...)`, in the same style as `initialization.confirmed`.
+2. **Spawn:** at the end of `EntityComponentSpawnOnPlanetFace`'s lazy-load, after its ready flag is set, report to the context:
+   `this.methodGetEntityByName("SingletonContextInitialization")?.methodGetComponent("EntityComponentSingletonContextInitialization")?.methodReportReady("player.spawned");`
+   Only the local player's spawn may report (remote players may have the same component): guard it there or in `methodReportReady`.
+3. **Loading screen:** a new component `EntityComponentLoadingScreen` in `entity components/ui/`, added **to the same entity as the main menu**
+   in `main.js` (next to `entityMainMenu.methodAddComponentWithName("EntityComponentMainMenu", ...)`, around line 257). Messages are
+   delivered to the whole entity, so it receives `initialization.confirmed` / `initialization.returnedToMenu` without any change to the
+   context's send lists. It shows on `initialization.confirmed`, hides on `initialization.ready` and on `initialization.returnedToMenu`.
+4. **Timeout:** in its `methodUpdate`, if the overlay has been up for about 10 seconds, hide it and `console.warn` (worlds with no spawn
+   component must not hang on it).
+5. **Reset:** the overlay's "waiting" state starts again on each `initialization.confirmed`, so picking a second world works.
+Note: the main menu and the world generator are added in `main.js` (not from JSON), so the new component is **not** registered in
+`registry.js`, which only holds the JSON-loadable ones.
+
 - **Files:** `main.js` (`cameraPivot` creation), `entity components/environment/planet.js` (`EntityComponentSpawnOnPlanetFace`
   lazy-load), the world load / menu code (`entity components/generation/world_generator.js`, `main_menu.js`,
-  `context/singleton/context_initialization.js`) and a new small UI component for the loading screen (registered in `registry.js`).
+  `context/singleton/context_initialization.js`) and a new small UI component for the loading screen (added in `main.js`).
+
+## 15. Audit: where could the ECS broadcast-message system be used, and is not?
+
+**Goal:** go through the places where components talk to each other directly (`methodGetComponent(...)` then a method call), and
+decide, case by case, whether the entity's message system (`methodSendMessageWithinEntity` / `methodRegisterMessageHandlerWithinEntity`,
+and `methodSendMessageToEntitiesWithComponent` across entities) is the better fit. Not a rewrite: a classification, then changes
+only where a message is genuinely clearer.
+
+**How the message system is used today (survey, 2026-10-19):**
+- *Sent by the entity's own setters:* `update.position`, `update.dir.up`, `update.dir.facing`, `update.rotation`, `update.rotations`
+  (`classes/ECS/entity.js`).
+- *Listened to:* `update.position` (camera controller, and two handlers in `test_objects.js`). `update.dir.up`, `update.rotation`
+  and `update.rotations` currently have **no listeners** (see item 9).
+- *Sent across entities:* `initialization.confirmed` / `initialization.returnedToMenu`, to the main menu and the world generator
+  (`context_initialization.js`; handlers in `main_menu.js` and `world_generator.js`).
+- A message is delivered synchronously, in the order handlers were registered, only within one entity (or to the entities that have
+  a named component). It carries no return value.
+
+**Candidates to look at first (direct calls that are really notifications):**
+- `EntityComponentGravity` -> velocity / player controller / camera: `methodOnFallingDistanceChanged(...)` and the generic
+  `methodOnStateGravityChanged(prevState, newState)`. The code already has a comment asking "is this not what the broadcast message
+  system and handlers is for!?". A `gravity.state.changed` message with `{prevState, newState}` would let each component subscribe
+  instead of gravity knowing all of them (and the optional-component `?.` checks would disappear).
+- *Readiness polling in the lazy-load methods:* gravity polls `spawn.methodGetIsReady()`, velocity waits for gravity, the camera waits for
+  its input sibling, the debug snapshot waits for several. A `component.ready` (or `player.spawned`) message could replace per-frame
+  polling. The loading screen (item 14) also needs a "spawn is ready" signal, so it is a natural first user.
+- `EntityComponentSpawnOnPlanetFace` -> camera: `methodSetDirUpWithoutTransition(...)` and `methodLookAt(...)` after spawning.
+- `EntityComponentGravity` -> camera `methodSetDirUp(...)` when the face changes or in `Orbit`. The entity already broadcasts
+  `update.dir.up`; check whether the camera could listen to that instead of being called.
+- Rotation changes (item 9): the camera could broadcast `update.rotations` for every rotation change, not only mouse-look.
+
+**Probably stay direct (queries, and commands that need a result or an exact order):** reading a value (`methodGetState()`,
+`methodGetVelocity()`, the debug snapshot's getters), adding velocity (`methodAddToVelocity...`), `methodNullifyGravity`, and anything
+where the order of two calls matters (e.g. the `Orbit` -> `Stratosphere` pair handler must run before the generic callback; a message
+would hide that order).
+
+**Questions to settle while auditing:**
+- The state machine already has its own handler system (`methodRegisterHandler`, `methodRegisterHandlerOnAny`). Should state changes be
+  *re-broadcast* as an entity message by one handler, so there is a single way for other components to hear about them?
+- Message names: keep the dotted style (`gravity.state.changed`), and put the names in one place (an enum, in the style of item 11) so
+  a typo is not silent. A handler registered under a misspelled name never fires and nothing complains.
+- Debuggability: a stack trace through a message is harder to follow than a direct call. Consider a dev-only log of every message sent.
+- Ordering and re-entrancy: a handler that sends another message runs nested, inside the sender's call. Note where that could surprise.
+
+**Suggested method:** `grep` for `methodGetComponent(` in code that runs after initialization, and label each cross-component call as
+*query*, *command with a result*, *notification*, or *readiness polling*. Only the last two are candidates. Do the loading screen's
+readiness message first, as the smallest real use.
+
+- **Files:** `classes/ECS/entity.js`, `classes/ECS/entity_component.js` (the message API), and the components above:
+  `entity components/environment/planet.js`, `movement/velocity.js`, `movement/player_controller.js`,
+  `movement/camera_controller_first_person.js`, `debug/debug_snapshot.js`.
