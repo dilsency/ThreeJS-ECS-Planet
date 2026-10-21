@@ -15,7 +15,7 @@ import {EntityComponent} from "./classes/ECS/entity_component.js";
 import {EntityComponentSingletonContextEngine} from "./entity components/context/singleton/context_engine.js";
 import {EntityComponentSingletonContextInitialization} from "./entity components/context/singleton/context_initialization.js";
 // generator components
-import {EntityComponentMainMenu} from "./entity components/ui/main_menu.js";
+import {EntityComponentMainMenu, EntityComponentLoadingScreen} from "./entity components/ui/main_menu.js";
 import {EntityComponentWorldGenerator} from "./entity components/generation/world_generator.js";
 // context components , less important
 import {EntityComponentSingletonContextModelCache} from "./entity components/context/singleton/context_model_cache.js";
@@ -255,6 +255,11 @@ function init()
         const entityMainMenu = new Entity(null);
         entityManager.methodAddEntity(entityMainMenu, "MainMenu");
         entityMainMenu.methodAddComponentWithName("EntityComponentMainMenu", new EntityComponentMainMenu(null));
+
+        // loading screen
+        // is added to the same entity as main menu
+        entityMainMenu.methodAddComponentWithName("EntityComponentLoadingScreen", new EntityComponentLoadingScreen(null));
+
 
         // world generator
         // this lets us NOT specify entities and entity-components below

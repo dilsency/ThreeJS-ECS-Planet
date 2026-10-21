@@ -2232,6 +2232,13 @@ export class EntityComponentSpawnOnPlanetFace extends EntityComponent
         // test : look at planet after spawning
         // will skip entities without a camera :)
         this.methodLookAt(this.#componentInstancePlanetFaces.methodGetFaceCenter(this.#faceIndex).clone());
+        
+        // #region broadcast
+        this.methodGetEntityByName("SingletonContextInitialization")
+            ?.methodGetComponent("EntityComponentSingletonContextInitialization")
+            ?.methodReportReady("player.spawned");
+        // #endregion broadcast
+        
         // #endregion spawn
 
         // #region lazy end
