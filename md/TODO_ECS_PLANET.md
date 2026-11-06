@@ -102,3 +102,44 @@ These need to be defined in **ONE** place, not re-declared/re-typed at each chec
   actually needed. Avoid the Context indirection until there's a concrete case for it.
 - **File:** `entity components/environment/planet.js` (search for `#isWithinFloorRange`,
   `#distanceFromFloorIdeal`, `>= 50.0`, `< 50.0`).
+
+## 6. Single shared time object; remove `timeElapsed` / `timeDelta` as parameters
+
+> Full design: `TIME_AND_MAIN_LOOP_THREEJS.md` (in the shared `threejs/` docs folder, not in
+> this repo). This item is only the work tracker.
+
+**Decision:** `main.js` stays the only place time is measured (`clock.getDelta()` /
+`getElapsedTime()`, `update()` around line 479). Each frame, right after those two reads and
+before `updateEntityComponentSystem()`, it calls `methodSetTime(...)` on ONE shared time
+object: a new startup context, `EntityComponentSingletonContextTime` on an entity named
+`"SingletonContextTime"` (separate from `...Engine`, which stays a plain holder). That object
+is the **single source of truth** for time.
+
+**It holds two clocks** (pause menu is wanted): real time (`realElapsed`/`realDelta`, never
+pauses) and game time (`gameElapsed`/`gameDelta`, derived in the setter from `paused` and
+`timeScale`). Large deltas are clamped once, at the source.
+
+**Why:** `methodInitialize()` and message handlers have no clock today (`entity.js:245/259`
+call `methodInitialize()` with no arguments; `entity.js:365` calls handlers with only the
+message). Anything created there that expires later (chat entries, projectiles, particles,
+buffs) needs `spawnedAt = now`. A shared object works in every place; the parameters only work
+in `methodUpdate`.
+
+**Phase 1 (start here): keep both.**
+- Add the time context, written once per frame in `main.js`.
+- Keep `methodUpdate(timeElapsed, timeDelta)` as it is, so nothing breaks.
+- New code that needs time outside `methodUpdate` reads the time object.
+
+**Phase 2 (explicit TODO): remove the parameters.**
+- Remove `timeElapsed` / `timeDelta` from every `methodUpdate` signature
+  (`EntityManager.methodUpdate`, `Entity.methodUpdate`, `EntityComponent.methodUpdate`, all
+  subclasses) and from the calls in `entity_manager.js:112`, `entity.js:330`, and `main.js:529`.
+- Components read time only via the time object. No second route.
+- Not purely mechanical: the old parameters carry **real** time, so each consumer must now
+  choose real vs game time explicitly.
+- Do it as its own focused commit.
+
+**Open:** `maxDelta` value; real vs game time for chat lifetimes (leaning real); what triggers
+pause and what must keep running during it (e.g. voice capture).
+
+First consumer: `EntityComponentChatList` message lifetimes (see voice build step 1).
