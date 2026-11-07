@@ -1,5 +1,7 @@
 import * as THREE from "three";
-import { EntityComponent } from "../../classes/ECS/entity_component";
+// #region ECS
+import { EntityComponent } from "../../classes/ECS/entity_component.js";
+// #endregion ECS
 
 export class EntityComponentVelocity extends EntityComponent
 {
