@@ -502,6 +502,7 @@ function update()
     entityComponentInstanceTime?.methodSetTime(clockTimeElapsed, clockTimeDelta);
 
     //
+    /*
     const secondsA = 1.0;
     const secondsB = 5.0;
     if(Math.round(clockTimeElapsed * 100) % (secondsA * 100) == 0)
@@ -512,6 +513,7 @@ function update()
     {
         entityComponentInstanceTime?.methodTogglePause();
     }
+    */
 
     // https://threejs.org/manual/#en/responsive
     updateWindowSize();
