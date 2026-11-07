@@ -11,9 +11,11 @@ import * as THREE from "three";
 import {EntityManager} from "./classes/ECS/entity_manager.js";
 import {Entity} from "./classes/ECS/entity.js";
 import {EntityComponent} from "./classes/ECS/entity_component.js";
-// context components , most important
+// #region context entity-components : most important
 import {EntityComponentSingletonContextEngine} from "./entity components/context/singleton/context_engine.js";
+import {EntityComponentSingletonContextTime} from "./entity components/context/singleton/context_time.js";
 import {EntityComponentSingletonContextInitialization} from "./entity components/context/singleton/context_initialization.js";
+// #endregion context entity-components : most important
 // generator components
 import {EntityComponentMainMenu} from "./entity components/ui/main_menu.js";
 import {EntityComponentWorldGenerator} from "./entity components/generation/world_generator.js";
@@ -24,6 +26,10 @@ import {EntityComponentSingletonContextLocalPlayerIdentity} from "./entity compo
 import {EntityComponentSingletonContextWorldLayout} from "./entity components/context/singleton/context_world_layout.js";
 import {EntityComponentSingletonContextPlayerInitialization} from "./entity components/context/singleton/context_player_initialization.js";
 import {EntityComponentSingletonContextEnvironment} from "./entity components/context/singleton/context_environment.js";
+// #region voice
+import {EntityComponentSingletonContextVoice} from "./entity components/context/singleton/context_voice.js";
+import {EntityComponentChatList} from "./entity components/ui/chat_list.js";
+// #endregion voice
 // entity components
 /*
 import {EntityComponentCameraControllerFirstPerson} from "./entity components/camera_controller_first_person.js";
@@ -59,6 +65,7 @@ var cameraFrustum;
 
 // ECS
 var entityManager;
+var entityComponentInstanceTime = null;
 
 //
 var cube;
@@ -214,36 +221,133 @@ function init()
         //
         console.log("init context components");
 
+        // time
+        const entityTime = new Entity(null);
+        entityManager
+            .methodAddEntity
+            (
+                entityTime,
+                "SingletonContextTime"
+            );
+        entityComponentInstanceTime = new EntityComponentSingletonContextTime(null);
+        entityTime
+            .methodAddComponentWithName
+            (
+                "EntityComponentSingletonContextTime",
+                entityComponentInstanceTime
+            );
+
         // main menu
         const entityInitialization = new Entity(null);
-        entityManager.methodAddEntity(entityInitialization, "SingletonContextInitialization");
-        entityInitialization.methodAddComponentWithName("EntityComponentSingletonContextInitialization", new EntityComponentSingletonContextInitialization(null));
+        entityManager
+            .methodAddEntity
+            (
+                entityInitialization,
+                "SingletonContextInitialization"
+            );
+        entityInitialization
+            .methodAddComponentWithName
+            (
+                "EntityComponentSingletonContextInitialization",
+                new EntityComponentSingletonContextInitialization(null)
+            );
 
         //
         const entityModelCache = new Entity(null);
-        entityManager.methodAddEntity(entityModelCache, "SingletonContextModelCache");
-        entityModelCache.methodAddComponentWithName("EntityComponentSingletonContextModelCache", new EntityComponentSingletonContextModelCache(null));
+        entityManager
+            .methodAddEntity
+            (
+                entityModelCache,
+                "SingletonContextModelCache"
+            );
+        entityModelCache
+            .methodAddComponentWithName
+            (
+                "EntityComponentSingletonContextModelCache",
+                new EntityComponentSingletonContextModelCache(null)
+            );
 
         //
         const entityLocalPlayerIdentity = new Entity(null);
-        entityManager.methodAddEntity(entityLocalPlayerIdentity, "SingletonContextLocalPlayerIdentity");
-        entityLocalPlayerIdentity.methodAddComponentWithName("EntityComponentSingletonContextLocalPlayerIdentity", new EntityComponentSingletonContextLocalPlayerIdentity(null));
+        entityManager
+            .methodAddEntity
+            (
+                entityLocalPlayerIdentity,
+                "SingletonContextLocalPlayerIdentity"
+            );
+        entityLocalPlayerIdentity
+            .methodAddComponentWithName
+            (
+                "EntityComponentSingletonContextLocalPlayerIdentity",
+                new EntityComponentSingletonContextLocalPlayerIdentity(null)
+            );
 
         //
         const entityEnvironment = new Entity(null);
-        entityManager.methodAddEntity(entityEnvironment, "SingletonContextEnvironment");
-        entityEnvironment.methodAddComponentWithName("EntityComponentSingletonContextEnvironment", new EntityComponentSingletonContextEnvironment(null));
+        entityManager
+            .methodAddEntity
+            (
+                entityEnvironment,
+                "SingletonContextEnvironment"
+            );
+        entityEnvironment
+            .methodAddComponentWithName
+            (
+                "EntityComponentSingletonContextEnvironment",
+                new EntityComponentSingletonContextEnvironment(null)
+            );
 
         //
         const entityWorldLayout = new Entity(null);
-        entityManager.methodAddEntity(entityWorldLayout, "SingletonContextWorldLayout");
-        entityWorldLayout.methodAddComponentWithName("EntityComponentSingletonContextWorldLayout", new EntityComponentSingletonContextWorldLayout(null));
+        entityManager
+            .methodAddEntity
+            (
+                entityWorldLayout,
+                "SingletonContextWorldLayout"
+            );
+        entityWorldLayout
+            .methodAddComponentWithName
+            (
+                "EntityComponentSingletonContextWorldLayout",
+                new EntityComponentSingletonContextWorldLayout(null)
+            );
 
         //
         const entityPlayerInitialization = new Entity(null);
-        entityManager.methodAddEntity(entityPlayerInitialization, "SingletonContextPlayerInitialization");
-        entityPlayerInitialization.methodAddComponentWithName("EntityComponentSingletonContextPlayerInitialization", new EntityComponentSingletonContextPlayerInitialization(null));
-    }
+        entityManager
+            .methodAddEntity
+            (
+                entityPlayerInitialization,
+                "SingletonContextPlayerInitialization"
+            );
+        entityPlayerInitialization
+            .methodAddComponentWithName
+            (
+                "EntityComponentSingletonContextPlayerInitialization",
+                new EntityComponentSingletonContextPlayerInitialization(null)
+            );
+
+        //
+        const entityChat = new Entity(null);
+        entityManager
+            .methodAddEntity
+            (
+                entityChat,
+                "SingletonContextChat"
+            );
+        entityChat
+            .methodAddComponentWithName
+            (
+                "EntityComponentChatList",
+                new EntityComponentChatList(null)
+            );
+        entityChat
+            .methodAddComponentWithName
+            (
+                "EntityComponentSingletonContextVoice",
+                new EntityComponentSingletonContextVoice(null)
+            );
+}
 
     //
     function initEntityComponents()
@@ -393,6 +497,21 @@ function update()
     //
     clockTimeDelta = clock.getDelta();
     clockTimeElapsed = clock.getElapsedTime();
+
+    //
+    entityComponentInstanceTime?.methodSetTime(clockTimeElapsed, clockTimeDelta);
+
+    //
+    const secondsA = 1.0;
+    const secondsB = 5.0;
+    if(Math.round(clockTimeElapsed * 100) % (secondsA * 100) == 0)
+    {
+        entityComponentInstanceTime?.methodPrint();
+    }
+    if(Math.round(clockTimeElapsed * 100) % (secondsB * 100) == 0)
+    {
+        entityComponentInstanceTime?.methodTogglePause();
+    }
 
     // https://threejs.org/manual/#en/responsive
     updateWindowSize();
