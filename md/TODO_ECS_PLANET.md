@@ -125,12 +125,12 @@ message). Anything created there that expires later (chat entries, projectiles, 
 buffs) needs `spawnedAt = now`. A shared object works in every place; the parameters only work
 in `methodUpdate`.
 
-**Phase 1 (start here): keep both.**
+**Phase 1 (DONE, committed 2026-11-07; verified in browser): keep both.**
 - Add the time context, written once per frame in `main.js`.
 - Keep `methodUpdate(timeElapsed, timeDelta)` as it is, so nothing breaks.
 - New code that needs time outside `methodUpdate` reads the time object.
 
-**Phase 2 (explicit TODO): remove the parameters.**
+**Phase 2 (explicit TODO, not started): remove the parameters.**
 - Remove `timeElapsed` / `timeDelta` from every `methodUpdate` signature
   (`EntityManager.methodUpdate`, `Entity.methodUpdate`, `EntityComponent.methodUpdate`, all
   subclasses) and from the calls in `entity_manager.js:112`, `entity.js:330`, and `main.js:529`.
@@ -142,4 +142,6 @@ in `methodUpdate`.
 **Open:** `maxDelta` value; real vs game time for chat lifetimes (leaning real); what triggers
 pause and what must keep running during it (e.g. voice capture).
 
-First consumer: `EntityComponentChatList` message lifetimes (see voice build step 1).
+First consumer (next): `EntityComponentChatList` message lifetimes; see `push-to-talk-voice-to-text.md` "Progress and revisions" (shared docs folder) for the ChatList build order.
+
+Not done in phase 1: `EntityComponent` shorthands for the getters; `methodUpdateTime` is a duplicate alias of `methodSetTime` (remove); `methodSetTimeScale` has no negative/NaN guard.
