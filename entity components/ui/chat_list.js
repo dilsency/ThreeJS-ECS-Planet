@@ -49,19 +49,18 @@ export class EntityComponentChatList extends EntityComponent
         this.#elementContainer.appendChild(this.#elementChat);
 
         //
-        for(var i = 0; i < 10; i++)
-        {
-            this.#methodAddChatMessage(
-                {
-                    "text": "chat message " + i,
-                    "timeSpawned": timeElapsed,
-                    "timeLife": 5 + i,
-                }
-            );
-        }
+        this.#methodAddChatMessage(
+            {
+                "text": "Chat list initiated!",
+                "timeSpawned": timeElapsed,
+                "timeLife": 10,
+            }
+        );
 
         // #region handler registration
-        this.methodRegisterMessageHandlerWithinEntity("chat.message", (broadcastItem) => {
+        this.methodRegisterMessageHandlerWithinEntity("chat.message", (broadcastItem) =>
+        {
+            console.log("broadcast received : chat.message");
 
             if(broadcastItem.invokableHandlerValue == null){return;}
             if(broadcastItem.invokableHandlerValue["text"] == null){return;}

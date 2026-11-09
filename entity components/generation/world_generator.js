@@ -48,6 +48,9 @@ export class EntityComponentWorldGenerator extends EntityComponent
     // #region methods
     methodGenerate(paramMessage)
     {
+        // we can use chatlist to display messages to the user
+        this.methodSendMessageToChat("Started world generation!");
+
         //
         console.log("() methodGenerate");
         console.log(paramMessage);
@@ -106,9 +109,8 @@ export class EntityComponentWorldGenerator extends EntityComponent
             this.methodCreateAndAddNewEntity(iterationEntity);
         }
 
-
-
-        
+        // we can use chatlist to display messages to the user
+        this.methodSendMessageToChat("Completed world generation!");
     }
     methodCreateAndAddNewEntity(iterationEntity)
     {
