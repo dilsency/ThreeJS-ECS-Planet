@@ -1,7 +1,10 @@
+// base
 import * as THREE from "three";
 // #region ECS
 import { EntityComponent } from "../../classes/ECS/entity_component.js";
 // #endregion ECS
+//
+import { EnumStateGravity } from "../../classes/enums.js";
 
 export class EntityComponentVelocity extends EntityComponent
 {
@@ -9,15 +12,21 @@ export class EntityComponentVelocity extends EntityComponent
     #velocity = null;
     //
     #frictionHorizontal = 0.995;
+    #frictionHorizontalMultiplierLanded = 0.1;//0.1
     #frictionVertical = 0.995;
     //
     #velocityCap = 15.0;
+    #velocityCapChase = 15.0;
     #velocityCapMin = 15.0;
     #velocityCapMax = 115.0;
     //
     #zeroEpsilon = 0.001;
-
+    // lazy
+    #hasOnLazyLoadInit = false;
     //
+    #componentInstanceGravity = null;
+
+    // #region construct
     constructor(params)
     {
         //
@@ -33,6 +42,9 @@ export class EntityComponentVelocity extends EntityComponent
             this.#frictionVertical = params.frictionVertical;
         }
     }
+    // #endregion construct
+
+    // #region lifecycle
     methodInitialize()
     {
         //
@@ -40,10 +52,17 @@ export class EntityComponentVelocity extends EntityComponent
     }
     methodUpdate(timeElapsed, timeDelta)
     {
-        // early return
+        // #region lazy
+        this.#methodOnLazyLoadInit();
+        if(!this.#hasOnLazyLoadInit){return;}
+        // #endregion lazy
+
+        // #region body
 
         //
-        if(this.#velocity == null){console.error("no vel");return;}
+
+        // we chase/lerp/ease velocityCap here
+        this.methodChaseVelocityCap(timeElapsed, timeDelta);
 
         // we don't need to do anything if velocity is zero
         const isVelocityZero = this.methodGetIsVelocityZero(); 
@@ -71,12 +90,94 @@ export class EntityComponentVelocity extends EntityComponent
         // and apply
         this.methodSetPosition(pos);
 
-        // then we scale down velocity based on friction
-        // to-do : get the current planet face's up direction
-        // and scale down vertical friction in that direction
+        // finally (I think at least, that this needs to be placed last)
+        // decay velocity
+        this.methodDecayVelocity();
+        
+        // #endregion body
+    }
+    methodDispose(){}
+    // #endregion lifecycle
 
-        // let's make it simple for ourselves when testing, first
-        this.#velocity.multiplyScalar(this.#frictionHorizontal);
+    // #region lazy
+    #methodOnLazyLoadInit()
+    {
+        // #region lazy early return
+        if(this.#hasOnLazyLoadInit){return;}
+        // #endregion lazy early return
+
+        // #region resolve
+        // #endregion resolve
+
+        // #region dependent
+        // mandatory component "gets"
+        // if ANY component is null after the get
+        // we early return out immediately
+        // so that we do not change the flag, and so that we can try again next iteration
+        // #endregion dependent
+
+        // #region independent
+        // entities without gravity can still have a velocity (this)
+        // so we get the component, but we are fine with a null result
+        // we do NOT early return for these
+        this.#componentInstanceGravity = this.methodGetComponent("EntityComponentGravity");
+        // #endregion independent
+
+        // #region spawn
+        // #endregion spawn
+
+        // #region lazy end
+        this.#hasOnLazyLoadInit = true;
+        // #endregion lazy end
+    }
+    // #endregion lazy
+
+    // #region methodUpdate delegates/extracts
+    methodChaseVelocityCap(timeElapsed, timeDelta)
+    {
+        if(this.#velocityCap == this.#velocityCapChase){return;}
+
+        //
+        const diff = Math.abs(this.#velocityCap - this.#velocityCapChase);
+
+        //
+        var stepSpeed = 50.0;
+
+        //
+        var stepSize =
+            Math.min(
+                diff,
+                stepSpeed * timeDelta
+            );
+
+        if(this.#velocityCap > this.#velocityCapChase){stepSize *= -1;}
+
+        //
+        this.#velocityCap += stepSize;
+    }
+    // #endregion methodUpdate delegates/extracts
+    
+    // #region getters that calculate
+    methodGetDirUpFromGravity()
+    {
+        // may not want to name this methodGetDirUp; base class EntityComponent already has one with this name
+        return this.#componentInstanceGravity.methodGetFaceNormal();
+    }
+    // #endregion getters that calculate
+
+    //
+    methodDecayVelocity()
+    {
+        // delegate/extraction functions
+        // one when the entity is affected by gravity, and one where they are not
+        if(this.#componentInstanceGravity == null || !this.#componentInstanceGravity.methodGetIsReady())
+        {
+            this.methodDecayVelocityWithoutGravity();
+        }
+        else
+        {
+            this.methodDecayVelocityWithGravity();
+        }
 
         // do not round velocities down to 0
         // and absolutely do not round them composite -style (.x, .y, .z)
@@ -84,28 +185,91 @@ export class EntityComponentVelocity extends EntityComponent
         // we can give it some (epsilon) leeway
         // very low velocities can be rounded down to 0
     }
-    methodDispose(){}
+    methodDecayVelocityWithGravity()
+    {
+        // #region pending : move to methodUpdatePerpendiculars() equivalent within class ...Velocity
+
+        // first, we need to split our velocity into horizontal and vertical
+        // or "the part that is along the up direction" and "the rest"
+        const dirUp = this.methodGetDirUpFromGravity().clone();
+
+        //
+        const velocityVertical = dirUp.multiplyScalar(this.#velocity.dot(dirUp));
+        const velocityHorizontal = this.#velocity.clone().sub(velocityVertical);
+        
+        // #endregion pending : move to methodUpdatePerpendiculars() equivalent within class ...Velocity
+
+        // we want to decay velocity DIFFERENTLY based on our gravity STATE
+        // while we are on the ground, horizontal velocity should decay almost instantly
+        // (reminder that not all entities with a velocity (this), has a gravity component)
+
+        //
+        var frictionHorizontalResult = this.#frictionHorizontal;
+
+        //
+        if(this.#componentInstanceGravity.methodGetState() == EnumStateGravity.Landed)
+        {
+            frictionHorizontalResult *= this.#frictionHorizontalMultiplierLanded;
+        }
+
+        // then we scale down velocity based on friction
+        // scale down velocity separately for horizontal and vertical
+
+        //
+        velocityVertical.multiplyScalar(this.#frictionVertical);
+        
+        //
+        velocityHorizontal.multiplyScalar(frictionHorizontalResult);
+
+        // to change our actual velocity result
+        // we just sum these together
+        this.#velocity.copy(velocityHorizontal).add(velocityVertical);
+    }
+    methodDecayVelocityWithoutGravity()
+    {
+        this.#velocity.multiplyScalar(this.#frictionHorizontal);
+    }
 
     //
-    methodOnFallingDistanceChanged(index)
+    methodOnFallingDistanceChanged(timeElapsed, timeDelta, nameOfState)
     {
         // alias function
-        this.methodSetVelocityCap(index);
+        this.methodSetVelocityCap(timeElapsed, timeDelta, nameOfState);
     }
-    methodSetVelocityCap(index)
+    methodSetVelocityCap(timeElapsed, timeDelta, nameOfState)
     {
-        switch(index)
+        // new idea
+        // instead of hard-setting velocity cap
+        // we chase it in methodUpdate()
+        // aka lerp
+
+        switch(nameOfState)
         {
-            case 0:
+            case EnumStateGravity.Falling:
+                this.#velocityCapChase = this.#velocityCapMin;
+                break;
+            case EnumStateGravity.Stratosphere:
+                this.#velocityCapChase = this.#velocityCapMin;
+                break;
+            case EnumStateGravity.Orbit:
+                this.#velocityCapChase = this.#velocityCapMax;
+                break;
+        }
+        
+        /*
+        switch(nameOfState)
+        {
+            case EnumStateGravity.Falling:
                 this.#velocityCap = this.#velocityCapMin;
                 break;
-            case 1:
-                this.#velocityCap = this.#velocityCapMin;
+            case EnumStateGravity.Stratosphere:
+                this.#velocityCap = clampedRes;
                 break;
-            case 2:
+            case EnumStateGravity.Orbit:
                 this.#velocityCap = this.#velocityCapMax;
                 break;
         }
+                */
     }
 
     //
@@ -180,16 +344,21 @@ export class EntityComponentVelocity extends EntityComponent
         // we have the gravity direction (straight down)
         // now, we scale down our velocity until we only have horizontal velocity left
 
+        /*
+
         // dot product is used to get the "scalar projection" according to google
         // aka the amount of speed in that direction
         //const scalarProjection = this.#velocity.dot(gravityDir);
-        const scalarProjection = this.methodGetVelocityAlongAxis(gravityDir);
+        const scalarProjection = this.methodGetVelocityAlongAxisScalar(gravityDir);
 
         // so we create a new vector, that is the gravity direction scaled by the dot product above
         const velocityInDirection = gravityDir.clone().multiplyScalar(scalarProjection);
 
         // now we subtract that from our velocity
         this.#velocity.subVectors(this.#velocity, velocityInDirection);
+        */
+
+        this.#velocity.sub(this.methodGetVelocityAlongAxis(gravityDir));
     }
 
     // #region getters : basic
@@ -223,7 +392,7 @@ export class EntityComponentVelocity extends EntityComponent
         return false;
     }
 
-    methodGetVelocityAlongAxis(axisDir)
+    methodGetVelocityAlongAxisScalar(axisDir)
     {
         //
         if(this.methodGetIsVelocityZero()){return 0.0;}
@@ -235,6 +404,10 @@ export class EntityComponentVelocity extends EntityComponent
         // is it enough to just return this dot product???
         return scalarProjection;
     }
+    methodGetVelocityAlongAxis(axisDir)
+    {
+        return axisDir.clone().multiplyScalar(this.methodGetVelocityAlongAxisScalar(axisDir));
+    }
     methodGetIsVelocityAlongAxisZero(axisDir)
     {
         // reminder : during methodUpdate, we do round velocities
@@ -245,7 +418,7 @@ export class EntityComponentVelocity extends EntityComponent
         if(this.methodGetIsVelocityZero()){return true;}
 
         //
-        const scalarProjection = this.methodGetVelocityAlongAxis(axisDir);
+        const scalarProjection = this.methodGetVelocityAlongAxisScalar(axisDir);
 
         // should we have another epsilon for scalarProjection?
         // instead of the one used for this.#velocity.length() ?
@@ -267,7 +440,7 @@ export class EntityComponentVelocity extends EntityComponent
         if(this.methodGetIsVelocityZero()){return true;}
 
         //
-        const scalarProjection = this.methodGetVelocityAlongAxis(axisDir);
+        const scalarProjection = this.methodGetVelocityAlongAxisScalar(axisDir);
 
         // should we have another epsilon for scalarProjection?
         // instead of the one used for this.#velocity.length() ?
@@ -278,5 +451,10 @@ export class EntityComponentVelocity extends EntityComponent
         }
 
         return false;
+    }
+
+    methodGetVelocityAcrossAxis(axisDir)
+    {
+        return this.#velocity.clone().sub(this.methodGetVelocityAlongAxis(axisDir));
     }
 }

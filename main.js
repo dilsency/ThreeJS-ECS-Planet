@@ -17,11 +17,11 @@ import {EntityComponentSingletonContextTime} from "./entity components/context/s
 import {EntityComponentSingletonContextInitialization} from "./entity components/context/singleton/context_initialization.js";
 // #endregion context entity-components : most important
 // generator components
-import {EntityComponentMainMenu} from "./entity components/ui/main_menu.js";
+import {EntityComponentMainMenu, EntityComponentLoadingScreen} from "./entity components/ui/main_menu.js";
 import {EntityComponentWorldGenerator} from "./entity components/generation/world_generator.js";
 // context components , less important
 import {EntityComponentSingletonContextModelCache} from "./entity components/context/singleton/context_model_cache.js";
-import {EntityComponentSingletonContextHUDLayout, HUDCubeHorizontalAlignmentEnum} from "./entity components/context/singleton/context_hud_layout.js";
+import {EntityComponentSingletonContextHUDLayout} from "./entity components/context/singleton/context_hud_layout.js";
 import {EntityComponentSingletonContextLocalPlayerIdentity} from "./entity components/context/singleton/context_local_player_identity.js";
 import {EntityComponentSingletonContextWorldLayout} from "./entity components/context/singleton/context_world_layout.js";
 import {EntityComponentSingletonContextPlayerInitialization} from "./entity components/context/singleton/context_player_initialization.js";
@@ -360,6 +360,11 @@ function init()
         entityManager.methodAddEntity(entityMainMenu, "MainMenu");
         entityMainMenu.methodAddComponentWithName("EntityComponentMainMenu", new EntityComponentMainMenu(null));
 
+        // loading screen
+        // is added to the same entity as main menu
+        entityMainMenu.methodAddComponentWithName("EntityComponentLoadingScreen", new EntityComponentLoadingScreen(null));
+
+
         // world generator
         // this lets us NOT specify entities and entity-components below
         // these will come from a .json file :)
@@ -426,7 +431,7 @@ function init()
         const componentHUDLayout = new EntityComponentSingletonContextHUDLayout(null);
         entityHUD.methodAddComponentWithName("EntityComponentSingletonContextHUDLayout", componentHUDLayout);
 
-        const cubeHUDHorizontalAlignment = HUDCubeHorizontalAlignmentEnum.LEFT;
+        const cubeHUDHorizontalAlignment = EnumHUDCubeHorizontalAlignment.LEFT;
 
         let cubeHUDLayout = componentHUDLayout.methodComputeLayout(cubeHUDHorizontalAlignment);
 

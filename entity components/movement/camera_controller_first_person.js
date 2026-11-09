@@ -1,5 +1,9 @@
+// base
 import * as THREE from "three";
+// ECS
 import {EntityComponent} from "../../classes/ECS/entity_component.js";
+//
+import { EnumModeDirUpTransition, EnumStateGravity } from "../../classes/enums.js";
 /*
 import {debugOverlaySetLine} from "./temp_debug_overlay.js"; // TEMPORARY - see that file's header comment
 */
@@ -49,7 +53,7 @@ export class EntityComponentCameraControllerFirstPersonInputMK extends EntityCom
 
         // we need to store event listener handlers...
         // ...in order to be able to dispose of them
-        this.#eventListenerHandlerOnKeyDown = (e) => this.methodOnKeyDown(e)
+        this.#eventListenerHandlerOnKeyDown = (e) => this.methodOnKeyDown(e);
         this.#eventListenerHandlerOnKeyUp = (e) => this.methodOnKeyUp(e);
         this.#eventListenerHandlerOnMouseMove = (e) => this.methodOnMouseMove(e);
 
@@ -365,10 +369,13 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
     #scene = null;
     #camera = null;
     #cameraPivot = null;
-    
+
     // we accumulate the pitch (up-down rotation)
     // we do this to stop overshooting at 90 degrees
     #pitch = 0;
+    // most of the time, we want to stop pitch from overshooting
+    // but if we are in orbit, we should be allowed to freely rotate
+    #pitchShouldClamp = true;
 
     //
     #directionForward = null;
@@ -376,12 +383,20 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
     #directionRight = null;
     #directionRightNonvertical = null;
     
-    // 
+    //
     #gravityTransitionAxis = null;
     #gravityTransitionRemainingAngle = 0;
     #gravityTransitionAngularSpeed = Math.PI;
-    #gravityTransitionAngularSpeedMin = Math.PI;
-    #gravityTransitionAngularSpeedMax = Math.PI * 4;
+    #gravityTransitionAngularSpeedMin = Math.PI / 4;
+    #gravityTransitionAngularSpeedMax = Math.PI * 2;
+
+    // possible rename : modeDirUpTransition
+    #modeDirUpTransition = EnumModeDirUpTransition.Rigid;
+
+    // lazy
+    #hasOnLazyLoadInit = false;
+    // mandatory components
+    #componentInstanceInput = null;
     // #endregion privates
 
     // #region construct
@@ -394,38 +409,15 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
     // #region lifecycle
     methodInitialize()
     {
-        // Self-attaches its own Input sibling instead of receiving it from
-        // main.js - see BARE_MINIMUM_THREEJS_EXCEPTION_OR_NOT.md's "Pattern
-        // C: self-attaching sibling components" section. Which concrete
-        // class actually gets attached depends on
-        // EntityComponentSingletonContextEnvironment's touch-primary detection, but
-        // main.js never needs to know that, or that there are two classes
-        // to choose between at all.
-        const componentEnvironment = this.methodGetEntityByName("SingletonContextEnvironment")?.methodGetComponent("EntityComponentSingletonContextEnvironment");
-        const componentInput = componentEnvironment.methodGetIsTouchPrimary()
-            ? new EntityComponentCameraControllerFirstPersonInputTouch()
-            : new EntityComponentCameraControllerFirstPersonInputMK();
-        this.methodGetParent().methodAddComponentWithName("EntityComponentCameraControllerFirstPersonInput", componentInput);
-
+        //
+        this.methodInitializeAttachment();
+        
+        //
         this.#scene = this.methodGetScene();
         this.#camera = this.methodGetCamera();
         this.#cameraPivot = this.methodGetCameraPivot();
 
-        // Local player spawn position - self-looked-up rather than received
-        // via constructor params, the same self-lookup shape as
-        // camera/cameraPivot/scene above, just one level further out (this
-        // component doesn't need to know spawn positions come from ground
-        // bounds at all - EntityComponentSingletonContextPlayerInitialization owns
-        // that). See NAMING_CONVENTIONS.md's "A single consumer is fine,
-        // conditionally" section and TODO.md item 6's sub-item 6.
-
-        // comment this out so that it doesn't fight with our planet spawning
-        /*
-        const componentPlayerInitialization = this.methodGetEntityByName("SingletonContextPlayerInitialization")?.methodGetComponent("EntityComponentSingletonContextPlayerInitialization");
-        const spawnPosition = componentPlayerInitialization.methodGetSpawnPosition();
-        this.#cameraPivot.position.set(spawnPosition.x, 0, spawnPosition.z);
-        */
-
+        //
         this.#directionForward = new THREE.Vector3(0,0,-1);
         this.#directionForwardNonvertical = new THREE.Vector3(0,0,-1);
         this.#directionRight = new THREE.Vector3(1,0,0);
@@ -441,21 +433,22 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
     }
     methodUpdate(timeElapsed, timeDelta)
     {
-        //
-        const componentInstanceInput = this.methodGetComponent("EntityComponentCameraControllerFirstPersonInput");
-        // early return: no entity component instance
-        if(componentInstanceInput == null){return;}
-
+        // #region lazy
+        this.#methodOnLazyLoadInit();
+        if(!this.#hasOnLazyLoadInit){return;}
+        // #endregion lazy
 
         // sort of early return
         // if reset is pressed we don't need to do anything below
-        if(componentInstanceInput.keys.reset == true)
+        if(this.#componentInstanceInput.keys.reset == true)
         {
             //
             this.#methodResetCameraRotation();
             //
-            componentInstanceInput.methodResetMouse();
-            componentInstanceInput.methodResetKeys();
+            this.#componentInstanceInput
+                .methodResetMouse();
+            this.#componentInstanceInput
+                .methodResetKeys();
             // the reset key probably shouldn't reset dirUp in the future, but let's try for now
             this.methodSetDirUp(new THREE.Vector3(0,1,0));
             //
@@ -483,29 +476,41 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
         var speedY = 0;
 
         // keyboard support
-        if(componentInstanceInput.keys.left){speedX = 0.02;}
-        else if(componentInstanceInput.keys.right){speedX = -0.02;}
-        else {speedX = componentInstanceInput.mouseX * -0.001;}
+        if(this.#componentInstanceInput.keys.left){speedX = 0.02;}
+        else if(this.#componentInstanceInput.keys.right){speedX = -0.02;}
+        else {speedX = this.#componentInstanceInput.mouseX * -0.001;}
         //
-        if(componentInstanceInput.keys.up){speedY = 0.02;}
-        else if(componentInstanceInput.keys.down){speedY = -0.02;}
-        else{speedY = componentInstanceInput.mouseY * -0.001;}
+        if(this.#componentInstanceInput.keys.up){speedY = 0.02;}
+        else if(this.#componentInstanceInput.keys.down){speedY = -0.02;}
+        else{speedY = this.#componentInstanceInput.mouseY * -0.001;}
 
         // clear the mouse deltas, always! will lead to severe bugs otherwise
-        componentInstanceInput.methodResetMouse();
+        this.#componentInstanceInput.methodResetMouse();
         // just the mouse though; not the keys
-        //componentInstanceInput.methodResetKeys();
+        //this.#componentInstanceInput.methodResetKeys();
 
         // early return: we don't do anything if we don't have anything
         if(speedX == 0 && speedY == 0){return;}
 
         // #region pitch
+        
+        // todo to-do to do : move this to a delegate/extract function, for readability
 
         // orientation independent
 
+        //
+        const pitchUnclamped = this.#pitch + speedY;
         // we first accumulate the pitch (up-down rotation)
         // and then we clamp it, to prevent overshooting
-        this.#pitch = THREE.MathUtils.clamp(this.#pitch + speedY, -Math.PI / 2, Math.PI / 2);
+        // unless we are in orbit
+        if(this.#pitchShouldClamp)
+        {
+            this.#pitch = THREE.MathUtils.clamp(pitchUnclamped, -Math.PI / 2, Math.PI / 2);
+        }
+        else 
+        {
+            this.#pitch = pitchUnclamped;
+        }
         // then we apply it
         this.#camera.rotation.x = this.#pitch;
 
@@ -524,8 +529,24 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
         // very hard to figure out without help
         // more on this in the GOTCHAS .md file
 
-        //
-        this.#cameraPivot.rotateOnWorldAxis(this.methodGetDirUp(), speedX);
+        // todo to-do to do : move this to a delegate/extract function, for readability
+        if(this.#modeDirUpTransition == EnumModeDirUpTransition.Frozen)
+        {
+            // we are likely in orbit
+            // we want to rotate right according to the camera's up-direction
+            // not the gravity up
+
+            const axisCameraUp = new THREE.Vector3(0,1,0).applyQuaternion(this.#camera.quaternion);
+            this.#cameraPivot.rotateOnAxis(axisCameraUp, speedX);
+        }
+        else
+        {
+            // we are likely within the planet's atmosphere
+            // we want to rotate right-left according to the gravity's up-direction
+            // not the camera up
+
+            this.#cameraPivot.rotateOnWorldAxis(this.methodGetDirUp(), speedX);
+        }
 
         // outdated : this would have been fine if up-direction could not be changed (but it can be)
         //this.#cameraPivot.rotateY(speedX);
@@ -544,38 +565,120 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
 
         // when we are done with using mouse
         // we reset it
-        componentInstanceInput.methodResetMouse();
+        this.#componentInstanceInput.methodResetMouse();
         // just reset the mouse; not the keys
-        //componentInstanceInput.methodResetKeys();
+        //this.#componentInstanceInput.methodResetKeys();
 
         // update perpendiculars
         this.methodUpdatePerpendiculars(false);
     }
-    methodOnFallingDistanceChanged(index)
-    {
-        // alias function
-        this.methodSetGravityTransitionAngularSpeed(index);
-    }
-    methodSetGravityTransitionAngularSpeed(index)
-    {
-        // todo : just change this ONCE depending on the gravity distance?
 
-        // depending on the distance from the planet
-        switch(index){
-            case 0:
-                this.#gravityTransitionAngularSpeed = this.#gravityTransitionAngularSpeedMax;
-                break;
-            case 1:
-                this.#gravityTransitionAngularSpeed = this.#gravityTransitionAngularSpeedMin;
-                break;
-            case 2:
-                this.#gravityTransitionAngularSpeed = this.#gravityTransitionAngularSpeedMin;
-                break;
-        }
+    //
+    methodInitializeAttachment()
+    {
+        // "Pattern C"
+
+        // we get which class of entity component that we want to add...
+        // ...based on what input method is used by the device running the app
+        const componentEnvironment = this.methodGetEntityByName("SingletonContextEnvironment")?.methodGetComponent("EntityComponentSingletonContextEnvironment");
+        const componentInput = componentEnvironment.methodGetIsTouchPrimary()
+            ? new EntityComponentCameraControllerFirstPersonInputTouch()
+            : new EntityComponentCameraControllerFirstPersonInputMK()
+        ;
+        
+        // add entity component to parent, it becomes a sibling to this
+        this.methodGetParent()
+            .methodAddComponentWithName
+            (
+                "EntityComponentCameraControllerFirstPersonInput",
+                componentInput
+            );
     }
+
+    //
+    #methodOnLazyLoadInit()
+    {
+        // #region lazy early return
+        if(this.#hasOnLazyLoadInit){return;}
+        // #endregion lazy early return
+
+        // #region resolve
+        // #endregion resolve
+
+        // #region dependent
+        this.#componentInstanceInput = this.methodGetComponent("EntityComponentCameraControllerFirstPersonInput");
+        if(this.#componentInstanceInput == null){return;}
+        // #endregion dependent
+
+        // #region independent
+        // #endregion independent
+
+        // #region spawn
+        // #endregion spawn
+
+        // #region lazy end
+        this.#hasOnLazyLoadInit = true;
+        // #endregion lazy end
+    }
+    // #endregion lifecycle
+
+    // #region a
+    
+
+    //
     methodUpdateUpDirectionTransition(timeElapsed, timeDelta)
     {
+        // #region debug
+        if(import.meta.env.DEV)
+        {
+            if(
+                this.#gravityTransitionRemainingAngle <= 0
+                && this.#modeDirUpTransition != EnumModeDirUpTransition.Frozen
+            )
+            {
+                const dirUp = this.methodGetDirUp().clone();
+                const dot = this
+                    .methodGetVisualDirUp()
+                        .dot(
+                            dirUp
+                        )
+                ;
+                if(dot <= 0.9)
+                {
+                    console.error("we aren't aligned, but we have no remaining angles");
+
+                    //
+                    const consoleLogObject = {};
+                    consoleLogObject.dot = dot;
+                    consoleLogObject.modeDirUpTransition = this.#modeDirUpTransition;
+                    consoleLogObject.gravityTransitionRemainingAngle = this.#gravityTransitionRemainingAngle;
+                    consoleLogObject.visualDirUp = this
+                        .methodGetVisualDirUp();
+                    consoleLogObject.dirUp = dirUp;
+
+                    //
+                    if(this.#gravityTransitionAxis != null)
+                    {
+                        const axisTransition = this.#gravityTransitionAxis.clone();
+                        const axisTransitionLengthSquared = axisTransition.lengthSq();
+                        consoleLogObject.gravityTransitionAxis = axisTransition;
+                        consoleLogObject.gravityTransitionAxisLengthSq = axisTransitionLengthSquared;
+                    }
+
+                    //
+                    console.log(consoleLogObject);
+                    console.log("[ALIGN]", JSON.stringify(consoleLogObject));
+                }
+            }
+        }
+        // #endregion debug
+
         // #region early return
+        if(this.#modeDirUpTransition == EnumModeDirUpTransition.Frozen)
+        {
+            this.methodUpdatePerpendiculars();
+            return;
+        }
         if(this.#gravityTransitionRemainingAngle <= 0){return;}
         // #endregion early return
 
@@ -593,6 +696,12 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
                 this.#gravityTransitionAngularSpeed * timeDelta
             );
 
+        // before we apply rotation
+        // we store prev values
+        const prevForward = new THREE.Vector3();
+        this.#camera.getWorldDirection(prevForward);
+        const prevDot = prevForward.dot(this.methodGetDirUp());
+
         // then we rotate the cameraPivot
         // by that angleStep
         // (we calculated the transition direction (pivot?) to rotate around earlier)
@@ -605,10 +714,56 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
         this.#gravityTransitionRemainingAngle -= angleStep;
 
         // #endregion body
+
+        // optional step afterwards
+        // to correct the rotation
+        this.methodUpdateUpDirectionTransitionCorrection(timeElapsed, timeDelta, prevForward, prevDot);
     }
-    // #endregion lifecycle
+    methodUpdateUpDirectionTransitionCorrection(timeElapsed, timeDelta, prevForward, prevDot)
+    {
+        // early return
+        if(this.#modeDirUpTransition == EnumModeDirUpTransition.Rigid){return;}
+
+        // we correct the change in camera "angle"
+
+        //
+        switch(this.#modeDirUpTransition)
+        {
+            case EnumModeDirUpTransition.KeepPitch:
+                //
+                const resultForward = new THREE.Vector3();
+                this.#camera.getWorldDirection(resultForward);
+                const resultDot = resultForward.dot(this.methodGetDirUp());
+
+                //
+                const correction = Math.asin(THREE.MathUtils.clamp(prevDot, -1, 1)) - Math.asin(THREE.MathUtils.clamp(resultDot, -1, 1));
+
+                //
+                this.#pitch = THREE.MathUtils.clamp(this.#pitch + correction, -Math.PI / 2, Math.PI / 2);
+
+                //
+                this.#camera.rotation.x = this.#pitch;
+
+                //
+                break;
+            case EnumModeDirUpTransition.KeepView:
+                //
+                this.#methodLookInDirectionWithDirUp(this.methodGetVisualDirUp(), prevForward, false);
+
+                //
+                break;
+            default:
+                break;
+        }
+    }
+    // #endregion a
 
     // #region getters
+    methodGetPitch(){return this.#pitch;}
+    methodGetTransitionRemainingAngle(){return this.#gravityTransitionRemainingAngle;}
+
+    methodGetModeDirUpTransition(){return this.#modeDirUpTransition;}
+
     get directionForward(){return this.#directionForward;}
     get directionForwardNonvertical(){return this.#directionForwardNonvertical;}
     get directionRightNonvertical(){return this.#directionRightNonvertical;}
@@ -628,8 +783,12 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
 
     // #endregion getters
 
+    // #region getters that calculate
+    methodGetYaw(){return this.#directionForwardNonvertical;}
+    // #endregion getters that calculate
+
     // move... somewhere
-    #methodGetVisualDirUp()
+    methodGetVisualDirUp()
     {
         // we don't need the current planet-face's normal direction
         // we need the actual live up direction of the cameraPivot
@@ -649,10 +808,94 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
     }
 
     // #region setters
+    methodSetDirUpWithoutTransition(paramDirUp, paramDebug)
+    {
+        //
+        //if(this.#modeDirUpTransition == EnumModeDirUpTransition.Frozen){return;}
+
+        //
+        const visualDirUp = this.methodGetVisualDirUp();
+        var angle = visualDirUp.angleTo(paramDirUp);
+        const epsilon = 1e-12;
+
+        //
+        this.#gravityTransitionAxis =
+            new THREE.Vector3()
+                .crossVectors(visualDirUp, paramDirUp);
+
+
+        // if we have a useable size
+        // "the cross-product is non-zero"
+        // we can just normalize it, and use our angle calculated previously
+        if(this.#gravityTransitionAxis.lengthSq() > epsilon)
+        {
+            this.#gravityTransitionAxis.normalize();
+        }
+        // we have an error check to make
+        // antiparallel
+        // if the current up-direction is exactly parallell to the new up-direction...
+        // ...things may go wrong
+        // in this case the "cross product is around zero"
+        // but we need to check the dot product to find out which of case it is:
+        // parallel or opposite
+        else if(visualDirUp.dot(paramDirUp) < 0)
+        {
+            // we have checked that cross product is about zero, and the dot product is negative
+            // this is the direct opposite direction to the up-direction
+            // we don't want to use this; instead, we get another direction
+            // we pick one that is perpendicular
+
+            // here, we need ANY direction that is NOT parallel to visualDirUp
+            var referenceDirection = null;
+            if(Math.abs(visualDirUp.x) < 0.9)
+            {
+                referenceDirection = new THREE.Vector3(1,0,0);
+            }
+            else
+            {
+                referenceDirection = new THREE.Vector3(0,1,0);
+            }
+
+            // then we override transition axis
+            this.#gravityTransitionAxis.crossVectors(visualDirUp, referenceDirection).normalize();
+            // and we set an angle
+            angle = Math.PI;
+        }
+
+        /*
+        const axis =
+            new THREE.Vector3()
+                .crossVectors(visualDirUp, paramDirUp)
+                .normalize();
+        */
+        //const axis = paramDirUp.clone();
+
+        // do a manual, direct rotation
+        // this would otherwise be done every frame in methodUpdate() , via methodUpdateUpDirectionTransition()
+        
+        this.#cameraPivot.rotateOnWorldAxis(
+            this.#gravityTransitionAxis,
+            angle
+        );
+        
+        // we have modified cameraPivot's rotation/quaternion directly
+        // as such
+        // we need to ensure that we do not have any remaining transitional rotation
+        // we therefore reset the "remaining angle"
+        this.#gravityTransitionRemainingAngle = 0;
+
+        //
+        super.methodSetDirUp(paramDirUp);
+        this.methodUpdatePerpendiculars(paramDebug);
+    }
     methodSetDirUp(paramDirUp, paramDebug)
     {
         //
-        const visualDirUp = this.#methodGetVisualDirUp();
+        //if(this.#modeDirUpTransition == EnumModeDirUpTransition.Frozen){return;}
+
+        //
+        const visualDirUp = this.methodGetVisualDirUp();
+        const epsilon = 1e-12;
 
         // the cross product creates a perpendicular / orthogonal vector to those
         // what this will accomplish, I do not know
@@ -661,10 +904,20 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
         this.#gravityTransitionAxis =
             new THREE.Vector3()
                 .crossVectors(visualDirUp, paramDirUp)
-                .normalize();
+        ;
+        const squareLength = this.#gravityTransitionAxis.lengthSq();
+        this.#gravityTransitionAxis.normalize()
 
         // how many degrees we have left to rotate / transition
         this.#gravityTransitionRemainingAngle = visualDirUp.angleTo(paramDirUp);
+
+        // error handling : antiparallell
+        // note that this is already handled in methodSetDirUpWithoutTransition()
+        // for now we just console.error
+        if(squareLength <= epsilon && visualDirUp.dot(paramDirUp) < 0)
+        {
+            console.error("() methodSetDirUp antiparallell");
+        }
 
         // we update our perpendiculars immediately
         // this will cause our movement to be accurate immediately
@@ -701,6 +954,18 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
     }
     // #endregion setters
 
+    // #region setters with a different name
+    methodCycleModeDirUpTransition()
+    {
+        const listModes = Object.values(EnumModeDirUpTransition);
+        const indexNext = (listModes.indexOf(this.#modeDirUpTransition) + 1) % listModes.length;
+        this.#modeDirUpTransition = listModes[indexNext];
+
+        // not sure the purpose of returning the value, but sure
+        return this.#modeDirUpTransition;
+    }
+    // #endregion setters with a different name
+
     // #region methods public
     methodUpdatePerpendiculars(paramDebug)
     {
@@ -716,10 +981,7 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
         // #region directionForward with no vertical component
 
         //
-        this.#directionForwardNonvertical.copy(this.#directionForward);
-        // this gets our current up direction, and zeroes it out
-        this.#directionForwardNonvertical.addScaledVector(this.methodGetDirUp(), -this.#directionForward.dot(this.methodGetDirUp()));
-        this.#directionForwardNonvertical.normalize();
+        this.methodUpdatePerpendicularsForward(paramDebug);
 
         // #endregion directionForward with no vertical component
 
@@ -727,8 +989,259 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
         this.#directionRight.crossVectors(this.methodGetDirUp(), this.#directionForward);
         this.#directionRightNonvertical.crossVectors(this.methodGetDirUp(), this.#directionForwardNonvertical);
     }
+    methodUpdatePerpendicularsForward(paramDebug)
+    {
+        // fallback value
+        // if we were to overshoot during a transition
+        // (untested if this is actually needed, for now)
+        const directionForwardNonverticalPrev = this.#directionForwardNonvertical.clone();
+
+        // instead of using camera forward (the pitch)
+        // (this is what we were doing in the ...OLD version of this method)
+        // we will use the cameraPivot forward (the yaw)
+        this.#directionForwardNonvertical.set(0,0,-1);
+        this.#directionForwardNonvertical.applyQuaternion(this.#cameraPivot.quaternion);
+        //
+        const amountOfVectorThatIsPointingUp = this.#directionForwardNonvertical.dot(this.methodGetDirUp());
+        this.#directionForwardNonvertical.addScaledVector(this.methodGetDirUp(), -amountOfVectorThatIsPointingUp);
+
+        // this fallback value is only used during a camera up-direction transition
+        // we have concluded that looking directly down, or directly up...
+        // ...does no longer cause an error that needs a fallback
+        this.methodUpdatePerpendicularsForwardPreventOvershoot(paramDebug, directionForwardNonverticalPrev);
+    }
+    methodUpdatePerpendicularsForwardPreventOvershoot(paramDebug, directionForwardNonverticalPrev)
+    {
+        // we check
+        // if the cameraPivot's forward (the yaw) is too close to directly up
+        // this can cause an erroneous flip in the "W"/"S" movement direction
+
+        // this fallback value is only used during a camera up-direction transition
+        // we have concluded that looking directly down, or directly up...
+        // ...does no longer cause an error that needs a fallback
+        if(this.#directionForwardNonvertical.length() < 1e-6)
+        {
+            this.#directionForwardNonvertical.copy(directionForwardNonverticalPrev);
+        }
+        else
+        {
+            this.#directionForwardNonvertical.normalize();
+        }
+    }
+    methodUpdatePerpendicularsForwardOLD(paramDebug)
+    {
+        //
+        // TEMPORARY DIAGNOSTIC (see perpendicular-overshoot-when-aiming-down.md) : remember last frame's
+        // result so we can detect a sudden flip
+        const directionForwardNonverticalPrev = this.#directionForwardNonvertical.clone();
+
+        this.#directionForwardNonvertical.copy(this.#directionForward);
+        // this gets our current up direction, and zeroes it out
+        this.#directionForwardNonvertical.addScaledVector(this.methodGetDirUp(), -this.#directionForward.dot(this.methodGetDirUp()));
+
+        this.#directionForwardNonvertical.normalize();
+    }
+    #methodLookInDirectionWithDirUp(dirUp, direction, shouldResetTransition = true)
+    {
+        // early return: our direction is too small
+        // just skip
+        const epsilon = 1e-6;
+        const magnitude = direction.length();
+        if(magnitude < epsilon) { return; }
+
+
+        // test!
+
+        // (1) tilt so that Y becomes up
+        // (2) apply a yaw
+        // (3) set the pitch
+        // (4) update perpendiculars
+
+        //
+        const normalizedDirection = direction.clone().normalize();
+
+        // the problem:
+        // we need horizontalLength (or horizontalLengthSquared)
+        // if up-direction is just .y , then this is .x and .z
+        // but up-direction is VARIABLE, it will change frequently
+        // we therefore need a perpendicular vector to the up-direction
+        // and this will be the horizontal vector
+        // (to clarify, specifically the right direction of the CURRENT horizontal plane aligned with the CURRENT up-direction)
+        // the cross product will get us this perpendicular vector
+        //const perpendicularDirectionRight = new THREE.Vector3().crossVectors(normalizedDirection, upDirection);
+        // we now need the length of this perpendicular vector
+        // this is the horizontal length
+        //const horizontalLengthSquared = perpendicularDirectionRight.lengthSq();
+
+        // if our lengthSquared is too small, we are pointing directly up or down
+        // and we can early-return
+        // otherwise the results are too noisy and unstable
+        //const epsilon = 1e-6;
+        //if(horizontalLengthSquared < epsilon)
+        //{
+        //    return;
+        //}
+
+        // we apparently need the forward direction (of the horizontal plane)
+        // what we had above is the rightward direction (of the horizontal plane)
+
+        // .projectOnPlane() has been explained to me as doing
+        // take one direction, and remove from it another direction
+        // directionThatWeWantToRemoveFrom.projectOnPlane(directionThatWeWantToRemove)
+
+        // this is also the "reverse" of updatePerpendiculars()
+        // there, we are already facing the correct direction, and we rotate other attached directions to match
+        // here, we are NOT facing the correct direction, but we know what we want to face
+            // "find the quaternion that turns (0,0,-1) into the forward direction."
+            // "That’s what the basis-vector version does."
+
+        const perpendicularDirectionForward = normalizedDirection.clone().projectOnPlane(dirUp);
+
+        const horizontalLengthSquared = perpendicularDirectionForward.lengthSq();
+
+        // .normalize() has a side effect when the vector points directly up or down
+        // it becomes very noisy and unstable
+        // we ONLY normalize our forward direction vector when we do NOT point as such
+        // and we use the lengthSquared to determine this;
+        // if we are above zero or a very small number, we are safe
+
+        const hasHorizontalPart = horizontalLengthSquared >= epsilon;
+
+        // we can't early return here
+        // since we need to do pitch regardless of if we do yaw or not
+
+        // we could make them separate functions though, hehehehehehe
+        this.#methodLookInDirectionYaw(dirUp, hasHorizontalPart, perpendicularDirectionForward, shouldResetTransition);
+        this.#methodLookInDirectionPitch(dirUp, normalizedDirection, horizontalLengthSquared, shouldResetTransition);
+
+        //
+        this.methodUpdatePerpendiculars(false);
+    }
     methodLookInDirection(direction)
     {
+        const upDirection = this.methodGetDirUp().clone();
+        this.#methodLookInDirectionWithDirUp(upDirection, direction, true);
+    }
+    #methodLookInDirectionYaw(upDirection, hasHorizontalPart, perpendicularDirectionForward, shouldResetTransition)
+    {
+        // #region header
+
+        // early return
+        if(!hasHorizontalPart){return;}
+
+        // we are safe to normalize our forward direction vector
+        // if we had done it earlier...
+        // ...it might have been noisy and unstable...
+        // ...since the forward direction vector might have been pointing directly up or down
+        // but at this point we have ensured that it does not
+        perpendicularDirectionForward.normalize();
+
+        // #endregion header
+
+        // #region body
+
+        // this turns the base-up (.y == 1) into our actual upDirection
+        // so this works
+        // but it would only be useful in an outdated version
+        //const yawQuaternion= new THREE.Quaternion()
+        //    .setFromUnitVectors(
+        //        new THREE.Vector3(0, 1, 0),
+        //        upDirection
+        //    )
+        //;
+
+        // the old version assumed .x and .y constitutes the horizontal plane
+        // this would have only been the case if we used the base-up (.y == 1)
+        // we do not
+        //const horizontalAngle = Math.atan2(
+        //    -perpendicularDirectionForward.x,
+        //    -perpendicularDirectionForward.z
+        //);
+
+        // this is apparently also outdated
+        // .setFromAxisAngle().premultiply() will actually tilt our rotation axis FIRST
+        // so even though we use upDirection, that direction will also be tilted
+        //this.#cameraPivot.quaternion
+        //    .setFromAxisAngle(
+        //        upDirection,
+        //        horizontalAngle
+        //    )
+        //    .premultiply(yawQuaternion);
+
+
+        // our new version
+        // instead of angles, we only use directions
+
+        //
+        const directionBackwards = perpendicularDirectionForward.clone().negate();
+
+        // cross product returns a perpendicular vector, mind you, which is the "horizontal" direction
+        const directionRightwards = new THREE.Vector3().crossVectors(upDirection, directionBackwards);
+
+        // set quaternion, aka, rotate the cameraPivot
+        this.#cameraPivot.quaternion
+            .setFromRotationMatrix(
+                new THREE.Matrix4()
+                    .makeBasis(
+                        directionRightwards, upDirection, directionBackwards
+                    )
+            )
+        ;
+
+        // #endregion body
+
+        // #region footer
+
+        // we have modified the cameraPivot's rotation/quaternion directly
+        // as such
+        // we need to ensure that we do not have any remaining transitional rotation
+        // we therefore reset the "remaining angle"
+
+        // unless we are in a different "mode" of transition
+        if(shouldResetTransition == true)
+        {
+            this.#gravityTransitionRemainingAngle = 0;
+        }
+
+        // #endregion footer
+    }
+    #methodLookInDirectionPitch(upDirection, normalizedDirection, horizontalLengthSquared, shouldResetTransition)
+    {
+        // #region body
+
+        const pitchUnclamped =
+            Math.atan2(
+                normalizedDirection
+                    .dot(upDirection),
+                Math.sqrt(horizontalLengthSquared)
+            );
+
+        // most of the time, we want to clamp pitch
+        // to prevent overshooting at the poles (directly up and/or directly down)
+        // but while in orbit
+        // we want to be able to rotate freely
+        if(this.#pitchShouldClamp)
+        {
+            this.#pitch = THREE.MathUtils.clamp(
+                pitchUnclamped,
+                -Math.PI / 2,
+                Math.PI / 2
+            );
+        }
+        else {
+            this.#pitch = pitchUnclamped;
+        }
+
+        // set the rotation component directly
+        this.#camera.rotation.x = this.#pitch;
+
+        // #endregion body
+    }
+
+    methodLookInDirectionOLD(direction)
+    {
+        // the OLD version does not take into account the variable up-direction
+
         // create a new dir (to not affect the old one), and make Sure that it is normalized
         const dir = direction.clone().normalize();
 
@@ -749,7 +1262,18 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
         
         // pitch: elevation above/below the horizontal plane, same clamp as mouse-look uses
         const horizontalLength = Math.sqrt(horizontalLengthSquared);
-        this.#pitch = THREE.MathUtils.clamp(Math.atan2(dir.y, horizontalLength), -Math.PI / 2, Math.PI / 2);
+        const pitchUnclamped = Math.atan2(dir.y, horizontalLength);
+        // we clamp pitch
+        // unless we are in orbit
+        if(this.#pitchShouldClamp)
+        {
+            this.#pitch = THREE.MathUtils.clamp(pitchUnclamped, -Math.PI / 2, Math.PI / 2);
+        }
+        else {
+            this.#pitch = pitchUnclamped;
+        }
+
+        // set rotation component directly
         this.#camera.rotation.x = this.#pitch;
         
         //
@@ -757,6 +1281,12 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
     }
     methodLookAt(targetPosition)
     {
+        this.methodLookAtOLD(targetPosition);
+    }
+    methodLookAtOLD(targetPosition)
+    {
+        // the OLD version does not take into account the variable up-direction
+
         // we transform this problem
         // to: "get the direction to the target"
         // and then we invoke our LookInDirection() method...
@@ -782,6 +1312,70 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
             this.methodUpdatePerpendiculars(false);
     }
     // #endregion methods private
+
+    // #region state machine
+
+    methodOnStateGravityChanged(prevState, newState)
+    {
+        // our main handler
+        // changed from before, where each pair of states had their own handler
+        // now we can just use a switch-case structure
+
+        switch(newState)
+        {
+            case EnumStateGravity.Orbit:
+                this.#modeDirUpTransition = EnumModeDirUpTransition.Frozen;
+                this.#pitchShouldClamp = false;
+                this.#gravityTransitionAngularSpeed = this.#gravityTransitionAngularSpeedMin;
+                break;
+            case EnumStateGravity.Stratosphere:
+                this.#modeDirUpTransition =
+                    (prevState == EnumStateGravity.Orbit
+                        ? EnumModeDirUpTransition.Frozen
+                        : EnumModeDirUpTransition.KeepPitch
+                    );
+                this.#pitchShouldClamp = true;
+                this.#gravityTransitionAngularSpeed = this.#gravityTransitionAngularSpeedMin;
+                break;
+            default:
+                this.#modeDirUpTransition = EnumModeDirUpTransition.KeepPitch;
+                this.#pitchShouldClamp = true;
+                if(prevState == EnumStateGravity.Stratosphere)
+                {
+                    this.#gravityTransitionAngularSpeed = this.#gravityTransitionAngularSpeedMin;
+                }
+                else {
+                    this.#gravityTransitionAngularSpeed = this.#gravityTransitionAngularSpeedMax;
+                }
+                break;
+        }
+    }
+    methodOnFallingDistanceChanged(timeElapsed, timeDelta, nameOfState)
+    {
+        // alias function
+        this.methodSetGravityTransitionAngularSpeed(timeElapsed, timeDelta, nameOfState);
+    }
+    methodSetGravityTransitionAngularSpeed(timeElapsed, timeDelta, nameOfState)
+    {
+        // todo : just change this ONCE depending on the gravity distance?
+
+        // depending on the distance from the planet
+        switch(nameOfState){
+            case EnumStateGravity.Falling:
+                this.#pitchShouldClamp = true;
+                this.#gravityTransitionAngularSpeed = this.#gravityTransitionAngularSpeedMax;
+                break;
+            case EnumStateGravity.Stratosphere:
+                this.#pitchShouldClamp = true;
+                this.#gravityTransitionAngularSpeed = this.#gravityTransitionAngularSpeedMin;
+                break;
+            case EnumStateGravity.Orbit:
+                this.#pitchShouldClamp = false;
+                this.#gravityTransitionAngularSpeed = this.#gravityTransitionAngularSpeedMin;
+                break;
+        }
+    }
+    // #endregion state machine
 
     // #region handlers
     methodHandleUpdatePosition(paramMessage)

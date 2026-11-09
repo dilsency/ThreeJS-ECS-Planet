@@ -7,7 +7,7 @@ import {EntityComponent} from "../../classes/ECS/entity_component.js";
 export class EntityComponentMainMenu extends EntityComponent
 {
     // #region privates
-    #componentInitialization = null;
+    #componentInstanceInitialization = null;
     #elementTitle = null;
     #elementButtonContainer = null;
     #listElementButtons = [];
@@ -25,7 +25,7 @@ export class EntityComponentMainMenu extends EntityComponent
     methodInitialize()
     {
         // context component, get, once
-        this.#componentInitialization = this.methodGetEntityByName("SingletonContextInitialization")?.methodGetComponent("EntityComponentSingletonContextInitialization");
+        this.#componentInstanceInitialization = this.methodGetEntityByName("SingletonContextInitialization")?.methodGetComponent("EntityComponentSingletonContextInitialization");
 
         //
         this.#elementTitle = document.createElement("div");
@@ -55,7 +55,7 @@ export class EntityComponentMainMenu extends EntityComponent
         document.body.appendChild(this.#elementButtonContainer);
 
         //
-        var len = this.#componentInitialization.methodGetPresetCount();
+        var len = this.#componentInstanceInitialization.methodGetPresetCount();
         
         //
         console.log("number of presets to loop through");
@@ -68,7 +68,7 @@ export class EntityComponentMainMenu extends EntityComponent
             var elementButton = document.createElement("button");
 
             //
-            var presetName = this.#componentInitialization.methodGetPresetNameByIndex(i);
+            var presetName = this.#componentInstanceInitialization.methodGetPresetNameByIndex(i);
             elementButton.innerText = presetName;
 
         //
@@ -117,7 +117,7 @@ export class EntityComponentMainMenu extends EntityComponent
         console.log("button clicked: index: " + indexPreset);
         
         //
-        this.#componentInitialization.methodSetIndexPreset(indexPreset);
+        this.#componentInstanceInitialization.methodSetIndexPreset(indexPreset);
 
         // at the moment, each button also confirms
         this.methodOnClickButtonConfirm(event, indexPreset);
@@ -125,7 +125,7 @@ export class EntityComponentMainMenu extends EntityComponent
     methodOnClickButtonConfirm(event, indexPreset)
     {
         // context component
-        this.#componentInitialization.methodConfirm();
+        this.#componentInstanceInitialization.methodConfirm();
 
         // we use the message system to hide...
         // ...instead of doing it directly
@@ -142,4 +142,88 @@ export class EntityComponentMainMenu extends EntityComponent
         this.#elementButtonContainer.style.display = "none";
     }
     // #endregion methods
+}
+
+export class EntityComponentLoadingScreen extends EntityComponent
+{
+    // #region privates
+    #componentInstanceInitialization = null;
+    #elementBase = null;
+    // #endregion privates
+
+    // #region construct
+    constructor(params)
+    {
+        super(params);
+        //this.#params = params;
+    }
+    // #endregion construct
+
+    // #region lifecycle
+    methodInitialize()
+    {
+        // context component, get, once
+        this.#componentInstanceInitialization = this.methodGetEntityByName("SingletonContextInitialization")?.methodGetComponent("EntityComponentSingletonContextInitialization");
+
+        //
+        this.#elementBase = document.createElement("div");
+        this.#elementBase.style.display = "none";
+        this.#elementBase.style.pointerEvents = "none";
+        this.#elementBase.style.position = "fixed";
+        this.#elementBase.style.zIndex = "100";
+        this.#elementBase.style.backgroundColor = "#7fcceb";
+        this.#elementBase.style.top = "0";
+        this.#elementBase.style.bottom = "0";
+        this.#elementBase.style.left = "0";
+        this.#elementBase.style.right = "0";
+        this.#elementBase.style.width = "100vw";
+        this.#elementBase.style.height = "100vh";
+        this.#elementBase.innerText = "loading...";
+        document.body.appendChild(this.#elementBase);
+
+        // #region message system handler registration
+        this.methodRegisterMessageHandlerWithinEntity("initialization.waiting",
+            (paramMessage) => this.methodShow()
+        );
+        this.methodRegisterMessageHandlerWithinEntity("initialization.ready",
+            (paramMessage) => 
+                {
+                    console.log("ready!");
+                    this.methodOnReady(paramMessage);
+                }
+        );
+        // #endregion message system handler registration
+    }
+    methodUpdate(timeElapsed, timeDelta) { }
+    methodDispose()
+    {
+        //
+        document.body.removeChild(this.#elementBase);
+    }
+    // #endregion lifecycle
+
+    // #region methods
+    methodShow()
+    {
+        this.#elementBase.style.display = "block";
+        this.#elementBase.style.pointerEvents = "auto";
+    }
+    methodHide()
+    {
+        this.#elementBase.style.display = "none";
+        this.#elementBase.style.pointerEvents = "none";
+    }
+    // #endregion methods
+
+    // #region a
+    methodOnReady(paramMessage)
+    {
+        this.methodHide();
+        console.log("initialization ready!");
+
+        // use the message system to broadcast
+        
+        // ...
+    }
+    // #endregion a
 }

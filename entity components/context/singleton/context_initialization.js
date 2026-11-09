@@ -96,6 +96,20 @@ export class EntityComponentSingletonContextInitialization extends EntityCompone
     // #endregion setters
 
     // #region methods
+    methodReportReady(stringReason)
+    {
+        // early return
+        if(!this.#isConfirmed){return;}
+
+        //
+        console.log("reported ready!");
+
+        // broadcast
+        this.methodSendMessageToEntitiesWithComponent("EntityComponentMainMenu", {
+            "invokableHandlerName": "initialization.ready",
+            "invokableHandlerValue": stringReason,
+        });
+    }
     methodConfirm(){
         // #region early return
         if(this.#isConfirmed){return;}
@@ -104,12 +118,17 @@ export class EntityComponentSingletonContextInitialization extends EntityCompone
 
         // use the message system to broadcast
 
-        // both to MainMenu
+        // MainMenu
         this.methodSendMessageToEntitiesWithComponent("EntityComponentMainMenu", {
             "invokableHandlerName": "initialization.confirmed",
             "invokableHandlerValue": null
         });
-        // and to WorldGenerator
+        // LoadingScreen
+        this.methodSendMessageToEntitiesWithComponent("EntityComponentLoadingScreen", {
+            "invokableHandlerName": "initialization.waiting",
+            "invokableHandlerValue": null
+        });
+        // WorldGenerator
         this.methodSendMessageToEntitiesWithComponent("EntityComponentWorldGenerator", {
             "invokableHandlerName": "initialization.confirmed",
             "invokableHandlerValue": null
