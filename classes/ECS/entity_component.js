@@ -109,6 +109,22 @@ export class EntityComponent
     methodGetTimeDeltaGame(){return this.methodGetCachedContextTime()?.methodGetTimeDeltaGame();}
     // #endregion getters : shorthand : SingletonContextTime
 
+    // #region shorthand : chat
+    // very simplified, not much customization
+    methodSendMessageToChat(paramMessageText)
+    {
+        this.methodSendMessageToEntitiesWithComponent("EntityComponentChatList",
+            {
+                "invokableHandlerName": "chat.message",
+                "invokableHandlerValue":
+                {
+                    "text": paramMessageText,
+                }
+            }
+        );
+    }
+    // #endregion shorthand : chat
+
     // #region getters : delegate to parent
 
     methodGetName(){return this.#parent.methodGetName();}
