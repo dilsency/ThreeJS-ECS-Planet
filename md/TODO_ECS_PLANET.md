@@ -629,3 +629,28 @@ pause and what must keep running during it (e.g. voice capture).
 First consumer (next): `EntityComponentChatList` message lifetimes; see `push-to-talk-voice-to-text.md` "Progress and revisions" (shared docs folder) for the ChatList build order.
 
 Not done in phase 1: `EntityComponent` shorthands for the getters; `methodUpdateTime` is a duplicate alias of `methodSetTime` (remove); `methodSetTimeScale` has no negative/NaN guard.
+
+## 17. Optional: rewrite history so every commit is authored by `dilsency` (needs a force-push)
+
+**Background:** every commit in this repo was meant to be `dilsency <dilsency@gmail.com>`. Some
+were made under `NilsTillaeus` (a different local git name, same email `dilsency@gmail.com`) and
+3 under `NilsTillaeus <nils.tillaeus@gmail.com>` (the other account, used by accident). The global
+git name on the main workstation is now `dilsency`.
+
+**Done (non-destructive):** a `.mailmap` in the repo root maps both to `dilsency <dilsency@gmail.com>`.
+`git log` (with `%aN`/`%aE` or the default format) and `git shortlog` show all 72 commits as
+`dilsency`. No hashes changed. GitHub's web UI ignores `.mailmap`, so commits made under
+`nils.tillaeus@gmail.com` may still show the other account there.
+
+**Open (only if wanted): the full rewrite.**
+1. Back up first: `git clone --mirror` of the repo (or a backup branch).
+2. On a fresh clone: `git filter-repo --mailmap .mailmap` (reuses the existing file).
+3. `git push --force origin main`. Every commit from the first rewritten one onward gets a new hash.
+4. **Every other workstation:** discard or save local work, then `git fetch` and
+   `git reset --hard origin/main`. Unpushed commits there must be rebased onto the new history.
+5. Once the history is clean, `.mailmap` can be deleted.
+
+**Why it is optional:** purely cosmetic (GitHub already attributes by email for the
+`dilsency@gmail.com` commits). The cost is new hashes, a force-push, and a reset on the other
+workstation. Not worth it unless the three `nils.tillaeus@gmail.com` commits showing as another
+account on GitHub bothers you.
