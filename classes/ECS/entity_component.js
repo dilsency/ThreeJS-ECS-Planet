@@ -50,47 +50,73 @@ export class EntityComponent
         return this.#parent.methodRemoveEntity(paramEntity);
     }
 
-    // getters - shorthand for bare-minimum Three.js state owned by the
-    // "SingletonContextEngine" entity's EntityComponentSingletonContextEngine - see
-    // BARE_MINIMUM_THREEJS_EXCEPTION_OR_NOT.md and NAMING_CONVENTIONS.md
-    // (the "EntityComponentSingletonContext*" naming family). All six bare-minimum
-    // values are covered now. None of these cache the lookup itself - a
-    // per-frame consumer should resolve once in its own methodInitialize()
-    // and stash the result, the way EntityComponentCameraControllerFirstPerson
-    // and EntityComponentLightManager both already do, rather than calling
-    // these fresh every frame.
-
+    // #region getters : shorthand : SingletonContextEngine
     methodGetScene()
     {
-        return this.methodGetEntityByName("SingletonContextEngine")?.methodGetComponent("EntityComponentSingletonContextEngine")?.methodGetScene();
+        return this.methodGetCachedContextEngine()?.methodGetScene();
     }
     methodGetSceneHUD()
     {
-        return this.methodGetEntityByName("SingletonContextEngine")?.methodGetComponent("EntityComponentSingletonContextEngine")?.methodGetSceneHUD();
+        return this.methodGetCachedContextEngine()?.methodGetSceneHUD();
     }
     methodGetRenderer()
     {
-        return this.methodGetEntityByName("SingletonContextEngine")?.methodGetComponent("EntityComponentSingletonContextEngine")?.methodGetRenderer();
+        return this.methodGetCachedContextEngine()?.methodGetRenderer();
     }
     methodGetCamera()
     {
-        return this.methodGetEntityByName("SingletonContextEngine")?.methodGetComponent("EntityComponentSingletonContextEngine")?.methodGetCamera();
+        return this.methodGetCachedContextEngine()?.methodGetCamera();
     }
     methodGetCameraPivot()
     {
-        return this.methodGetEntityByName("SingletonContextEngine")?.methodGetComponent("EntityComponentSingletonContextEngine")?.methodGetCameraPivot();
+        return this.methodGetCachedContextEngine()?.methodGetCameraPivot();
     }
     methodGetCameraHUD()
     {
-        return this.methodGetEntityByName("SingletonContextEngine")?.methodGetComponent("EntityComponentSingletonContextEngine")?.methodGetCameraHUD();
+        return this.methodGetCachedContextEngine()?.methodGetCameraHUD();
     }
+    // #endregion getters : shorthand : SingletonContextEngine
 
-    // getters, but actually for the parent
+    // #region component instance cache
+    #componentInstanceEngine = null;
+    methodGetCachedContextEngine()
+    {
+        if(this.#componentInstanceEngine == null)
+        {
+            this.#componentInstanceEngine =
+                this.methodGetEntityByName("SingletonContextEngine")
+                    ?.methodGetComponent("EntityComponentSingletonContextEngine");
+        }
+        return this.#componentInstanceEngine;
+    }
+    #componentInstanceTime = null;
+    methodGetCachedContextTime()
+    {
+        if(this.#componentInstanceTime == null)
+        {
+            this.#componentInstanceTime =
+                this.methodGetEntityByName("SingletonContextTime")
+                    ?.methodGetComponent("EntityComponentSingletonContextTime");
+        }
+        return this.#componentInstanceTime;
+    }
+    // #endregion component instance cache
+
+    // #region getters : shorthand : SingletonContextTime
+    methodGetTimeElapsed(){return this.methodGetCachedContextTime()?.methodGetTimeElapsed();}
+    methodGetTimeDelta(){return this.methodGetCachedContextTime()?.methodGetTimeDelta();}
+    methodGetTimeElapsedGame(){return this.methodGetCachedContextTime()?.methodGetTimeElapsedGame();}
+    methodGetTimeDeltaGame(){return this.methodGetCachedContextTime()?.methodGetTimeDeltaGame();}
+    // #endregion getters : shorthand : SingletonContextTime
+
+    // #region getters : delegate to parent
 
     methodGetName(){return this.#parent.methodGetName();}
     methodGetPosition(){return this.#parent.methodGetPosition();}
     methodGetDirUp(){return this.#parent.methodGetDirUp();}
     methodGetDirFacing(){return this.#parent.methodGetDirFacing();}
+
+    // #endregion getters : delegate to parent
 
     //
     methodGetIsFlaggedForDeletion()
