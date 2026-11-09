@@ -6,7 +6,14 @@ export class EntityComponentChatList extends EntityComponent
 {
     // #region privates
     #elementContainer = null;
-    #elementChatList = null;
+    #elementChat = null;
+    //
+    #listChatMessageElements = [];
+    //
+    #listChatMessages = [];
+    #listChatMessagesMax = 10;
+    //
+    #timeLifeDefault = 5;
     // #endregion privates
 
     // #region constructor
@@ -21,6 +28,10 @@ export class EntityComponentChatList extends EntityComponent
     methodInitialize()
     {
         console.log("EntityComponentChatList.methodInitialize()");
+
+        //
+        const timeElapsed = this.methodGetTimeElapsed();
+
         //
         this.#elementContainer = document.createElement("div");
         this.#elementContainer.style.position = "fixed";
@@ -31,23 +42,78 @@ export class EntityComponentChatList extends EntityComponent
         document.body.appendChild(this.#elementContainer);
 
         //
-        this.#elementChatList = document.createElement("div");
-        this.#elementChatList.style.fontSize = "10px";
-        this.#elementChatList.style.lineHeight = "10px";
-        this.#elementChatList.style.marginBottom = "-8px";
-        this.#elementContainer.appendChild(this.#elementChatList);
+        this.#elementChat = document.createElement("div");
+        this.#elementChat.style.fontSize = "10px";
+        this.#elementChat.style.lineHeight = "10px";
+        this.#elementChat.style.marginBottom = "-8px";
+        this.#elementContainer.appendChild(this.#elementChat);
 
         //
         for(var i = 0; i < 10; i++)
         {
-            this.#methodAddChatMessage({"text": "chat message " + i});
+            this.#methodAddChatMessage(
+                {
+                    "text": "chat message " + i,
+                    "timeSpawned": timeElapsed,
+                    "timeLife": 5 + i,
+                }
+            );
         }
+
+        // #region handler registration
+        this.methodRegisterMessageHandlerWithinEntity("chat.message", (broadcastItem) => {
+
+            if(broadcastItem.invokableHandlerValue == null){return;}
+            if(broadcastItem.invokableHandlerValue["text"] == null){return;}
+
+            const message = {
+                "text": broadcastItem.invokableHandlerValue["text"],
+                "timeSpawned": broadcastItem.invokableHandlerValue["timeSpawned"],
+                "timeLife": broadcastItem.invokableHandlerValue["timeLife"],
+            };
+
+            // add time, if none exists
+            if(message["timeSpawned"] == null)
+            {
+                message["timeSpawned"] = this.methodGetTimeElapsed();
+            }
+            if(message["timeLife"] == null)
+            {
+                message["timeLife"] = this.#timeLifeDefault;
+            }
+
+            // check that text is actually a string
+            if(!(typeof message["text"] === 'string'))
+            {
+                message["text"] = String(message["text"]);
+            }
+
+            //
+            this.#methodAddChatMessage(message);
+        });
+        // #endregion handler registration
 
         //
         console.log("EntityComponentChatList.methodInitialize() done");
     }
-    methodUpdate(timeElapsed, timeDelta)
+    methodUpdate()
     {
+        // time object replaces time parameters
+        const timeElapsed = this.methodGetTimeElapsed();
+
+        //
+        const len = this.#listChatMessages.length;
+
+        // reverse loop through list
+        for(var i = (len - 1); i >= 0; i--)
+        {
+            const timeExpires = this.#listChatMessages[i]["timeSpawned"] + this.#listChatMessages[i]["timeLife"];
+            if(timeExpires < timeElapsed)
+            {
+                // delete chat message here
+                this.#methodRemoveChatMessageByIndex(i);
+            }
+        }
     }
     methodDispose()
     {
@@ -56,7 +122,11 @@ export class EntityComponentChatList extends EntityComponent
 
         //
         this.#elementContainer = null;
-        this.#elementChatList = null;
+        this.#elementChat = null;
+
+        //
+        this.#listChatMessages = [];
+        this.#listChatMessageElements = [];
     }
     // #endregion lifecycle
 
@@ -64,10 +134,31 @@ export class EntityComponentChatList extends EntityComponent
     #methodAddChatMessage(message)
     {
         const elementChatMessage = document.createElement("div");
-        elementChatMessage.innerText = message.text;
-        this.#elementChatList.appendChild(elementChatMessage);
-
+        elementChatMessage.textContent = message["text"];
+        elementChatMessage.title = (message["timeSpawned"] + "/" + (message["timeSpawned"] + message["timeLife"]));
         elementChatMessage.style.marginBottom = "8px";
+        this.#elementChat.appendChild(elementChatMessage);
+
+        this.#listChatMessages.push(message);
+        this.#listChatMessageElements.push(elementChatMessage);
+
+        //
+        if (this.#listChatMessages.length > this.#listChatMessagesMax)
+        {
+            this.#methodRemoveChatMessageByIndex(0);
+        }
+    }
+    #methodRemoveChatMessageByIndex(index)
+    {
+        //
+        if (index >= 0 && index < this.#listChatMessages.length)
+        {
+            //
+            this.#listChatMessages.splice(index, 1);
+            //
+            const messageElement = this.#listChatMessageElements.splice(index, 1)[0];
+            this.#elementChat.removeChild(messageElement);            
+        }
     }
     // #endregion private methods
 }
