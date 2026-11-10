@@ -32,3 +32,11 @@ export const EnumHUDPanelYawBehavior = Object.freeze({
 });
 
 // #endregion hud layout
+
+// #region voice
+export const EnumModeVoiceTranscriber = Object.freeze({
+    None: "None",
+    Local: "Local",
+    Cloud: "Cloud",
+});
+// #endregion voice

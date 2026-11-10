@@ -123,6 +123,19 @@ export class EntityComponent
             }
         );
     }
+    methodSendMessageToChatWithLifespan(paramMessageText, paramMessageLifespan)
+    {
+        this.methodSendMessageToEntitiesWithComponent("EntityComponentChatList",
+            {
+                "invokableHandlerName": "chat.message",
+                "invokableHandlerValue":
+                {
+                    "text": paramMessageText,
+                    "timeLife": paramMessageLifespan,
+                }
+            }
+        );
+    }
     // #endregion shorthand : chat
 
     // #region getters : delegate to parent
