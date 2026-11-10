@@ -35,7 +35,8 @@ export class EntityComponentChatList extends EntityComponent
         //
         this.#elementContainer = document.createElement("div");
         this.#elementContainer.style.position = "fixed";
-        this.#elementContainer.style.bottom = "2px";
+        this.#elementContainer.style.top = "50%";
+        this.#elementContainer.style.transform = "translateY(-50%)";
         this.#elementContainer.style.left = "2px";
         this.#elementContainer.style.backgroundColor = "#00000060";
         this.#elementContainer.style.color = "#FFFFFF";
@@ -66,6 +67,7 @@ export class EntityComponentChatList extends EntityComponent
             if(broadcastItem.invokableHandlerValue["text"] == null){return;}
 
             const message = {
+                "username": "default",
                 "text": broadcastItem.invokableHandlerValue["text"],
                 "timeSpawned": broadcastItem.invokableHandlerValue["timeSpawned"],
                 "timeLife": broadcastItem.invokableHandlerValue["timeLife"],
@@ -133,10 +135,17 @@ export class EntityComponentChatList extends EntityComponent
     #methodAddChatMessage(message)
     {
         const elementChatMessage = document.createElement("div");
-        elementChatMessage.textContent = message["text"];
         elementChatMessage.title = (message["timeSpawned"] + "/" + (message["timeSpawned"] + message["timeLife"]));
         elementChatMessage.style.marginBottom = "8px";
         this.#elementChat.appendChild(elementChatMessage);
+
+        //
+        elementChatMessage.textContent = "";
+        if(message["username"] != null && message["username"].length >= 2)
+        {
+            elementChatMessage.textContent += (message["username"] + ": ");
+        }
+        elementChatMessage.textContent += message["text"];
 
         this.#listChatMessages.push(message);
         this.#listChatMessageElements.push(elementChatMessage);
