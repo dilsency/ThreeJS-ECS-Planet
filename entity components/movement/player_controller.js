@@ -22,16 +22,23 @@ const TAP_MAX_MOVEMENT_PX = 20;
 
 export class EntityComponentPlayerControllerInput extends EntityComponent
 {
+    // #region privates
     #params = null;
     #keys = null;
+    //
+    #eventListenerHandlerOnKeyDown = null;
+    #eventListenerHandlerOnKeyUp = null;
+    // #endregion privates
     constructor(params)
     {
         super(params);
         this.#params = params;
     }
     get keys() {return this.#keys;}
+    // #region lifecycle
     methodInitialize()
     {
+        //
         this.#keys =
         {
             forward: false,
@@ -43,9 +50,26 @@ export class EntityComponentPlayerControllerInput extends EntityComponent
             jump: false,
             teleportout: false,
         };
-        document.addEventListener('keydown', (e) => this.methodEventOnKeyDown(e), false);
-        document.addEventListener('keyup', (e) => this.methodEventOnKeyUp(e), false);
+
+        // #region event listeners
+        //
+        this.#eventListenerHandlerOnKeyDown = (e) => this.methodEventOnKeyDown(e);
+        this.#eventListenerHandlerOnKeyUp = (e) => this.methodEventOnKeyUp(e);
+
+        //
+        document.addEventListener('keydown', this.#eventListenerHandlerOnKeyDown, false);
+        document.addEventListener('keyup', this.#eventListenerHandlerOnKeyUp, false);
+        // #endregion event listeners
     }
+    methodDispose()
+    {
+        // for event listeners on document/window, we need to store the function reference beforehand...
+        // ...so that we can remove exactly that function instance...
+        // ...whereas => or .bind(this) will erroneously create a NEW function instance
+        document.removeEventListener('keydown', this.#eventListenerHandlerOnKeyDown, false);
+        document.removeEventListener('keyup', this.#eventListenerHandlerOnKeyUp, false);
+    }
+    // #endregion lifecycle
     methodEventOnKeyDown(e)
     {
         switch (e.keyCode)
@@ -122,6 +146,7 @@ export class EntityComponentPlayerControllerInput extends EntityComponent
 // fields have to exist regardless.
 export class EntityComponentPlayerControllerInputTouch extends EntityComponent
 {
+    // #region privates
     #params = null;
     #keys = null;
 
@@ -145,12 +170,20 @@ export class EntityComponentPlayerControllerInputTouch extends EntityComponent
     // of a double-tap) - null when not walking.
     #walkingTouchIdentifier = null;
 
+    // 
+    #eventListenerHandlerOnTouchStart = null;
+    #eventListenerHandlerOnTouchEnd = null;
+    #eventListenerHandlerOnTouchCancel = null;
+    // #endregion privates
+
     constructor(params)
     {
         super(params);
         this.#params = params;
     }
     get keys() {return this.#keys;}
+    
+    // #region lifecycle
     methodInitialize()
     {
         this.#keys =
@@ -163,20 +196,16 @@ export class EntityComponentPlayerControllerInputTouch extends EntityComponent
             down: false,
         };
 
-        // document only, not also window - see
-        // EntityComponentCameraControllerFirstPersonInputTouch's own comment
-        // on this: this class also computes state by tracking/diffing
-        // across events rather than reading something the browser
-        // pre-computes per event, so double-registering risks the same kind
-        // of silent corruption caught there.
+        // we need to store event listener handlers...
+        // ...in order to be able to dispose of them
+        this.#eventListenerHandlerOnTouchStart = (e) => this.methodEventOnTouchStart(e);
+        this.#eventListenerHandlerOnTouchEnd = (e) => this.methodEventOnTouchEnd(e);
+        this.#eventListenerHandlerOnTouchCancel = (e) => this.methodEventOnTouchCancel(e);
+
         //
-        // {passive: false} on touchstart so methodEventOnTouchStart() below
-        // can call e.preventDefault() - see that method's own comment for
-        // why (a held, stationary touch arms the browser's own long-press
-        // gesture on a timer, which this needs to preempt before it fires).
-        document.addEventListener('touchstart', (e) => this.methodEventOnTouchStart(e), {passive: false});
-        document.addEventListener('touchend', (e) => this.methodEventOnTouchEnd(e));
-        document.addEventListener('touchcancel', (e) => this.methodEventOnTouchEnd(e));
+        document.addEventListener('touchstart', this.#eventListenerHandlerOnTouchStart, {passive: false});
+        document.addEventListener('touchend', this.#eventListenerHandlerOnTouchEnd);
+        document.addEventListener('touchcancel', this.#eventListenerHandlerOnTouchCancel);
     }
 
     methodUpdate(timeElapsed, timeDelta)
@@ -200,6 +229,15 @@ export class EntityComponentPlayerControllerInputTouch extends EntityComponent
             }
         }
     }
+    methodDispose()
+    {
+        //
+        document.removeEventListener('touchstart', this.#eventListenerHandlerOnTouchStart, {passive: false});
+        document.removeEventListener('touchend', this.#eventListenerHandlerOnTouchEnd);
+        document.removeEventListener('touchcancel', this.#eventListenerHandlerOnTouchCancel);
+
+    }
+    // #endregion lifecycle
 
     methodEventOnTouchStart(e)
     {
@@ -243,6 +281,11 @@ export class EntityComponentPlayerControllerInputTouch extends EntityComponent
         this.#candidateStartY = touch.clientY;
         this.#candidateElapsedSeconds = 0;
         //debugOverlaySetLine("player", `tap candidate id=${touch.identifier} walking=${this.#walkingTouchIdentifier}`); // TEMPORARY
+    }
+
+    methodEventOnTouchCancel(e)
+    {
+        this.methodEventOnTouchEnd(e);
     }
 
     methodEventOnTouchEnd(e)
