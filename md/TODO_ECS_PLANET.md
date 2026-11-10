@@ -654,3 +654,183 @@ git name on the main workstation is now `dilsency`.
 `dilsency@gmail.com` commits). The cost is new hashes, a force-push, and a reset on the other
 workstation. Not worth it unless the three `nils.tillaeus@gmail.com` commits showing as another
 account on GitHub bothers you.
+
+## 18. Input classes are NOT future-proof: controlling-options must be attachable and detachable at runtime
+
+**The current version is NOT future-proof.** The choice of input is made ONCE, at startup, and never
+revisited.
+
+**How it works today:**
+- `context_environment.js:35` computes `#isTouchPrimary` once:
+  `('ontouchstart' in window) || (navigator.maxTouchPoints > 0)`.
+- `EntityComponentPlayerController.methodInitializeAttachment()` ("Pattern C", `player_controller.js`
+  around line 492) reads it a single time and attaches EITHER `EntityComponentPlayerControllerInputTouch`
+  OR `EntityComponentPlayerControllerInput` as a sibling, under the one slot name
+  `"EntityComponentPlayerControllerInput"`. `camera_controller_first_person.js` (around line 584) does
+  the same for its own Input classes.
+- Entities have no remove-component method, so a chosen sibling can never be detached.
+
+**What goes wrong:**
+- A player can attach or detach controlling-options at any time (a Bluetooth keyboard on a tablet,
+  a controller, a mouse). Nothing is noticed after startup.
+- A laptop with a touchscreen has `maxTouchPoints > 0`, so the touch Input wins and the keyboard Input
+  is never attached at all.
+- Keyboard + touch are not mutually exclusive, so "pick one" is the wrong model.
+
+**What it needs to be able to do, in the future:**
+- Handle attaching AND detaching various controlling-options at runtime (keyboard, touch, and later
+  gamepads or other peripherals), without a restart and without leaking listeners.
+
+**Ideas (not decided):**
+- Attach all available Input classes and merge their `keys` (they do not conflict), instead of picking
+  one at startup. The consumer reads one merged result.
+- OR: one Input wrapper component that owns the shared state and holds a set of plain "source" objects
+  that can be added and removed at runtime. This is the same shape as the voice transcriber wrapper
+  plus backends (see `push-to-talk-voice-to-text.md`, shared docs folder).
+- Detecting a change: `pointer: coarse` media query change events, first touch / first key press seen,
+  and gamepad connect / disconnect events.
+- Every source must remove its listeners on detach (the listener cleanup in `player_controller.js`
+  was already done as a separate small change).
+
+**Open:** what to merge when two sources disagree (e.g. both press forward); whether the camera
+controller's Input classes should share the same mechanism; how a source announces itself.
+
+## 19. Possible alternative: voice "tail" delay driven by `methodUpdate` and the time object, instead of `setTimeout`
+
+**Background:** when the push-to-talk key is released, calling the recognizer's `.stop()` at once usually
+cuts off the last spoken word. `VoiceTranscriberCloud` (`entity components/voice/transcriber.js`) therefore
+delays `.stop()` by `#timerTailDuration` (300 ms, tuned by ear) using `setTimeout`. A new press during the
+delay cancels the pending stop and the recording simply continues.
+
+**The alternative (not chosen for now):** `EntityComponentVoiceTranscriber` (the wrapper) counts the delay
+down in its own `methodUpdate`, using the shared time object (`this.methodGetTimeElapsed()`, REAL time so a
+pause does not stretch it):
+- On a stop request, store `timeStopAt = now + tail`, and do not stop yet.
+- In `methodUpdate`, when `now >= timeStopAt`, call the transcriber's `methodStopRecording()` and clear it.
+- A new start request while a stop is pending clears `timeStopAt` (same "keep recording" behaviour).
+
+**Pros:**
+- One clock: `main.js` stays the only place time is measured; nothing else owns a timer.
+- No timer handle to clear in dispose or on a backend swap.
+- Applies to every backend (Local/Whisper too), and the wrapper can expose a "stopping" state for the
+  planned "currently recording" indicator.
+- Runs in step with the frame loop and the rest of the ECS.
+
+**Cons:**
+- More code than a `setTimeout`, for the same visible behaviour.
+- Frame granularity (about 16 ms), which is negligible against a 300 ms tail.
+- The tail is a property of Web Speech; Whisper may need a different value or none. It would need to come
+  from the backend (e.g. a `methodGetTailDuration()`), not be a constant in the wrapper.
+
+**Decision:** keep `setTimeout` inside `VoiceTranscriberCloud` for now. Revisit when the Local (Whisper)
+transcriber is added, or when the recording indicator needs a "stopping" state.
+
+## 20. Optional: console diagnostics for voice sessions that produce no text and no error
+
+**Status:** not implemented, on purpose. Written down so it can be added quickly if "sometimes nothing is
+transcribed" becomes a real problem. All lines are **console only**, never chat. Files:
+`entity components/voice/transcriber.js` (Cloud class and wrapper) and `context_voice.js`.
+
+**Why:** Web Speech can end a session with no result and no `onerror`, and several code paths return
+silently. Today nothing shows which one happened. A prime suspect: pressing V again before the previous
+session's `onend` fired, so `methodStartRecording` returns early at its `#isRecording` check.
+
+**Convention:** one prefix for every line, `voice : ...`, so they can be filtered in the console.
+Optionally wrap them in one `#isDebug` flag (default `true`) so they can be switched off in one place.
+
+**1. Cloud class, `methodStartRecording`**
+```js
+if(this.#timerTail != null)
+{
+    console.log("voice : press during tail delay, continuing the current recording");
+    clearTimeout(this.#timerTail);
+    this.#timerTail = null;
+    return;
+}
+if(this.#isRecording)
+{
+    console.log("voice : start ignored, the previous session has not ended yet");
+    return;
+}
+```
+
+**2. Cloud class, `methodStopRecording`**
+```js
+if(!this.#isRecording)
+{
+    console.log("voice : stop ignored, not recording");
+    return;
+}
+if(this.#timerTail != null)
+{
+    console.log("voice : stop ignored, a stop is already pending");
+    return;
+}
+```
+
+**3. Cloud class, transcript loop**
+```js
+if(!iteration.isFinal)
+{
+    console.log("voice : skipped a non-final result");
+    continue;
+}
+// ... after trimming
+if(trimmedText.length <= 0)
+{
+    console.log("voice : skipped an empty result");
+    continue;
+}
+```
+
+**4. Cloud class, "session ended with no transcript"** (new private field `#hasTranscriptThisSession`)
+```js
+// methodStartRecording, after start() succeeds:  this.#hasTranscriptThisSession = false;
+// transcript loop, right before delivering:      this.#hasTranscriptThisSession = true;
+// methodHandleOnEnd:
+if(!this.#hasTranscriptThisSession)
+{
+    console.log("voice : session ended with no transcript");
+}
+```
+
+**5. Cloud class, recognizer lifecycle events** (in the constructor)
+```js
+this.#instanceVoiceRecognizer.onaudiostart = () => console.log("voice : audio capture started");
+this.#instanceVoiceRecognizer.onspeechstart = () => console.log("voice : speech detected");
+this.#instanceVoiceRecognizer.onspeechend = () => console.log("voice : speech ended");
+this.#instanceVoiceRecognizer.onnomatch = () => console.log("voice : no match");
+```
+`methodDispose` must set these four to `null` too, BEFORE `abort()`, like `onresult`/`onend`/`onerror`.
+How to read them: no `audiostart` = the mic never reached the browser (relevant over Remote Desktop mic
+redirection); `audiostart` but no `speechstart` = no speech detected; `speechstart` but no result = the
+service returned nothing.
+
+**6. Wrapper, `methodStartRecording`**
+```js
+if(this.#swappableTranscriber == null)
+{
+    console.log("voice : start ignored, no transcriber (mode None)");
+    return;
+}
+if(!this.#swappableTranscriber.methodGetIsSupported())
+{
+    console.log("voice : start ignored, this browser does not support the transcriber");
+    return;
+}
+```
+
+**7. Context, key handler** (optional)
+```js
+// methodEventOnKeyDown
+if(this.#mode === EnumModeVoiceTranscriber.None)
+{
+    console.log("voice : V ignored, mode is None");
+    return;
+}
+```
+Do NOT log the `e.repeat` early return: a held key fires it about 30 times a second.
+
+**Other likely cause that needs no code:** a very quick tap. `stop()` right after `start()` often gives no
+result, because the recognizer needs a moment to connect. Related: the tail delay (item 19) exists because
+`stop()` at once cuts off the last word.
