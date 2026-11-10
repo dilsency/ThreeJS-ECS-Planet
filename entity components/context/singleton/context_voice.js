@@ -9,7 +9,7 @@ import { EntityComponentVoiceTranscriber } from "../../voice/transcriber.js";
 export class EntityComponentSingletonContextVoice extends EntityComponent
 {
     // #region privates
-    #mode = EnumModeVoiceTranscriber.Cloud;
+    #mode = EnumModeVoiceTranscriber.None;
     //
     #isKeyHeld = false;
     #isKeyHeldPrevious = null;
@@ -101,6 +101,10 @@ export class EntityComponentSingletonContextVoice extends EntityComponent
     // #region setters
     methodSetMode(mode)
     {
+        // we check that our Enum actually has a mode of that name
+        // if it does not, we early-return
+        if(!this.methodGetIsModeValid(mode)){console.warn("non-existing mode: " + mode);return;}
+
         //
         this.#mode = mode;
         //
@@ -109,6 +113,11 @@ export class EntityComponentSingletonContextVoice extends EntityComponent
     // #endregion setters
 
     // #region getters
+    methodGetIsModeValid(mode)
+    {
+        // Object.values , not Object.keys ...for whatever reason
+        return Object.values(EnumModeVoiceTranscriber).includes(mode);
+    }
     methodGetMode()
     {
         return this.#mode;

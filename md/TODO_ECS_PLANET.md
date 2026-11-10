@@ -834,3 +834,47 @@ Do NOT log the `e.repeat` early return: a held key fires it about 30 times a sec
 **Other likely cause that needs no code:** a very quick tap. `stop()` right after `start()` often gives no
 result, because the recognizer needs a moment to connect. Related: the tail delay (item 19) exists because
 `stop()` at once cuts off the last word.
+ 
+---
+ 
+## 21. Local (offline) voice transcription: implement `VoiceTranscriberLocal`
+ 
+Status: `VoiceTranscriberLocal` in `entity components/voice/transcriber.js` is a stub, and the "Local" radio button
+on the Main Menu selects it. Selecting it works, but pressing V does nothing, because `methodGetIsSupported()` is false.
+Size: medium-large. A working prototype is about one focused session; a polished version is a few.
+ 
+**What already exists (the easy part).** The wrapper (`EntityComponentVoiceTranscriber`), the mode switch, the radio
+button and the chat output are all in place. The Local class only has to match the Cloud class's shape:
+constructor `(language, onTranscript, onEnd, onError)`, plus start / stop / dispose / `methodGetIsSupported`.
+ 
+**Hurdles**
+ 
+1. **Audio capture.** `SpeechRecognition` records for us; locally we must do it ourselves.
+   `getUserMedia`, then `MediaRecorder` or an `AudioContext`, producing 16 kHz mono PCM (what Whisper expects).
+   The tail delay (see item 19) still applies. About 50-100 lines.
+2. **Running the model.** Likely transformers.js (`@huggingface/transformers`), e.g.
+   `pipeline("automatic-speech-recognition", "Xenova/whisper-tiny.en")`. Run it in a Web Worker so inference does not
+   freeze the render loop. This is the biggest piece: a separate worker file, a message protocol between worker and
+   component, and making sure Vite bundles the worker correctly (also for the GitHub Pages build).
+3. **Model download.** `whisper-tiny.en` is about 40 MB, `base.en` about 75 MB. The first use needs a loading state;
+   the chat list can report progress, as the world generator does. The browser caches the model afterwards.
+4. **Latency.** Local transcription is batch, not live: release V, the audio is processed, the text appears
+   about 1-3 seconds later (depends on the device and on WebGPU vs plain WASM). The UI should signal "transcribing...".
+   This also fits the recording indicator that is planned anyway.
+5. **Hosting and privacy.** GitHub Pages is fine (static), but the model is fetched from Hugging Face's CDN at
+   runtime. Worth a chat notice, the opposite of the Cloud warning: audio never leaves the device, but a model is downloaded.
+6. **Quality.** The tiny models misrecognise more than Chrome's cloud engine. Compare `tiny.en` and `base.en`.
+7. **Lifecycle.** `methodDispose` must terminate the worker and stop the mic stream tracks. Switching the mode
+   away from Local mid-download or mid-transcription needs a cancellation story.
+8. **Errors.** Mic denied, model download failed, no WebAssembly / WebGPU. Report through `#handlerOnError`, as Cloud does.
+ 
+**Suggested approach**
+ 
+1. Throwaway spike first: record 3 seconds, run it through the model, print the text to the console. No ECS, no worker.
+2. If that works: move inference into a worker, then build `VoiceTranscriberLocal` around it.
+3. Then loading state / progress in the chat list, then `methodGetIsSupported()`.
+ 
+**Depends on / related**
+- Recording indicator (animating vector image), planned for cloud as well.
+- Item 19 (tail delay driven by `methodUpdate`).
+- Item 20 (voice diagnostics), where the log lines would apply to Local as well.

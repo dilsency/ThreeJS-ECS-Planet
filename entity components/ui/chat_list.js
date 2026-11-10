@@ -35,6 +35,7 @@ export class EntityComponentChatList extends EntityComponent
         //
         this.#elementContainer = document.createElement("div");
         this.#elementContainer.style.position = "fixed";
+        this.#elementContainer.style.zIndex = "100";
         this.#elementContainer.style.top = "50%";
         this.#elementContainer.style.transform = "translateY(-50%)";
         this.#elementContainer.style.left = "2px";
@@ -67,7 +68,7 @@ export class EntityComponentChatList extends EntityComponent
             if(broadcastItem.invokableHandlerValue["text"] == null){return;}
 
             const message = {
-                "username": "default",
+                "username": broadcastItem.invokableHandlerValue["username"],
                 "text": broadcastItem.invokableHandlerValue["text"],
                 "timeSpawned": broadcastItem.invokableHandlerValue["timeSpawned"],
                 "timeLife": broadcastItem.invokableHandlerValue["timeLife"],

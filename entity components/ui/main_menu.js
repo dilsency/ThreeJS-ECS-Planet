@@ -3,14 +3,22 @@
 import * as THREE from "three";
 // ECS
 import {EntityComponent} from "../../classes/ECS/entity_component.js";
+import { EnumModeVoiceTranscriber } from "../../classes/enums.js";
 
 export class EntityComponentMainMenu extends EntityComponent
 {
     // #region privates
     #componentInstanceInitialization = null;
+    #componentInstanceVoice = null;
+    //
     #elementTitle = null;
+    //
     #elementButtonContainer = null;
     #listElementButtons = [];
+    //
+    #elementRadioButtonContainer = null;
+    #elementRadioButtonContainer2 = null;
+    #listElementRadioButtons = [];
     // #endregion privates
 
     // #region construct
@@ -25,7 +33,12 @@ export class EntityComponentMainMenu extends EntityComponent
     methodInitialize()
     {
         // context component, get, once
-        this.#componentInstanceInitialization = this.methodGetEntityByName("SingletonContextInitialization")?.methodGetComponent("EntityComponentSingletonContextInitialization");
+        this.#componentInstanceInitialization =
+            this.methodGetEntityByName("SingletonContextInitialization")
+                ?.methodGetComponent("EntityComponentSingletonContextInitialization");
+        this.#componentInstanceVoice =
+            this.methodGetEntityByName("SingletonContextChat")
+                ?.methodGetComponent("EntityComponentSingletonContextVoice");
 
         //
         this.#elementTitle = document.createElement("div");
@@ -39,6 +52,8 @@ export class EntityComponentMainMenu extends EntityComponent
         this.#elementTitle.innerText = "Pick your starting location";
         document.body.appendChild(this.#elementTitle);
 
+        // #region presets
+
         // we create one containing parent for the buttons
         // easier to hide
         this.#elementButtonContainer = document.createElement("div");
@@ -51,7 +66,6 @@ export class EntityComponentMainMenu extends EntityComponent
         this.#elementButtonContainer.style.right = "calc(50% - 90px)";
         this.#elementButtonContainer.style.minWidth = "90px";
         this.#elementButtonContainer.style.minHeight = "45px";
-        this.#elementButtonContainer.style.background = "red";
         document.body.appendChild(this.#elementButtonContainer);
 
         //
@@ -71,9 +85,9 @@ export class EntityComponentMainMenu extends EntityComponent
             var presetName = this.#componentInstanceInitialization.methodGetPresetNameByIndex(i);
             elementButton.innerText = presetName;
 
-        //
-        console.log("preset name at index: " + i);
-        console.log("\t" + presetName);
+            //
+            console.log("preset name at index: " + i);
+            console.log("\t" + presetName);
 
             //
             elementButton.style.width = "90px";
@@ -92,6 +106,69 @@ export class EntityComponentMainMenu extends EntityComponent
             this.#listElementButtons.push(elementButton);
         }
 
+        // #endregion presets
+
+        // #region voice input
+
+        //
+        this.#elementRadioButtonContainer = document.createElement("form");
+        this.#elementRadioButtonContainer.style.position = "fixed";
+        this.#elementRadioButtonContainer.style.display = "flex";
+        this.#elementRadioButtonContainer.style.flexFlow = "row nowrap";
+        this.#elementRadioButtonContainer.style.top = "calc(50% + 90px - 45px)";
+        this.#elementRadioButtonContainer.style.bottom = "calc(50% - 90px - 45px)";
+        this.#elementRadioButtonContainer.style.left = "calc(50% - 90px)";
+        this.#elementRadioButtonContainer.style.right = "calc(50% - 90px)";
+        this.#elementRadioButtonContainer.style.minWidth = "90px";
+        this.#elementRadioButtonContainer.style.minHeight = "45px";
+        document.body.appendChild(this.#elementRadioButtonContainer);
+
+        //
+        this.#elementRadioButtonContainer2 = document.createElement("fieldset");
+        this.#elementRadioButtonContainer.appendChild(this.#elementRadioButtonContainer2);
+
+        //
+        this.#elementRadioButtonContainer2.onchange = (e) => this.methodHandleOnChange(e);
+
+        //
+        const elementLegend = document.createElement("legend");
+        elementLegend.innerText = "Voice Control";
+        this.#elementRadioButtonContainer2.appendChild(elementLegend);
+
+        //
+        const arrayEnumModeVoiceTranscriber = Object.values(EnumModeVoiceTranscriber);
+        const lenEnumModeVoiceTranscriber = arrayEnumModeVoiceTranscriber.length;
+
+        //
+        for(var i = 0; i < lenEnumModeVoiceTranscriber; i++)
+        {
+            //
+            const elementIterationLabel = document.createElement("label");
+            elementIterationLabel.innerText = arrayEnumModeVoiceTranscriber[i];
+            elementIterationLabel.htmlFor = "voice-mode-" + arrayEnumModeVoiceTranscriber[i];
+
+            //
+            this.#elementRadioButtonContainer2.appendChild(elementIterationLabel);
+
+            //
+            const elementIterationRadioButton = document.createElement("input");
+            elementIterationRadioButton.type = "radio";
+            elementIterationRadioButton.name = "Voice Control";
+            elementIterationRadioButton.id = "voice-mode-" + arrayEnumModeVoiceTranscriber[i];
+            elementIterationRadioButton.value = arrayEnumModeVoiceTranscriber[i];
+
+            //
+            if(this.#componentInstanceVoice?.methodGetMode() == arrayEnumModeVoiceTranscriber[i])
+            {
+                elementIterationRadioButton.checked = "checked";
+            }
+
+            //
+            this.#elementRadioButtonContainer2.appendChild(elementIterationRadioButton);
+            this.#listElementRadioButtons.push(elementIterationRadioButton);
+        }
+        // #endregion voice input
+
         // #region message system handler registration
         this.methodRegisterMessageHandlerWithinEntity("initialization.confirmed",
             (paramMessage) => this.methodHide()
@@ -107,10 +184,13 @@ export class EntityComponentMainMenu extends EntityComponent
         //
         document.body.removeChild(this.#elementTitle);
         document.body.removeChild(this.#elementButtonContainer);
+
+        //
+        document.body.removeChild(this.#elementRadioButtonContainer);
     }
     // #endregion lifecycle
 
-    // #region methods
+    // #region event listeners
     methodOnClickButton(event, indexPreset)
     {
         //
@@ -131,15 +211,34 @@ export class EntityComponentMainMenu extends EntityComponent
         // ...instead of doing it directly
         // the context component (initialization) above will do so
     }
+    methodHandleOnChange(event)
+    {
+        //
+        const mode = event.target.value;
+
+        //
+        this.#componentInstanceVoice?.methodSetMode(mode);
+
+        // prevent it from keeping focus
+        // might interfere when we move our character with the arrow keys
+        event.target.blur();
+    }
+    // #endregion event listeners
+
+    // #region methods
     methodShow()
     {
         this.#elementTitle.style.display = "block";
         this.#elementButtonContainer.style.display = "flex";
+
+        this.#elementRadioButtonContainer.style.display = "flex";
     }
     methodHide()
     {
         this.#elementTitle.style.display = "none";
         this.#elementButtonContainer.style.display = "none";
+        
+        this.#elementRadioButtonContainer.style.display = "none";
     }
     // #endregion methods
 }

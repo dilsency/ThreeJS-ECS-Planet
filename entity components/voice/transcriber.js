@@ -283,6 +283,8 @@ export class EntityComponentVoiceTranscriber extends EntityComponent
         }
         else if(mode === EnumModeVoiceTranscriber.Local)
         {
+            this.methodSendMessageToChatWithUsername("Local transcription has not yet been implemented. Please select Cloud, instead.", null);
+
             // reminder: we need to either write .bind(this) when it comes to callback
             // or do the arrow syntax
             this.#swappableTranscriber = new VoiceTranscriberLocal(
@@ -309,7 +311,9 @@ export class EntityComponentVoiceTranscriber extends EntityComponent
     methodHandleOnTranscript(text)
     {
         //
-        this.methodSendMessageToChat(text);
+        const textLowerCase = text.toLowerCase();
+        //
+        this.methodSendMessageToChat(textLowerCase);
     }
     methodHandleOnEnd(){this.#isRecording = false;}
     methodHandleOnError(codeError)

@@ -136,6 +136,19 @@ export class EntityComponent
             }
         );
     }
+    methodSendMessageToChatWithUsername(paramMessageText, paramMessageUsername)
+    {
+        this.methodSendMessageToEntitiesWithComponent("EntityComponentChatList",
+            {
+                "invokableHandlerName": "chat.message",
+                "invokableHandlerValue":
+                {
+                    "username": paramMessageUsername,
+                    "text": paramMessageText,
+                }
+            }
+        );
+    }
     // #endregion shorthand : chat
 
     // #region getters : delegate to parent
