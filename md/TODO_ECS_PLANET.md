@@ -861,8 +861,9 @@ constructor `(language, onTranscript, onEnd, onError)`, plus start / stop / disp
 4. **Latency.** Local transcription is batch, not live: release V, the audio is processed, the text appears
    about 1-3 seconds later (depends on the device and on WebGPU vs plain WASM). The UI should signal "transcribing...".
    This also fits the recording indicator that is planned anyway.
-5. **Hosting and privacy.** GitHub Pages is fine (static), but the model is fetched from Hugging Face's CDN at
-   runtime. Worth a chat notice, the opposite of the Cloud warning: audio never leaves the device, but a model is downloaded.
+5. **Hosting.** GitHub Pages is fine (static), but the model is fetched from Hugging Face's CDN at
+   runtime. No privacy warning is needed: audio and text never leave the device; only the model is downloaded (one way).
+   Show "Downloading speech model (40 MB)" in the chat, and label the Main Menu radio button "Local (40 MB)".
 6. **Quality.** The tiny models misrecognise more than Chrome's cloud engine. Compare `tiny.en` and `base.en`.
 7. **Lifecycle.** `methodDispose` must terminate the worker and stop the mic stream tracks. Switching the mode
    away from Local mid-download or mid-transcription needs a cancellation story.
