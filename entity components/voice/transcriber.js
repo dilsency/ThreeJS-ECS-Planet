@@ -26,6 +26,9 @@ export class VoiceRecordingLocal
     #instanceMediaRecorderChunks = [];
     #instanceMediaRecorderBlob = null;
     #instanceMediaRecorderIsCancelled = false;
+    //
+    #timestampRecordingStarted = null;
+    #timestampRecordingEnded = null;
     // #endregion privates
 
     // #region constructor
@@ -99,8 +102,12 @@ export class VoiceRecordingLocal
             //
             const handlerMediaRecorderOnDataAvailable = (eventObject) => this.methodHandlerMediaRecorderOnDataAvailable(eventObject);
             this.#instanceMediaRecorder.ondataavailable = handlerMediaRecorderOnDataAvailable;
+            const handlerMediaRecorderOnStart = (eventObject) => this.methodHandlerMediaRecorderOnStart(eventObject);
+            this.#instanceMediaRecorder.onstart = handlerMediaRecorderOnStart;
             const handlerMediaRecorderOnStop = (eventObject) => this.methodHandlerMediaRecorderOnStop(eventObject);
             this.#instanceMediaRecorder.onstop = handlerMediaRecorderOnStop;
+            const handlerMediaRecorderOnError = (eventObject) => this.methodHandlerMediaRecorderOnError(eventObject);
+            this.#instanceMediaRecorder.onerror = handlerMediaRecorderOnError;
 
             //
             this.#instanceMediaRecorder.start();
@@ -146,6 +153,7 @@ export class VoiceRecordingLocal
 
         //
         this.methodEndRecordingAfterSuccess();
+        
     }
     methodDispose()
     {
@@ -204,6 +212,11 @@ export class VoiceRecordingLocal
             this.#instanceMediaRecorderChunks.push(eventObject.data);
         }
     }
+    methodHandlerMediaRecorderOnStart(eventObject)
+    {
+        //
+        this.#timestampRecordingStarted = performance.now();
+    }
     methodHandlerMediaRecorderOnStop(eventObject)
     {
         //
@@ -224,9 +237,23 @@ export class VoiceRecordingLocal
             this.#instanceMediaRecorderBlob = null;
             return;
         }
+        
+        //
+        this.#timestampRecordingEnded = performance.now();
 
         //
-        this.#handlerOnSampled(this.#instanceMediaRecorderBlob);
+        this.#handlerOnSampled(this.#instanceMediaRecorderBlob, this.#timestampRecordingStarted, this.#timestampRecordingEnded);
+    }
+    methodHandlerMediaRecorderOnError(eventObject)
+    {
+        //
+        console.error(eventObject.error?.name);
+
+        //
+        this.#handlerOnError("audio-capture");
+
+        // the following noteworthingly flags the MediaRecorder as being cancelled
+        this.methodCancelRecording();
     }
     // #endregion event listeners : MediaRecorder
 }
@@ -311,15 +338,22 @@ export class VoiceTranscriberLocal
     //
     #handlerOnTranscript = null;
     #handlerOnEnd = null;
+    #handlerOnInfo = null;
     #handlerOnError = null;
     //
     #handlerRecorderOnSampled = null;
     #handlerRecorderOnFinished = null;
     #handlerRecorderOnError = null;
+    // decoder
+    #decoderSampleRate = 16000;
+    #decoderMaxDuration = 10.0;
+    #decoderMinDuration = 0.1;
+    //
+    #recordingLengthMinimum = 250;
     // #endregion privates
 
     // #region constructor
-    constructor(stringLanguage, handlerOnTranscript, handlerOnEnd, handlerOnError)
+    constructor(stringLanguage, handlerOnTranscript, handlerOnEnd, handlerOnInfo, handlerOnError)
     {
         //
         //super(params);
@@ -329,10 +363,11 @@ export class VoiceTranscriberLocal
         //
         this.#handlerOnTranscript = handlerOnTranscript;
         this.#handlerOnEnd = handlerOnEnd;
+        this.#handlerOnInfo = handlerOnInfo;
         this.#handlerOnError = handlerOnError;
 
         //
-        this.#handlerRecorderOnSampled = (e) => this.methodHandleRecorderOnSampled(e);
+        this.#handlerRecorderOnSampled = (objectBlob, timestampRecordingStarted, timestampRecordingEnded) => this.methodHandleRecorderOnSampled(objectBlob, timestampRecordingStarted, timestampRecordingEnded);
         this.#handlerRecorderOnFinished = (e) => this.methodHandleRecorderOnFinished(e);
         this.#handlerRecorderOnError = (e) => this.methodHandleRecorderOnError(e);
         
@@ -378,13 +413,69 @@ export class VoiceTranscriberLocal
     // #endregion methods
 
     // #region event handlers
-    methodHandleRecorderOnSampled(objectBlob)
+    async methodHandleRecorderOnSampled(objectBlob, timestampRecordingStarted, timestampRecordingEnded)
     {
-        //this.methodDebugPlaySound(objectBlob);
+        //
+        if(objectBlob == null){return;}
+        if(objectBlob.size < 1){return;}
+        //
+        if((timestampRecordingEnded - timestampRecordingStarted) < this.#recordingLengthMinimum){return;}
+        
+        //
+        this.methodDebugPlaySound(objectBlob);
+
+        //
+        const channelData = await this.#methodDecode(objectBlob);
+        if(channelData == null){return;}
+        console.log("sample count : " + channelData.length);
+        console.log("sample duration (seconds) : " + (channelData.length / this.#decoderSampleRate).toString());
     }
     methodHandleRecorderOnFinished(e){console.log(e);}
     methodHandleRecorderOnError(e){console.error(e);}
     // #endregion event handlers
+
+    // #region decoder
+    async #methodDecode(objectBlob)
+    {
+        var audioContext = null;
+        var channelData = null;
+        try
+        {
+            const arrayBuffer = await objectBlob.arrayBuffer();
+            audioContext = new AudioContext({sampleRate: this.#decoderSampleRate});
+            const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+            console.log("sample rate : " + audioBuffer.sampleRate);
+            // we only use the first channel (microphones only use 1)
+            channelData = audioBuffer.getChannelData(0).slice();
+            const channelDataMaxLength = (this.#decoderSampleRate * this.#decoderMaxDuration);
+            const channelDataMinLength = (this.#decoderSampleRate * this.#decoderMinDuration);
+            if(channelData.length > channelDataMaxLength)
+            {
+                //
+                channelData = channelData.slice(0, channelDataMaxLength);
+                // todo to-do to do : invoke a special callback/handler here, that notifies the player in the chat list
+                // handlerOnInfo or handlerOnInform or handlerOnWarn or something
+                // we can reuse the old one, for now
+                this.#handlerOnInfo("too-long");
+            }
+            else if(channelData.length < channelDataMinLength)
+            {
+
+                this.#handlerOnInfo("too-short");
+                channelData = null;
+            }
+        }
+        catch(errorObject)
+        {
+            console.error(errorObject);
+        }
+        finally {
+            audioContext?.close();
+        }
+
+        return channelData;
+    }
+    // #endregion decoder
 
     // #region debug only
     methodDebugPlaySound(objectBlob)
@@ -676,6 +767,7 @@ export class EntityComponentVoiceTranscriber extends EntityComponent
                 this.#language,
                 (text) => this.methodHandleOnTranscript(text),
                 () => this.methodHandleOnEnd(),
+                (codeInfo) => this.methodHandleOnInfo(codeInfo),
                 (codeError) => this.methodHandleOnError(codeError),
             );
         }
@@ -701,6 +793,19 @@ export class EntityComponentVoiceTranscriber extends EntityComponent
         this.methodSendMessageToChat(textLowerCase);
     }
     methodHandleOnEnd(){this.#isRecording = false;}
+    methodHandleOnInfo(codeInfo)
+    {
+        //
+        switch(codeInfo)
+        {
+            case "too-long":
+                this.methodSendMessageToChatWithLifespan("Voice clips longer than 10 seconds will be clipped.", 3);
+                break;
+            case "too-short":
+                //this.methodSendMessageToChatWithLifespan("Voice clips need to be longer than " + this.#recordingLengthMinimum + " milliseconds.", 3);
+                break;
+        }
+    }
     methodHandleOnError(codeError)
     {
         //
