@@ -879,3 +879,31 @@ constructor `(language, onTranscript, onEnd, onError)`, plus start / stop / disp
 - Recording indicator (animating vector image), planned for cloud as well.
 - Item 19 (tail delay driven by `methodUpdate`).
 - Item 20 (voice diagnostics), where the log lines would apply to Local as well.
+
+---
+
+## 22. Optional: tail delay for Local voice recordings (`TailDelay` state)
+
+Status: NOT needed at the moment. In testing, the `MediaRecorder` clip was not cut off at the end. The tail delay existed
+for Web Speech (Cloud), where `stop()` cut off the recognizer's last word. `MediaRecorder` captures the raw mic stream up
+to the moment it is stopped, so that cause does not apply. What remains is the player's own timing: releasing V a hair
+before the last syllable.
+
+Revisit if clipped endings are noticed. Before building it, test: say a sentence, release exactly on the last word, and
+listen to the playback several times. `EnumStateVoiceRecording.TailDelay` and `#timerTail` / `#timerTailDuration` already
+exist in `VoiceRecordingLocal` (unused).
+
+**Pieces, if it is ever built**
+1. Release in `Recording` sets the state to `TailDelay` and starts the timer (probably 100-200 ms, shorter than Cloud's 300 ms).
+2. When the timer fires, run the existing end path (`methodEndRecordingAfterSuccess`). `Finishing` is probably not needed,
+   because `Finished` is already reported there.
+3. Re-press during the delay: `methodStartRecording` gets a `TailDelay` branch that clears the timer and returns to
+   `Recording`. The manager already forwards presses to the current recording.
+4. Cancel and dispose during the delay must clear the timer first.
+5. Clear the timer in every end path, including the error path.
+6. Tune the duration by listening.
+
+Cost to weigh: the mic stays on (and the browser's indicator stays lit) for the delay after release.
+
+Related: item 19 (an alternative tail delay driven by `methodUpdate`), and `md/LOCAL_TRANSCRIPTION_PLAN.md`, which mentions
+the tail delay in chunk 1.
