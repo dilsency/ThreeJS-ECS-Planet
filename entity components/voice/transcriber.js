@@ -2,8 +2,235 @@
 import { EntityComponent } from "../../classes/ECS/entity_component.js";
 // #endregion ECS
 // #region enums
-import { EnumModeVoiceTranscriber } from "../../classes/enums.js";
+import { EnumModeVoiceTranscriber, EnumStateVoiceRecording } from "../../classes/enums.js";
 // #endregion enums
+
+export class VoiceRecorderLocal
+{
+    // #region privates
+    //
+    #stateRecording = EnumStateVoiceRecording.Idle;
+    //
+    #microphone = null;
+    // we need a timer
+    // to elongate the "tail end" of a recording
+    // if we do not, the last spoken word is usually omitted
+    #timerTail = null;
+    #timerTailDuration = 300;
+    //
+    #handlerOnComplete = null;
+    #handlerOnError = null;
+    // #endregion privates
+
+    // #region constructor
+    constructor(handlerOnComplete, handlerOnError)
+    {
+        //
+        //super(params);
+
+        //
+        this.#handlerOnComplete = handlerOnComplete;
+        this.#handlerOnError = handlerOnError;
+
+        //
+        console.log("Local voice recorder created!");
+    }
+    // #endregion constructor
+
+    // #region methods
+    async methodStartRecording()
+    {
+        // if state is "Cancelled"
+        // that means the player quickly tried to press the button again
+        // after they let go of it by accident
+        // we COULD undo the "Cancelled" state at this point
+        // and change it to its intended "in progress" state
+        // and pretend nothing happened
+        // this would let the flow progress as usual after the await
+        // for now, we do just that
+        if(this.#stateRecording == EnumStateVoiceRecording.Cancelled)
+        {
+            // .Opening is what it would be set to
+            // after the await has finished
+            // so this is just undoing the .Cancelled state, basically
+            this.#stateRecording = EnumStateVoiceRecording.Opening;
+            return;
+        }
+
+        //
+        if(this.#microphone != null){return;}
+
+
+        // only allowed state is "Idle" (normal)
+        if(!(this.#stateRecording == EnumStateVoiceRecording.Idle)){return;}
+        this.#stateRecording = EnumStateVoiceRecording.Opening;
+
+        //
+        try {
+            // this is the asynchronous await part
+            // after this we need to check that we haven't changed state...
+            // ...to "Cancelled"
+            this.#microphone = await navigator.mediaDevices.getUserMedia({audio: true,video:false,});
+
+            // if the state was changed to "Cancelled" while we were waiting...
+            // ...(one of the many reasons that this can happen is prematurely letting go of the button)...
+            // ...we need to cancel here
+            if(this.#stateRecording == EnumStateVoiceRecording.Cancelled)
+            {
+                //
+                this.methodCancelRecording();
+                return;
+            }
+
+            //
+            this.#stateRecording = EnumStateVoiceRecording.Recording;
+        }
+        catch(errorObject)
+        {
+            //
+            console.error(errorObject.message);
+            //
+            switch(errorObject.name)
+            {
+                case "NotAllowedError":
+                    this.#handlerOnError("not-allowed");
+                    break;
+                case "NotFoundError":
+                case "NotReadableError":
+                    this.#handlerOnError("audio-capture");
+                    break;
+                default:
+                    console.error(errorObject.name);
+                    break;
+            }
+            //
+            this.#stateRecording = EnumStateVoiceRecording.Idle;
+        }
+    }
+    methodStopRecording()
+    {
+        // reminder : we are dealing with an async fetch of the microphone
+        // by setting the state to cancel, we let it be handled AFTER the await
+        if(this.#stateRecording == EnumStateVoiceRecording.Opening)
+        {
+            // the button was released before the recording had a chance to start
+            // so we need to cancel it
+            this.#stateRecording = EnumStateVoiceRecording.Cancelled;
+            return;
+        }
+
+        //
+        if(this.#microphone == null){return;}
+
+        //
+        this.methodCancelRecording();
+    }
+    methodDispose()
+    {
+        // reminder : we are dealing with an async fetch of the microphone
+        // by setting the state to cancel, we let it be handled AFTER the await
+        if(this.#stateRecording == EnumStateVoiceRecording.Opening)
+        {
+            this.#stateRecording = EnumStateVoiceRecording.Cancelled;
+            return;
+        }
+
+        //
+        this.methodCancelRecording();
+    }
+    // #endregion methods
+
+    // #region methods : namehere
+    methodCancelRecording()
+    {
+        //
+        this.#microphone?.getTracks().forEach(track => track.stop());
+        //
+        this.#microphone = null;
+        //
+        this.#stateRecording = EnumStateVoiceRecording.Idle;
+    }
+    // #endregion methods : namehere
+}
+
+export class VoiceTranscriberLocal
+{
+    // #region privates
+    //
+    #language = null;
+    //
+    #instanceVoiceRecognizer = null;
+    //
+    #instanceVoiceRecorder = null;
+    //
+    #handlerOnTranscript = null;
+    #handlerOnEnd = null;
+    #handlerOnError = null;
+    //
+    #handlerRecorderOnComplete = null;
+    #handlerRecorderOnError = null;
+    // #endregion privates
+
+    // #region constructor
+    constructor(stringLanguage, handlerOnTranscript, handlerOnEnd, handlerOnError)
+    {
+        //
+        //super(params);
+
+        //
+        this.#language = stringLanguage;
+        //
+        this.#handlerOnTranscript = handlerOnTranscript;
+        this.#handlerOnEnd = handlerOnEnd;
+        this.#handlerOnError = handlerOnError;
+
+        //
+        this.#handlerRecorderOnComplete = (e) => this.methodHandleRecorderOnComplete(e);
+        this.#handlerRecorderOnError = (e) => this.methodHandleRecorderOnError(e);
+        
+        //
+        this.#instanceVoiceRecorder = new VoiceRecorderLocal(this.#handlerRecorderOnComplete, this.#handlerRecorderOnError);
+
+        //
+        console.log("Local voice transcriber created!");
+    }
+    // #endregion constructor
+
+    // #region methods
+    methodStartRecording()
+    {
+        //
+        this.#instanceVoiceRecorder?.methodStartRecording();
+    }
+    methodStopRecording()
+    {
+        //
+        this.#instanceVoiceRecorder?.methodStopRecording();
+    }
+    methodDispose()
+    {
+        //
+        this.#instanceVoiceRecorder?.methodDispose();
+        this.#instanceVoiceRecorder = null;
+    }
+    // #endregion methods
+
+    // #region event handlers
+    methodHandleRecorderOnComplete(e){console.log(e);}
+    methodHandleRecorderOnError(e){console.error(e);}
+    // #endregion event handlers
+
+    // #region getters
+    methodGetIsSupported()
+    {
+        // temporary re-flagging
+        // when this class has been fully implemented...
+        // ...we remove the upper return
+        return true;
+        return !(this.#instanceVoiceRecognizer == null);
+    }
+    // #endregion getters
+}
 
 export class VoiceTranscriberCloud
 {
@@ -189,29 +416,6 @@ export class VoiceTranscriberCloud
     }
     // #endregion event handlers
 }
-export class VoiceTranscriberLocal
-{
-    // #region privates
-    #instanceVoiceRecognizer = null;
-    // #endregion privates
-
-    // #region constructor
-    constructor(params)
-    {
-        //super(params);
-    }
-    // #endregion constructor
-
-    // #region methods
-    methodStartRecording(){}
-    methodStopRecording(){}
-    methodDispose(){}
-    // #endregion methods
-
-    // #region getters
-    methodGetIsSupported(){return !(this.#instanceVoiceRecognizer == null);}
-    // #endregion getters
-}
 export class EntityComponentVoiceTranscriber extends EntityComponent
 {
     // #region privates
@@ -283,7 +487,7 @@ export class EntityComponentVoiceTranscriber extends EntityComponent
         }
         else if(mode === EnumModeVoiceTranscriber.Local)
         {
-            this.methodSendMessageToChatWithUsername("Local transcription has not yet been implemented. Please select Cloud, instead.", null);
+            //this.methodSendMessageToChatWithUsername("Local transcription has not yet been implemented. Please select Cloud, instead.", null);
 
             // reminder: we need to either write .bind(this) when it comes to callback
             // or do the arrow syntax

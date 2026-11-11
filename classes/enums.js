@@ -39,4 +39,12 @@ export const EnumModeVoiceTranscriber = Object.freeze({
     Local: "Local",
     Cloud: "Cloud",
 });
+export const EnumStateVoiceRecording = Object.freeze({
+    Idle: "Idle",
+    Opening: "Opening",
+    Cancelled: "Cancelled",
+    Recording: "Recording",
+    TailDelay: "TailDelay",
+    Finishing: "Finishing",
+});
 // #endregion voice
