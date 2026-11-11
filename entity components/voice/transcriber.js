@@ -350,6 +350,11 @@ export class VoiceTranscriberLocal
     #decoderMinDuration = 0.1;
     //
     #recordingLengthMinimum = 250;
+    //
+    #timestampImportStarted = null;
+    #timestampImportEnded = null;
+    #promiseTranscriptionModel = null;
+    #instanceTranscriptionModel = null;
     // #endregion privates
 
     // #region constructor
@@ -421,18 +426,57 @@ export class VoiceTranscriberLocal
         //
         if((timestampRecordingEnded - timestampRecordingStarted) < this.#recordingLengthMinimum){return;}
         
-        //
-        this.methodDebugPlaySound(objectBlob);
+        // #region debug only
+        //this.methodDebugPlaySound(objectBlob);
+        // #endregion debug only
 
-        //
+        // #region decoder
         const channelData = await this.#methodDecode(objectBlob);
         if(channelData == null){return;}
         console.log("sample count : " + channelData.length);
         console.log("sample duration (seconds) : " + (channelData.length / this.#decoderSampleRate).toString());
+        // #endregion decoder
+
+        // #region lazy-load transcription model
+        //
+        await this.#methodLazyLoadTranscriptionModel();
+        if(this.#instanceTranscriptionModel == null)
+        {
+            console.error("no transcription model");
+            return;
+        }
+        // and then we use it... fingers crossed
+        try {
+            const timestampInferenceStarted = performance.now();
+            const objectResult = await this.#instanceTranscriptionModel(channelData);
+            const timestampInferenceEnded = performance.now();
+            const timespanInference = ((timestampInferenceEnded - timestampInferenceStarted) / 1000).toFixed(1);
+            console.log(objectResult.text + " ("+ timespanInference +"s)");
+            this.#handlerOnTranscript(objectResult.text + " ("+ timespanInference +"s)");
+        }
+        catch(errorObject)
+        {
+            console.error(errorObject);
+        }
+        // #endregion lazy-load transcription model
     }
     methodHandleRecorderOnFinished(e){console.log(e);}
     methodHandleRecorderOnError(e){console.error(e);}
     // #endregion event handlers
+
+    // #region debug only
+    methodDebugPlaySound(objectBlob)
+    {
+        if(objectBlob == null){return;}
+
+        const url = URL.createObjectURL(objectBlob);
+        const audio = new Audio(url);
+        audio.play();
+        audio.onended = () => {
+            URL.revokeObjectURL(url);
+        }
+    }
+    // #endregion debug only
 
     // #region decoder
     async #methodDecode(objectBlob)
@@ -477,19 +521,77 @@ export class VoiceTranscriberLocal
     }
     // #endregion decoder
 
-    // #region debug only
-    methodDebugPlaySound(objectBlob)
+    // #region lazy-load transcription model
+    async #methodLazyLoadTranscriptionModel()
     {
-        if(objectBlob == null){return;}
+        // this function is a layer above the actual body function
+        // an "operator" or "manager" function
+        // the only reason why we do this
+        // is so that we can store the promise of an async method
+        // and store the awaited async method
+        // separately
 
-        const url = URL.createObjectURL(objectBlob);
-        const audio = new Audio(url);
-        audio.play();
-        audio.onended = () => {
-            URL.revokeObjectURL(url);
+        // if promise is not null, we are still loading
+        // what we can do is await that very same promise
+        // (won't this invoke it twice?)
+        // (if it will, is that fine?)
+        if(this.#promiseTranscriptionModel != null)
+        {
+            await this.#promiseTranscriptionModel;
+            return;
+        }
+
+        // by calling the loading method, WITHOUT AWAITING, we will receive a promise
+        // and we use this to check above if we are still loading
+        this.#promiseTranscriptionModel = this.#methodLoadTranscriptionModel();
+
+        // now that we have stored it
+        // we can await it
+        // and store that result
+        // (also, apparently you don't place parentheses after a promise (it is not a function invocation))
+        this.#instanceTranscriptionModel = await this.#promiseTranscriptionModel;
+
+        // #region failure
+        if(this.#instanceTranscriptionModel == null)
+        {
+            this.#promiseTranscriptionModel = null;
+        }
+        // #endregion failure
+    }
+    async #methodLoadTranscriptionModel()
+    {
+        try
+        {
+            //
+            this.#timestampImportStarted = performance.now();
+
+            // we do "dynamic importing"
+            // this is because not every user will use local transcription
+            // and we don't want to bother them with loading something before they need it
+            const module = await import("@huggingface/transformers");
+            const pipeline = module.pipeline;
+
+            //
+            const promiseTranscriptionModel = pipeline("automatic-speech-recognition", "Xenova/whisper-tiny.en");
+            const instanceTranscriptionModel = await promiseTranscriptionModel;
+            
+            // #region finish
+            //
+            this.#timestampImportEnded = performance.now();
+            //
+            const timespanImport = ((this.#timestampImportEnded - this.#timestampImportStarted) / 1000).toFixed(1);
+            console.log("import and model load took : " + timespanImport + "s");
+            //
+            return instanceTranscriptionModel;
+            // #endregion finish
+        }
+        catch (errorObject)
+        {
+            console.error(errorObject);
+            return null;
         }
     }
-    // #endregion debug only
+    // #endregion lazy-load transcription model
 
     // #region getters
     methodGetIsSupported()
@@ -790,7 +892,7 @@ export class EntityComponentVoiceTranscriber extends EntityComponent
         //
         const textLowerCase = text.toLowerCase();
         //
-        this.methodSendMessageToChat(textLowerCase);
+        this.methodSendMessageToChatWithLifespan(textLowerCase, 10);
     }
     methodHandleOnEnd(){this.#isRecording = false;}
     methodHandleOnInfo(codeInfo)

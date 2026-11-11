@@ -907,3 +907,30 @@ Cost to weigh: the mic stays on (and the browser's indicator stays lit) for the 
 
 Related: item 19 (an alternative tail delay driven by `methodUpdate`), and `md/LOCAL_TRANSCRIPTION_PLAN.md`, which mentions
 the tail delay in chunk 1.
+
+---
+
+## 23. Investigate: "() methodSetDirUp antiparallell" repeated 100+ times when Local transcription runs during planet loading
+
+Observed: with the voice mode set to Local, running the transcription model (inference) while a planet is loading freezes the
+whole app for the duration of the inference, and the console then shows `() methodSetDirUp antiparallell` more than a hundred
+times. The message does NOT appear when the mode is None.
+
+Where it comes from: `entity components/movement/camera_controller_first_person.js`, in `methodSetDirUp` (the `console.error`
+near the "error handling : antiparallell" comment). It fires when the camera's current up direction and the new target up
+direction are exactly opposite, so the rotation axis is undefined. The comment there says the case is already handled in
+`methodSetDirUpWithoutTransition()` and that "for now we just console.error". The repeats suggest it fires every frame while
+the condition holds.
+
+Hypothesis (unverified): the main-thread freeze lets the player move a long way in a single step while the planet is loading,
+which puts the up direction in the opposite state. Related items: 10 (player stuck in the air), 12 (gravity direction jumps),
+14 (player flash after picking a world).
+
+**To find out**
+1. Is it only the freeze? After the transcription runs in a worker (see `md/LOCAL_TRANSCRIPTION_PLAN.md`, chunk 3), load a
+   planet while transcribing and check again. If it is gone, the freeze was the trigger.
+2. Does Local without inference (recording only) trigger it? Does Cloud? Not tested yet. Only None (no message) and Local with
+   inference (message) are known.
+3. If it still appears without any voice use, it is an existing gravity / load bug: log the player's position, the current
+   `visualDirUp` and the target up direction on the first occurrence, and check what changed in that frame (delta time, state
+   transition `Orbit` / `FallingFar`).
