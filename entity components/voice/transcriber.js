@@ -5,7 +5,7 @@ import { EntityComponent } from "../../classes/ECS/entity_component.js";
 import { EnumModeVoiceTranscriber, EnumStateVoiceRecording } from "../../classes/enums.js";
 // #endregion enums
 
-export class VoiceRecorderLocal
+export class VoiceRecordingLocal
 {
     // #region privates
     //
@@ -18,18 +18,25 @@ export class VoiceRecorderLocal
     #timerTail = null;
     #timerTailDuration = 300;
     //
-    #handlerOnComplete = null;
+    #handlerOnSampled = null;
+    #handlerOnFinished = null;
     #handlerOnError = null;
+    //
+    #instanceMediaRecorder = null;
+    #instanceMediaRecorderChunks = [];
+    #instanceMediaRecorderBlob = null;
+    #instanceMediaRecorderIsCancelled = false;
     // #endregion privates
 
     // #region constructor
-    constructor(handlerOnComplete, handlerOnError)
+    constructor(handlerOnSampled, handlerOnFinished, handlerOnError)
     {
         //
         //super(params);
 
         //
-        this.#handlerOnComplete = handlerOnComplete;
+        this.#handlerOnSampled = handlerOnSampled;
+        this.#handlerOnFinished = handlerOnFinished;
         this.#handlerOnError = handlerOnError;
 
         //
@@ -84,6 +91,20 @@ export class VoiceRecorderLocal
 
             //
             this.#stateRecording = EnumStateVoiceRecording.Recording;
+
+            // #region MediaRecorder
+            //
+            this.#instanceMediaRecorder = new MediaRecorder(this.#microphone);
+
+            //
+            const handlerMediaRecorderOnDataAvailable = (eventObject) => this.methodHandlerMediaRecorderOnDataAvailable(eventObject);
+            this.#instanceMediaRecorder.ondataavailable = handlerMediaRecorderOnDataAvailable;
+            const handlerMediaRecorderOnStop = (eventObject) => this.methodHandlerMediaRecorderOnStop(eventObject);
+            this.#instanceMediaRecorder.onstop = handlerMediaRecorderOnStop;
+
+            //
+            this.#instanceMediaRecorder.start();
+            // #endregion MediaRecorder
         }
         catch(errorObject)
         {
@@ -103,8 +124,9 @@ export class VoiceRecorderLocal
                     console.error(errorObject.name);
                     break;
             }
+
             //
-            this.#stateRecording = EnumStateVoiceRecording.Idle;
+            this.methodCancelRecording();
         }
     }
     methodStopRecording()
@@ -123,7 +145,7 @@ export class VoiceRecorderLocal
         if(this.#microphone == null){return;}
 
         //
-        this.methodCancelRecording();
+        this.methodEndRecordingAfterSuccess();
     }
     methodDispose()
     {
@@ -135,6 +157,10 @@ export class VoiceRecorderLocal
             return;
         }
 
+        // keep-in-mind :
+        // methodDispose() can cancel the MediaRecorder while the latter is still in-process
+        // we think this is fine for the moment
+
         //
         this.methodCancelRecording();
     }
@@ -143,14 +169,132 @@ export class VoiceRecorderLocal
     // #region methods : namehere
     methodCancelRecording()
     {
+        // because MediaRecorder is also asyncronous, it needs its own cancel state flag
+        this.#instanceMediaRecorderIsCancelled = true;
+
+        // this was not a success, but we reset all the same variables... so...
+        this.methodEndRecordingAfterSuccess();
+    }
+    methodEndRecordingAfterSuccess()
+    {
+        //
+        if(this.#instanceMediaRecorder?.state == "recording")
+        {
+            this.#instanceMediaRecorder.stop();
+        }
+
         //
         this.#microphone?.getTracks().forEach(track => track.stop());
+
         //
         this.#microphone = null;
         //
         this.#stateRecording = EnumStateVoiceRecording.Idle;
+
+        //
+        this.#handlerOnFinished(this);
     }
     // #endregion methods : namehere
+
+    // #region event listeners : MediaRecorder
+    methodHandlerMediaRecorderOnDataAvailable(eventObject)
+    {
+        if (eventObject.data.size > 0)
+        {
+            this.#instanceMediaRecorderChunks.push(eventObject.data);
+        }
+    }
+    methodHandlerMediaRecorderOnStop(eventObject)
+    {
+        //
+        if(this.#instanceMediaRecorderIsCancelled)
+        {
+            // clear blob
+            this.#instanceMediaRecorderBlob = null;
+            return;
+        }
+        
+        //
+        this.#instanceMediaRecorderBlob = new Blob(this.#instanceMediaRecorderChunks, { type: this.#instanceMediaRecorder.mimeType });
+
+        // we need to nope-out early if we the blob size is too small
+        if(this.#instanceMediaRecorderBlob.size == 0)
+        {
+            // clear blob
+            this.#instanceMediaRecorderBlob = null;
+            return;
+        }
+
+        //
+        this.#handlerOnSampled(this.#instanceMediaRecorderBlob);
+    }
+    // #endregion event listeners : MediaRecorder
+}
+
+export class VoiceRecordingManagerLocal
+{
+    // #region privates
+    //
+    #currentRecording = null;
+    //
+    #handlerOnSampled = null;
+    #handlerOnFinished = null;
+    #handlerOnError = null;
+    // #endregion privates
+
+    // #region construct
+    constructor(handlerOnSampled, handlerOnFinished, handlerOnError)
+    {
+        //
+        this.#handlerOnSampled = handlerOnSampled;
+        this.#handlerOnFinished = (e) => {
+            this.methodHandleOnFinished(e);
+            handlerOnFinished(e);
+        };
+        this.#handlerOnError = handlerOnError;
+    }
+    // #endregion construct
+    
+
+    // #region methods
+    methodStartRecording()
+    {
+        if(this.#currentRecording != null)
+        {
+            this.#currentRecording.methodStartRecording();
+            return;
+        }
+
+        this.#currentRecording =
+            new VoiceRecordingLocal
+            (
+                this.#handlerOnSampled,
+                this.#handlerOnFinished,
+                this.#handlerOnError
+            );
+        
+            this.#currentRecording.methodStartRecording();
+    }
+    methodStopRecording()
+    {
+        this.#currentRecording?.methodStopRecording();
+    }
+    methodDispose()
+    {
+        this.#currentRecording?.methodDispose();
+        this.#currentRecording = null;
+    }
+    // #endregion methods
+
+    // #region event listeners
+    methodHandleOnFinished(eventObject)
+    {
+        if(eventObject == this.#currentRecording)
+        {
+            this.#currentRecording = null;
+        }
+    }
+    // #endregion event listeners
 }
 
 export class VoiceTranscriberLocal
@@ -163,11 +307,14 @@ export class VoiceTranscriberLocal
     //
     #instanceVoiceRecorder = null;
     //
+    #instanceVoiceRecordingManager = null;
+    //
     #handlerOnTranscript = null;
     #handlerOnEnd = null;
     #handlerOnError = null;
     //
-    #handlerRecorderOnComplete = null;
+    #handlerRecorderOnSampled = null;
+    #handlerRecorderOnFinished = null;
     #handlerRecorderOnError = null;
     // #endregion privates
 
@@ -185,11 +332,21 @@ export class VoiceTranscriberLocal
         this.#handlerOnError = handlerOnError;
 
         //
-        this.#handlerRecorderOnComplete = (e) => this.methodHandleRecorderOnComplete(e);
+        this.#handlerRecorderOnSampled = (e) => this.methodHandleRecorderOnSampled(e);
+        this.#handlerRecorderOnFinished = (e) => this.methodHandleRecorderOnFinished(e);
         this.#handlerRecorderOnError = (e) => this.methodHandleRecorderOnError(e);
         
         //
-        this.#instanceVoiceRecorder = new VoiceRecorderLocal(this.#handlerRecorderOnComplete, this.#handlerRecorderOnError);
+        //this.#instanceVoiceRecorder = new VoiceRecorderLocal(this.#handlerRecorderOnComplete, this.#handlerRecorderOnError);
+
+        //
+        this.#instanceVoiceRecordingManager =
+            new VoiceRecordingManagerLocal
+            (
+                this.#handlerRecorderOnSampled,
+                this.#handlerRecorderOnFinished,
+                this.#handlerRecorderOnError
+            );
 
         //
         console.log("Local voice transcriber created!");
@@ -200,25 +357,48 @@ export class VoiceTranscriberLocal
     methodStartRecording()
     {
         //
-        this.#instanceVoiceRecorder?.methodStartRecording();
+        //this.#instanceVoiceRecorder?.methodStartRecording();
+        this.#instanceVoiceRecordingManager?.methodStartRecording();
     }
     methodStopRecording()
     {
         //
-        this.#instanceVoiceRecorder?.methodStopRecording();
+        //this.#instanceVoiceRecorder?.methodStopRecording();
+        this.#instanceVoiceRecordingManager?.methodStopRecording();
     }
     methodDispose()
     {
         //
-        this.#instanceVoiceRecorder?.methodDispose();
-        this.#instanceVoiceRecorder = null;
+        //this.#instanceVoiceRecorder?.methodDispose();
+        //this.#instanceVoiceRecorder = null;
+        //
+        this.#instanceVoiceRecordingManager?.methodDispose();
+        this.#instanceVoiceRecordingManager = null;
     }
     // #endregion methods
 
     // #region event handlers
-    methodHandleRecorderOnComplete(e){console.log(e);}
+    methodHandleRecorderOnSampled(objectBlob)
+    {
+        //this.methodDebugPlaySound(objectBlob);
+    }
+    methodHandleRecorderOnFinished(e){console.log(e);}
     methodHandleRecorderOnError(e){console.error(e);}
     // #endregion event handlers
+
+    // #region debug only
+    methodDebugPlaySound(objectBlob)
+    {
+        if(objectBlob == null){return;}
+
+        const url = URL.createObjectURL(objectBlob);
+        const audio = new Audio(url);
+        audio.play();
+        audio.onended = () => {
+            URL.revokeObjectURL(url);
+        }
+    }
+    // #endregion debug only
 
     // #region getters
     methodGetIsSupported()
@@ -227,7 +407,8 @@ export class VoiceTranscriberLocal
         // when this class has been fully implemented...
         // ...we remove the upper return
         return true;
-        return !(this.#instanceVoiceRecognizer == null);
+        //return !(this.#instanceVoiceRecognizer == null);
+        return !(this.#instanceVoiceRecordingManager == null);
     }
     // #endregion getters
 }
