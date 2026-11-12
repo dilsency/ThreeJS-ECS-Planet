@@ -979,3 +979,18 @@ so the names are not changed twice.
   queue is that two handlers can otherwise run inference at the same time.
 - The comment above `let` ("cleaner than `self.`") explains a decision rather than the code. Trim or reword.
 - A closing `// #region inference` should read `// #endregion inference`.
+
+**The queue itself (`pointerOngoingTranscriptionQueue`) is subject to change**
+The "pointer to a promise, extended with `.then`" queue only reads naturally to someone who knows how Promises work
+(`.then` returns a new promise, the variable must be reassigned, the callbacks must `return` the handler's promise, a failed
+predecessor needs its own branch). People new to this architecture do not find it intuitive, and the author (me) does not either.
+In a normal context, a queue is just an array, or a class with a "next pointer". In the context of Promises, the syntax is
+completely different, and not at all self-explanatory: the "queue" is a single variable, and the line only exists as a chain
+of "wait for the one before me" inside the promises.
+Treat the current form as a first working version, not a settled design. Options to compare when this item is done:
+1. Keep the promise chain, but wrap it in one small, well-named function (for example `methodEnqueueTranscription(job)`) with
+   a comment that explains the chain once, so the dispatcher `case` reads as one plain line.
+2. An explicit array of waiting clips plus a "busy" flag and a `methodProcessNext()` loop. More lines, but each step can be
+   read and logged, and it makes the optional cap on waiting clips (see `md/LOCAL_TRANSCRIPTION_PLAN.md`, chunk 3) easy to add.
+3. An `async` loop that takes clips from an array one at a time (`for` / `await`). Reads top to bottom like ordinary code.
+Decide by which one is easiest to read six months from now, not by which is shortest.

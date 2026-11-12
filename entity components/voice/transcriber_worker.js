@@ -19,8 +19,28 @@ self.onmessage = (eventObject) =>
             methodHandlerOnLoad(message);
             break;
         case "transcribe":
-            // we do not await here ("so the dispatcher never blocks" ???)
-            methodHandlerOnTranscribe(message);
+            // instead of invoking the handler immediately
+            // we instead "add it to the end of the queue"
+            // aka we set our pointer, to point at it, CONTAINING the old value
+
+            // very particular syntax for the Promise data type
+            // ".then" will only run the function inside when its prior one has finished
+            // the right-hand side creates/returns a NEW promise, so we assign the original value to it
+            // this will be the most recent transcription and it will CONTAIN the old transcription
+            pointerOngoingTranscriptionQueue = pointerOngoingTranscriptionQueue.then(
+                () =>
+                {
+                    // the return is very important in Promise syntax
+                    // otherwise we would not wait before the older transcription has finished
+                    return methodHandlerOnTranscribe(message);
+                },
+                () =>
+                {
+                    console.error("the previous transcription failed");
+                    // we still run the very same handler on it, to keep the queue going
+                    return methodHandlerOnTranscribe(message);
+                }
+            );
             break;
         default:
             console.warn("unknown message type : " + message.type + " : " + message.id);
@@ -34,6 +54,10 @@ let promiseTranscriptionModelResult = null;
 let instanceTranscriptionModel = null;
 let timestampImportStarted = null;
 let timestampImportEnded = null;
+// this points to currently awaited work
+// the initial value is an already-finished Promise
+// to make debugging easier
+let pointerOngoingTranscriptionQueue = Promise.resolve();
 // #endregion privates
 
 // #region handlers
@@ -132,9 +156,25 @@ async function methodHandlerOnTranscribe(message)
     }
     catch(errorObject)
     {
+        //
         console.error(errorObject);
+        //
+        self.postMessage
+        (
+            {
+                type: "error",
+                code: "transcribe-fail",
+                text:
+                {
+                    name: (errorObject?.name ?? "unknown"),
+                    message: (errorObject?.message ?? String(errorObject)),
+                    stack: (errorObject?.stack ?? ""),
+                },
+                id: message.id,
+            }
+        );
     }
-    // #region inference
+    // #endregion inference
 }
 // #endregion handlers
 
@@ -215,7 +255,7 @@ async function methodLoadTranscriptionModel()
             error:
             {
                 name: (errorObject?.name ?? "unknown"),
-                message: (errorObject?.message ?? ""),
+                message: (errorObject?.message ?? String(errorObject)),
                 stack: (errorObject?.stack ?? ""),
             }
         };
