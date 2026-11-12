@@ -29,7 +29,7 @@ Chunks 1-3 are invisible to players, so stopping after any of them leaves nothin
 | Model | `Xenova/whisper-tiny.en` (~40 MB) vs `base.en` (~75 MB) | start with tiny, compare in chunk 7 |
 | Language | English only (already decided) | `.en` models |
 | Audio capture | `MediaRecorder` vs `AudioContext` + `AudioWorklet` | **Decided: `MediaRecorder`**, then decode and resample. Transcription is batch (the whole clip after V is released), so live samples are not needed. No voice-level animation is planned either. |
-| When to load the model | on selecting `Local` vs on first V press | on selecting `Local` (chunk 5) |
+| When to load the worker and the model | on selecting `Local` vs on first V press | **Decided: on selecting `Local`** (both the worker and the model load, chunk 5) |
 
 ## Chunks
 
@@ -107,7 +107,9 @@ Chunks 1-3 are invisible to players, so stopping after any of them leaves nothin
 - Chat notices: "Downloading speech model (40 MB)", then progress such as "40%", then "transcribing...", "ready".
 - The Main Menu radio button is labelled "Local (40 MB)" (decided), so the download size is visible before choosing it.
   The label text must be separate from the enum value, which stays `"Local"`. Update the size if the model changes.
-- Start loading when `Local` is selected, not on the first V press.
+- **Decided: the worker is created and the model load starts when `Local` is selected**, not on the first V press.
+  The first download then happens while the player is still in the menu. No confirmation dialog (the "Local (40 MB)"
+  label is the warning); it can be added later if misclicks are a problem. See TODO item 24.
 - Use `methodSendMessageToChatWithLifespan`; a progress line may need replacing instead of stacking (decide).
 - **Done when:** a first-time user sees what is happening at every step.
 

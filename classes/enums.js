@@ -39,6 +39,11 @@ export const EnumModeVoiceTranscriber = Object.freeze({
     Local: "Local",
     Cloud: "Cloud",
 });
+export const EnumLabelVoiceTranscriber = Object.freeze({
+    None: "None",
+    Local: "Local (75 MB)",
+    Cloud: "Cloud",
+});
 export const EnumStateVoiceRecording = Object.freeze({
     Idle: "Idle",
     Opening: "Opening",

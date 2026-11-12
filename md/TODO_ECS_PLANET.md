@@ -934,3 +934,22 @@ which puts the up direction in the opposite state. Related items: 10 (player stu
 3. If it still appears without any voice use, it is an existing gravity / load bug: log the player's position, the current
    `visualDirUp` and the target up direction on the first occurrence, and check what changed in that frame (delta time, state
    transition `Orbit` / `FallingFar`).
+
+## 24. Local transcription: worker and model load happen when `Local` is selected
+
+**Decided:** when the player selects `Local` in the Main Menu, both the worker and the model load start right away, not on
+the first V press. Reason: the first download (about 40 MB) can take many seconds, and it should happen while the player is
+still in the menu, so the first clip transcribes as fast as every later one. The Main Menu label "Local (40 MB)" already
+shows the cost before the click. A confirmation dialog for the first selection was considered and skipped (the label and the
+chat notice are enough; "first time only" would also need `localStorage`). It can be added later if misclicks turn out to
+be a problem.
+
+**Current state:** the worker is created in the `VoiceTranscriberLocal` constructor (`entity components/voice/transcriber.js`,
+region `worker`), which runs on selecting `Local`. That already matches the decision. The model load still happens lazily on
+the first clip, on the main thread, and must move into the worker (`load` message), posted right after the worker is created.
+
+**Optional follow-ups**
+1. Starting a thread in a constructor is a bit hidden. An explicit `methodStart()`, called by the wrapper after construction,
+   may read more clearly.
+2. Wrap `new Worker(...)` in `try/catch` and report failures through `#handlerOnError` (chunk 6).
+3. Switching away from `Local` mid-download must terminate the worker cleanly (chunk 6).

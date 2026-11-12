@@ -355,6 +355,8 @@ export class VoiceTranscriberLocal
     #timestampImportEnded = null;
     #promiseTranscriptionModel = null;
     #instanceTranscriptionModel = null;
+    // worker
+    #instanceWorker = null;
     // #endregion privates
 
     // #region constructor
@@ -388,6 +390,39 @@ export class VoiceTranscriberLocal
                 this.#handlerRecorderOnError
             );
 
+        // #region worker
+        // this exact URL pattern is for Vite to be able to bundle it correctly
+        this.#instanceWorker
+        = new Worker
+        (
+            new URL
+            (
+                "./transcriber_worker.js",
+                import.meta.url
+            ),
+            { type: "module" }
+        );
+        // event listener
+        this.#instanceWorker.onmessage = (eventObject) =>
+        {
+            const message = eventObject.data;
+
+            switch(message.type)
+            {
+                case "ping":
+                    console.log("a ping was received, but we were to receive a pong... hmm... id : " + message.id);
+                    break;
+                case "pong":
+                    console.log("a pong was received! nice! id : " + message.id);
+                    break;
+                default:
+                    console.warn("unknown message type : " + message.type + " : " + message.id);
+                    break;
+            }
+        };
+        this.#instanceWorker.postMessage({type:"ping", id: 1});
+        // #endregion worker
+
         //
         console.log("Local voice transcriber created!");
     }
@@ -414,6 +449,9 @@ export class VoiceTranscriberLocal
         //
         this.#instanceVoiceRecordingManager?.methodDispose();
         this.#instanceVoiceRecordingManager = null;
+        //
+        this.#instanceWorker?.terminate();
+        this.#instanceWorker = null;
     }
     // #endregion methods
 

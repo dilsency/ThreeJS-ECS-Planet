@@ -3,7 +3,7 @@
 import * as THREE from "three";
 // ECS
 import {EntityComponent} from "../../classes/ECS/entity_component.js";
-import { EnumModeVoiceTranscriber } from "../../classes/enums.js";
+import { EnumModeVoiceTranscriber, EnumLabelVoiceTranscriber } from "../../classes/enums.js";
 
 export class EntityComponentMainMenu extends EntityComponent
 {
@@ -137,15 +137,21 @@ export class EntityComponentMainMenu extends EntityComponent
 
         //
         const arrayEnumModeVoiceTranscriber = Object.values(EnumModeVoiceTranscriber);
+        const arrayEnumLabelVoiceTranscriber = Object.values(EnumLabelVoiceTranscriber);
         const lenEnumModeVoiceTranscriber = arrayEnumModeVoiceTranscriber.length;
+        const lenEnumLabelVoiceTranscriber = arrayEnumLabelVoiceTranscriber.length;
+
+        //
+        if(lenEnumModeVoiceTranscriber != lenEnumLabelVoiceTranscriber){console.error("mismatch enum voice transcriber lengths");return;}
 
         //
         for(var i = 0; i < lenEnumModeVoiceTranscriber; i++)
         {
             //
             const elementIterationLabel = document.createElement("label");
-            elementIterationLabel.innerText = arrayEnumModeVoiceTranscriber[i];
+            elementIterationLabel.innerText = arrayEnumLabelVoiceTranscriber[i];
             elementIterationLabel.htmlFor = "voice-mode-" + arrayEnumModeVoiceTranscriber[i];
+            elementIterationLabel.style.whiteSpace = "nowrap";
 
             //
             this.#elementRadioButtonContainer2.appendChild(elementIterationLabel);
