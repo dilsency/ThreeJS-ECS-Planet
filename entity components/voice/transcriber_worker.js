@@ -1,7 +1,10 @@
 // this is not "main thread", so we use "self." instead of "this."
 
+// todo to-do to do : go through the variables naming scheme for this entire file
+// it is quite confusing at the moment, and I have a feeling that it could become clearer
+
 // create an event listener for messages
-self.onmessage = async (eventObject) =>
+self.onmessage = (eventObject) =>
 {
     const message = eventObject.data;
 
@@ -12,10 +15,12 @@ self.onmessage = async (eventObject) =>
             self.postMessage({ type: "pong", id: message.id });
             break;
         case "load":
+            // we do not await here ("so the dispatcher never blocks" ???)
             methodHandlerOnLoad(message);
             break;
         case "transcribe":
-            console.log("test with the transcribe message.type");
+            // we do not await here ("so the dispatcher never blocks" ???)
+            methodHandlerOnTranscribe(message);
             break;
         default:
             console.warn("unknown message type : " + message.type + " : " + message.id);
@@ -64,9 +69,78 @@ async function methodHandlerOnLoad(message)
         }
     );
 }
+
+async function methodHandlerOnTranscribe(message)
+{
+    // first, we get the model
+    // the function returns a cached variable
+    // (therefore, we probably should clarify that in the function name)
+    // methodGetCachedModelOrLoadIt
+    // methodGetCachedModel
+    // methodCacheLoadModel
+
+    //
+    const returnObject = await methodLoadTranscriptionModelViaManager();
+    if(returnObject.model == null)
+    {
+        //
+        self.postMessage
+        (
+            {
+                type: "error",
+                code: "load-fail",
+                text: returnObject.error,
+                id: message.id,
+            }
+        );
+
+        return;
+    }
+
+    // #region inference
+    // at this point, we have the transcription model
+    // so we should now run inference (aka, use the model)
+    try {
+        const timestampInferenceStarted = performance.now();
+        const resultObject
+            = await instanceTranscriptionModel
+            (
+                message.audiosamples
+            );
+        const timestampInferenceEnded = performance.now();
+        const timespanInference = ((timestampInferenceEnded - timestampInferenceStarted) / 1000).toFixed(1);
+        //console.log(resultObject.text + " ("+ timespanInference +"s)");
+        //
+        self.postMessage
+        (
+            {
+                type: "result",
+                text: (resultObject.text + " ("+ timespanInference +"s)"),
+                id: message.id,
+            }
+        );
+        
+
+        /*
+        const timestampInferenceStarted = performance.now();
+        const objectResult = await this.#instanceTranscriptionModel(channelData);
+        const timestampInferenceEnded = performance.now();
+        const timespanInference = ((timestampInferenceEnded - timestampInferenceStarted) / 1000).toFixed(1);
+        console.log(objectResult.text + " ("+ timespanInference +"s)");
+        this.#handlerOnTranscript(objectResult.text + " ("+ timespanInference +"s)");
+        */
+    }
+    catch(errorObject)
+    {
+        console.error(errorObject);
+    }
+    // #region inference
+}
 // #endregion handlers
 
 // #region load model
+// possible rename for clarification
+// methodGetCachedModelOrLoadIt
 async function methodLoadTranscriptionModelViaManager()
 {
     //

@@ -328,6 +328,8 @@ export class VoiceTranscriberLocal
 {
     // #region privates
     //
+    #counter = 0;
+    //
     #language = null;
     //
     #instanceVoiceRecognizer = null;
@@ -422,7 +424,8 @@ export class VoiceTranscriberLocal
                     console.log("progress");
                     break;
                 case "result":
-                    console.log("result");
+                    //console.log(message.text);
+                    this.#handlerOnTranscript(message.text);
                     break;
                 case "error":
                     console.log("error");
@@ -488,6 +491,20 @@ export class VoiceTranscriberLocal
         console.log("sample duration (seconds) : " + (channelData.length / this.#decoderSampleRate).toString());
         // #endregion decoder
 
+        // #region communicate with the worker
+        this.#instanceWorker?.postMessage
+        (
+            {
+                type: "transcribe",
+                id: this.#counter,
+                audiosamples: channelData,
+            },
+            [channelData.buffer],
+        );
+        this.#counter++;
+        // #endregion communicate with the worker
+
+        /*
         // #region lazy-load transcription model
         //
         //await this.#methodLazyLoadTranscriptionModel();
@@ -510,6 +527,7 @@ export class VoiceTranscriberLocal
             console.error(errorObject);
         }
         // #endregion lazy-load transcription model
+        */
     }
     methodHandleRecorderOnFinished(e){console.log(e);}
     methodHandleRecorderOnError(e){console.error(e);}

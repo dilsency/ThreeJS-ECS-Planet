@@ -953,3 +953,29 @@ the first clip, on the main thread, and must move into the worker (`load` messag
    may read more clearly.
 2. Wrap `new Worker(...)` in `try/catch` and report failures through `#handlerOnError` (chunk 6).
 3. Switching away from `Local` mid-download must terminate the worker cleanly (chunk 6).
+
+## 25. Clarify names and comments in `transcriber_worker.js`
+
+The worker file grew quickly and its names no longer say what the code does. A to-do comment sits at the top of
+`entity components/voice/transcriber_worker.js`. Go through it once the worker work (load, transcribe, queue) has settled,
+so the names are not changed twice.
+
+**Names to review**
+1. `methodLoadTranscriptionModelViaManager`: it does not always load. It starts a load, waits for one in progress, or returns
+   the cached result. Candidates: `methodGetCachedModelOrLoadIt`, `methodGetCachedModel`, `methodCacheLoadModel`.
+2. `promiseTranscriptionModelResult`: a Promise that resolves to `{ model, error }`, not to the model. It is `null` only before
+   the first load and after a failed load (the cache is cleared on failure).
+3. `instanceTranscriptionModel`: the model itself. Check that it is still needed once handlers read `returnObject.model`.
+4. `methodHandlerOnLoad`, `methodHandlerOnTranscribe`: check they read well next to the main side's `onmessage` switch.
+5. The result object (`returnObject`, `resultObject`, `returnPromise`): pick one name for "the `{ model, error }` object" and use it
+   everywhere.
+6. The two `timestampImport...` variables and the `timespan...` locals.
+
+**Comments to correct or make more accurate**
+- The comment at the top says `self` is "a version of `this`". It is not: `self` is the worker's global object, and at the top
+  level of a module `this` is `undefined`.
+- "We do not await here (so the dispatcher never blocks)": awaiting in `onmessage` would not block other messages either, since
+  each message is its own event. The real effect of not awaiting is only that `onmessage` returns right away. The reason for the
+  queue is that two handlers can otherwise run inference at the same time.
+- The comment above `let` ("cleaner than `self.`") explains a decision rather than the code. Trim or reword.
+- A closing `// #region inference` should read `// #endregion inference`.
