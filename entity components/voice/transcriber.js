@@ -415,12 +415,25 @@ export class VoiceTranscriberLocal
                 case "pong":
                     console.log("a pong was received! nice! id : " + message.id);
                     break;
+                case "ready":
+                    console.log("ready");
+                    break;
+                case "progress":
+                    console.log("progress");
+                    break;
+                case "result":
+                    console.log("result");
+                    break;
+                case "error":
+                    console.log("error");
+                    break;
                 default:
                     console.warn("unknown message type : " + message.type + " : " + message.id);
                     break;
             }
         };
-        this.#instanceWorker.postMessage({type:"ping", id: 1});
+        // trigger the worker to begin loading the model
+        this.#instanceWorker.postMessage({type:"load", id: 1});
         // #endregion worker
 
         //
@@ -477,7 +490,7 @@ export class VoiceTranscriberLocal
 
         // #region lazy-load transcription model
         //
-        await this.#methodLazyLoadTranscriptionModel();
+        //await this.#methodLazyLoadTranscriptionModel();
         if(this.#instanceTranscriptionModel == null)
         {
             console.error("no transcription model");
