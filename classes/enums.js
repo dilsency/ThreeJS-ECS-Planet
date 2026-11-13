@@ -39,9 +39,14 @@ export const EnumModeVoiceTranscriber = Object.freeze({
     Local: "Local",
     Cloud: "Cloud",
 });
+export const ConfigTranscriptionModel = Object.freeze({
+    Id: "Xenova/whisper-tiny.en",
+    Size: "40 MB",
+    LocalStorage: "cachedTranscriptionModelId",
+});
 export const EnumLabelVoiceTranscriber = Object.freeze({
     None: "None",
-    Local: "Local (75 MB)",
+    Local: "Local (" + ConfigTranscriptionModel.Size + ")",
     Cloud: "Cloud",
 });
 export const EnumStateVoiceRecording = Object.freeze({

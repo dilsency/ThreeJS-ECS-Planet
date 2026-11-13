@@ -1,5 +1,7 @@
 // this is not "main thread", so we use "self." instead of "this."
 
+// NO IMPORTS (if possible)
+
 // todo to-do to do : go through the variables naming scheme for this entire file
 // it is quite confusing at the moment, and I have a feeling that it could become clearer
 
@@ -15,6 +17,8 @@ self.onmessage = (eventObject) =>
             self.postMessage({ type: "pong", id: message.id });
             break;
         case "load":
+            // store the model id
+            modelId = message.modelId;
             // we do not await here ("so the dispatcher never blocks" ???)
             methodHandlerOnLoad(message);
             break;
@@ -50,6 +54,10 @@ self.onmessage = (eventObject) =>
 
 // #region privates
 // "let" at a module-level is cleaner than "self." (which is in turn, a version of "this.")
+//
+let isCached = false;
+//
+let modelId = null;
 let promiseTranscriptionModelResult = null;
 let instanceTranscriptionModel = null;
 let timestampImportStarted = null;
@@ -78,18 +86,14 @@ async function methodHandlerOnLoad(message)
         );
         return;
     }
-    const timespanImport =
-        (
-            (timestampImportEnded - timestampImportStarted)
-            / 1000
-        )
-            .toFixed(1);
+    const timespanImport = (timestampImportEnded - timestampImportStarted);
     self.postMessage
     (
         {
             type: "ready",
             id: message.id,
             timespan: timespanImport,
+            firstDownload: !isCached,
         }
     );
 }
@@ -132,14 +136,16 @@ async function methodHandlerOnTranscribe(message)
                 message.audiosamples
             );
         const timestampInferenceEnded = performance.now();
-        const timespanInference = ((timestampInferenceEnded - timestampInferenceStarted) / 1000).toFixed(1);
+        const timespanInference = (timestampInferenceEnded - timestampInferenceStarted);
+        //const timespanInferenceRounded = (timespanInference / 1000).toFixed(1);
         //console.log(resultObject.text + " ("+ timespanInference +"s)");
         //
         self.postMessage
         (
             {
                 type: "result",
-                text: (resultObject.text + " ("+ timespanInference +"s)"),
+                text: (resultObject.text),
+                timespan: timespanInference,
                 id: message.id,
             }
         );
@@ -219,6 +225,21 @@ async function methodLoadTranscriptionModelViaManager()
 
 async function methodLoadTranscriptionModel()
 {
+    // early-return
+    if(modelId == null)
+    {
+        console.error("no modelId defined");
+        return {
+            model: null,
+            error: {
+                name: "no-model-id",
+                message: "no modelId was sent with the .postMessage()",
+                stack: "",
+            },
+        };
+    }
+
+    //
     try
     {
         //
@@ -230,8 +251,36 @@ async function methodLoadTranscriptionModel()
         const module = await import("@huggingface/transformers");
         const pipeline = module.pipeline;
 
+        // we can check right now if we have cached the model
+        isCached = await module.ModelRegistry.is_pipeline_cached("automatic-speech-recognition", modelId);
+        // if we have not, we inform the main thread, so that it can inform the player
+        // that the first download has started
+        if(!isCached)
+        {
+            self.postMessage
+            (
+                {
+                    type: "download",
+                }
+            );
+        }
+
         //
-        const promiseTranscriptionModelPipeline = pipeline("automatic-speech-recognition", "Xenova/whisper-tiny.en");
+        const promiseTranscriptionModelPipeline =
+            pipeline
+            (
+                "automatic-speech-recognition",
+                modelId,
+                {
+                    progress_callback: (progressObject) =>
+                    {
+                        if(progressObject.status == "progress")
+                        {
+                            // fires each progress/download step
+                        }
+                    }
+                }
+            );
         const instanceTranscriptionModelPipeline = await promiseTranscriptionModelPipeline;
         
         // #region finish

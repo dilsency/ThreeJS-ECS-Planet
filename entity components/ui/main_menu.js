@@ -3,7 +3,7 @@
 import * as THREE from "three";
 // ECS
 import {EntityComponent} from "../../classes/ECS/entity_component.js";
-import { EnumModeVoiceTranscriber, EnumLabelVoiceTranscriber } from "../../classes/enums.js";
+import { EnumModeVoiceTranscriber, EnumLabelVoiceTranscriber, ConfigTranscriptionModel } from "../../classes/enums.js";
 
 export class EntityComponentMainMenu extends EntityComponent
 {
@@ -137,20 +137,46 @@ export class EntityComponentMainMenu extends EntityComponent
 
         //
         const arrayEnumModeVoiceTranscriber = Object.values(EnumModeVoiceTranscriber);
-        const arrayEnumLabelVoiceTranscriber = Object.values(EnumLabelVoiceTranscriber);
         const lenEnumModeVoiceTranscriber = arrayEnumModeVoiceTranscriber.length;
-        const lenEnumLabelVoiceTranscriber = arrayEnumLabelVoiceTranscriber.length;
 
         //
-        if(lenEnumModeVoiceTranscriber != lenEnumLabelVoiceTranscriber){console.error("mismatch enum voice transcriber lengths");return;}
+        var isCached = false;
+        try
+        {
+            const temp = localStorage.getItem(ConfigTranscriptionModel.LocalStorage);
+            if(temp != null && temp == ConfigTranscriptionModel.Id)
+            {
+                isCached = true;
+            }
+        }
+        catch(errorObject)
+        {
+            console.error(errorObject);
+        }
 
         //
         for(var i = 0; i < lenEnumModeVoiceTranscriber; i++)
         {
             //
             const elementIterationLabel = document.createElement("label");
-            elementIterationLabel.innerText = arrayEnumLabelVoiceTranscriber[i];
-            elementIterationLabel.htmlFor = "voice-mode-" + arrayEnumModeVoiceTranscriber[i];
+            // might be slightly confusing
+            // basically, we use the EnumMode value...
+            // ...such as "Cloud", or "Local"
+            // as the key in the EnumLabel lookup value
+            // so "Local" gives us "Local (40 MB)"
+            const enumModeValue = arrayEnumModeVoiceTranscriber[i];
+            var label = "";
+            if(isCached)
+            {
+                label = enumModeValue;
+            }
+            else
+            {
+                label = EnumLabelVoiceTranscriber[enumModeValue];
+            }
+            elementIterationLabel.innerText = label;
+                
+            elementIterationLabel.htmlFor = "voice-mode-" + enumModeValue;
             elementIterationLabel.style.whiteSpace = "nowrap";
 
             //
@@ -181,6 +207,9 @@ export class EntityComponentMainMenu extends EntityComponent
         );
         this.methodRegisterMessageHandlerWithinEntity("initialization.returnedToMenu",
             (paramMessage) => this.methodShow()
+        );
+        this.methodRegisterMessageHandlerWithinEntity("mainmenu.update",
+            (paramMessage) => this.methodHandleMainMenuUpdate(paramMessage)
         );
         // #endregion message system handler registration
     }
@@ -230,6 +259,59 @@ export class EntityComponentMainMenu extends EntityComponent
         event.target.blur();
     }
     // #endregion event listeners
+
+    // #region broadcast handlers
+    methodHandleMainMenuUpdate(paramMessage)
+    {
+        
+        //
+        var isCached = false;
+        try
+        {
+            const temp = localStorage.getItem(ConfigTranscriptionModel.LocalStorage);
+            if(temp != null && temp == ConfigTranscriptionModel.Id)
+            {
+                isCached = true;
+            }
+        }
+        catch(errorObject)
+        {
+            console.error(errorObject);
+        }
+
+        // early-return
+        //if(!isCached){return;}
+
+        //
+        const arrayEnumModeVoiceTranscriber = Object.values(EnumModeVoiceTranscriber);
+
+        //
+        const childCount = this.#elementRadioButtonContainer2.children.length;
+        
+        //
+        var j = 0;
+        for(var i = 0; i < childCount; i++)
+        {
+            //
+            const iterationElement = this.#elementRadioButtonContainer2.children[i];
+            if(iterationElement.tagName != "LABEL"){continue;}
+            console.log(j);
+            const enumModeValue = arrayEnumModeVoiceTranscriber[j];
+            var label = "";
+            if(isCached)
+            {
+                label = enumModeValue;
+            }
+            else
+            {
+                label = EnumLabelVoiceTranscriber[enumModeValue];
+            }
+            console.log(label);
+            iterationElement.innerText = label;
+            j++;
+        }
+    }
+    // #endregion broadcast handlers
 
     // #region methods
     methodShow()

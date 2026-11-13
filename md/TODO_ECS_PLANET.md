@@ -994,3 +994,91 @@ Treat the current form as a first working version, not a settled design. Options
    read and logged, and it makes the optional cap on waiting clips (see `md/LOCAL_TRANSCRIPTION_PLAN.md`, chunk 3) easy to add.
 3. An `async` loop that takes clips from an array one at a time (`for` / `await`). Reads top to bottom like ordinary code.
 Decide by which one is easiest to read six months from now, not by which is shortest.
+
+## 26. Local transcription: the "loading model" notices repeat every time `Local` is selected — done
+
+Observed: clicking `Local` posted "Begin loading model (...)" and "Finished loading model (...)" to the chat. Clicking `None`
+and then `Local` again posted both again.
+
+**Why:** selecting `None` disposes the Local transcriber, which terminates its worker. Selecting `Local` creates a new transcriber
+and a new worker. The "begin" notice was sent from the `VoiceTranscriberLocal` constructor and the "finished" notice when the
+worker posted `ready`. The second time the model comes from the browser cache, so nothing is downloaded, but the notices said
+"loading" anyway, which suggested a repeated download.
+
+**Fix (implemented):** keep the lifecycle (selecting `None` leaves no worker and no model in memory, see plan chunk 6) and tie
+the notices to whether a download is really needed.
+1. In the worker's loader, after the dynamic import and before `pipeline(...)`, ask the library with
+   `ModelRegistry.is_pipeline_cached("automatic-speech-recognition", modelId)` and store the answer in `isCached`.
+2. If not cached, the worker posts `{ type: "download" }`, and the main side shows "Begin loading model (...)".
+3. The `ready` message carries `firstDownload: !isCached`, and the main side shows "Finished loading model (...)" only when it
+   is true. A cached load shows no notices.
+
+**Correction to the earlier plan:** the `progress_callback` `download` event does NOT mean a network download. In the library
+(`utils/hub.js`) it is dispatched after the cache check for every file, including files read from the cache, despite its
+documentation ("A file download has started"). Do not use it to decide whether anything was downloaded. `ModelRegistry` is
+the reliable check.
+
+**Left over:**
+- `progress_callback` in the worker is an empty stub. It is the place for `progress_total` byte counts if a percentage in the
+  chat is wanted (plan chunk 5), reported only while a real download runs (`!isCached`), and throttled.
+- The main side's `progress` case ("Progress?") is still a placeholder.
+- A failed `is_pipeline_cached` call currently counts as a load failure (it is inside the loader's `try`). Consider treating it
+  as "not cached" instead.
+- A cached load is silent for about 1.4 s (worker start, library import, runtime and session setup). Acceptable; revisit if
+  slow devices make V seem unresponsive.
+
+## 27. Local radio label: hide the size once the model is cached
+
+Idea: the Main Menu label reads "Local (40 MB)" so the player sees the download size before choosing it. Once the model is in the
+browser cache there is nothing left to download, so the label could drop the size and read just "Local".
+
+**Why it is not trivial:** the cached answer (`isCached`, from `ModelRegistry.is_pipeline_cached`) only exists inside the worker,
+after `Local` has been selected. The label is drawn before that. Importing the library on the main thread just to ask would defeat
+the lazy loading, so that is not an option.
+
+**Decision (not implemented yet): remember it in `localStorage`.**
+1. When the worker's `ready` message arrives with the model loaded, the main side stores a "speech model cached" flag.
+2. The Main Menu reads the flag when it builds the Local label. Cached: no size. Not cached: size from
+   `ConfigTranscriptionModel.Size` (the single source, see item 24).
+3. Wrap every `localStorage` read and write in `try/catch` (it can throw or be empty in private windows); no flag means "not
+   cached", i.e. the size stays visible.
+
+**Known weakness:** the flag can go stale. If the browser evicts the Cache API entries but keeps `localStorage`, the label drops
+the size while a download is still needed. The worker's own `isCached` check stays authoritative, so the "Begin loading model
+(40 MB)" notice still appears. Only the label's advance warning is lost.
+
+**Things to handle:**
+- `EnumLabelVoiceTranscriber` is a static lookup. The Local entry has to be computed (a function, or a lookup that checks the
+  flag).
+- The label must refresh when the flag changes. A label built once when the menu is created will not update after the first
+  download in the same session.
+- The size in the label doubles as the misclick warning (see item 24). Hiding it only once cached keeps that intact.
+- If the model id changes (`ConfigTranscriptionModel.Id`), the stored flag must not carry over. Store it per model id.
+
+Alternative, if the weakness matters: check the Cache API directly from the main thread (cache name `transformers-cache`, the
+library default). Accurate and eviction-proof, but it ties us to the library's internal file names.
+
+## 28. Optional / debatable: how the Local transcriber tells the Main Menu that the model is ready
+
+Context: item 27 needs the Main Menu to refresh its "Local (40 MB)" label when the model finishes loading and becomes cached.
+The worker's `ready` message reaches `VoiceTranscriberLocal`, which has to pass it on to the wrapper
+(`EntityComponentVoiceTranscriber`) and from there to the menu.
+
+**Current choice (for now): reuse the existing info callback.** `VoiceTranscriberLocal` already receives
+`(codeInfo) => this.methodHandleOnInfo(codeInfo)`. On every `ready` (not only on a first download) it sends a new info code, for
+example `"model-ready"`. The wrapper's `methodHandleOnInfo` handles that code by sending a message to the menu, which re-reads the
+`localStorage` flag and updates the Local label. The constructor keeps its five parameters.
+
+**Why it is debatable:** the info callback so far carries things to *tell the player* (chat notices). A code that exists only to
+make a UI refresh is a different kind of event, so it feels like it does not belong there.
+
+**Alternatives:**
+1. **A sixth constructor argument, `onReady`.** Explicit and honest about intent, but the constructor grows to five callbacks plus
+   the language, and `ready` is only one of several lifecycle events.
+2. **Re-read the flag when the menu is shown (`methodShow`) and rebuild the labels there.** No wiring at all, but the label stays
+   stale while the player is still in the menu after the first download.
+3. **A general lifecycle callback** (for example `onState(code)`) separate from the player-facing info, used for
+   `model-ready` and later for `worker-created`, `worker-terminated` and so on (chunk 6). Probably the right shape if more such
+   events appear; premature for just one.
+
+Decide when a second "not for the player" event shows up, or when the info callback starts to feel crowded.

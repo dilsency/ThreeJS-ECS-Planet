@@ -72,6 +72,7 @@ export class EntityComponentChatList extends EntityComponent
                 "text": broadcastItem.invokableHandlerValue["text"],
                 "timeSpawned": broadcastItem.invokableHandlerValue["timeSpawned"],
                 "timeLife": broadcastItem.invokableHandlerValue["timeLife"],
+                "timeSpan": broadcastItem.invokableHandlerValue["timeSpan"],
             };
 
             // add time, if none exists
@@ -90,7 +91,15 @@ export class EntityComponentChatList extends EntityComponent
                 message["text"] = String(message["text"]);
             }
 
-            //
+            // we could use different methods based on which input data we have
+            // for example
+            // a notice from the game should probably be a white color, no username, no time data except lifespan
+            // whereas
+            // a warning would be similar, but yellow
+            // whereas
+            // a message from a user to other users, would be colored differently, and have a username
+            // whereas
+            // a "message" by a user that acts as a Command, would not have a username
             this.#methodAddChatMessage(message);
         });
         // #endregion handler registration
@@ -135,8 +144,33 @@ export class EntityComponentChatList extends EntityComponent
     // #region private methods
     #methodAddChatMessage(message)
     {
+        // #region format time stamps
+        // note :
+        // timeSpawned and timeLife are set manually by us, in seconds
+        // timeSpan is calculated from two performance.now() , and they will be measured in milliseconds
+
+        var timeSpawned = "-";
+        var timeSpawnedEnd = "-";
+        var timeSpan = "-";
+        if(message["timeSpawned"] != null)
+        {
+            // unit : seconds
+            timeSpawned = message["timeSpawned"].toFixed(1);
+        }
+        if(message["timeSpawned"] != null && message["timeLife"] != null)
+        {
+            // unit : seconds
+            timeSpawnedEnd = ((message["timeSpawned"] + message["timeLife"])).toFixed(1);
+        }
+        if(message["timeSpan"] != null)
+        {
+            // unit : milliseconds
+            timeSpan = (message["timeSpan"] / 1000).toFixed(1);
+        }
+        // #endregion format time stamps
+
         const elementChatMessage = document.createElement("div");
-        elementChatMessage.title = (message["timeSpawned"] + "/" + (message["timeSpawned"] + message["timeLife"]));
+        elementChatMessage.title = (timeSpawned + " / " + timeSpawnedEnd + " : " + timeSpan);
         elementChatMessage.style.marginBottom = "8px";
         this.#elementChat.appendChild(elementChatMessage);
 

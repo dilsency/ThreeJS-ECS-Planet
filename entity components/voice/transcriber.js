@@ -2,7 +2,7 @@
 import { EntityComponent } from "../../classes/ECS/entity_component.js";
 // #endregion ECS
 // #region enums
-import { EnumModeVoiceTranscriber, EnumStateVoiceRecording } from "../../classes/enums.js";
+import { ConfigTranscriptionModel, EnumModeVoiceTranscriber, EnumStateVoiceRecording } from "../../classes/enums.js";
 // #endregion enums
 
 export class VoiceRecordingLocal
@@ -392,7 +392,7 @@ export class VoiceTranscriberLocal
                 this.#handlerRecorderOnError
             );
 
-        // #region worker
+        // #region worker : init
         // this exact URL pattern is for Vite to be able to bundle it correctly
         this.#instanceWorker
         = new Worker
@@ -417,15 +417,34 @@ export class VoiceTranscriberLocal
                 case "pong":
                     console.log("a pong was received! nice! id : " + message.id);
                     break;
+                case "download":
+                    // we know at this point that we do not have a cached transcription model
+                    // we can therefore delete the localStorage item
+                    this.methodRemoveLocalStorage();
+                    //
+                    this.#handlerOnInfo("load-model-begin");
+                    break;
                 case "ready":
-                    console.log("ready");
+                    // in localStorage...
+                    // ...we store whether or not the transcription model is cached
+                    // either the storage item exists, so it is cached
+                    // or it does not exist, so it is not cached
+                    // we store the model id instead of just "true"
+                    this.methodSetLocalStorage();
+                    //
+                    if(message.firstDownload)
+                    {
+                        //
+                        this.#handlerOnInfo("load-model-finished-first-time");
+                    }
+                    this.#handlerOnInfo("load-model-finished-any-time");
                     break;
                 case "progress":
-                    console.log("progress");
+                    this.#handlerOnInfo("transcribe-progress");
                     break;
                 case "result":
                     //console.log(message.text);
-                    this.#handlerOnTranscript(message.text);
+                    this.#handlerOnTranscript(message.text, message.timespan);
                     break;
                 case "error":
                     console.log("error");
@@ -435,14 +454,53 @@ export class VoiceTranscriberLocal
                     break;
             }
         };
+        // #endregion worker : init
+
+        // #region worker : start
+        // this will just send an informative message
+        //this.#handlerOnInfo("load-model-begin");
         // trigger the worker to begin loading the model
-        this.#instanceWorker.postMessage({type:"load", id: 1});
-        // #endregion worker
+        // we pass along the model id as a parameter..,
+        // so that the worker can be without imports
+        this.#instanceWorker.postMessage
+        (
+            {
+                type:"load",
+                id: 1,
+                modelId: ConfigTranscriptionModel.Id,
+            }
+        );
+        // #endregion worker : start
 
         //
         console.log("Local voice transcriber created!");
     }
     // #endregion constructor
+
+    // #region localStorage
+    methodRemoveLocalStorage()
+    {
+        try {
+            //const item = localStorage.getItem(ConfigTranscriptionModel.LocalStorage);
+            //if(item == null){return;}
+            localStorage.removeItem(ConfigTranscriptionModel.LocalStorage);
+        }
+        catch(errorObject)
+        {
+            console.error(errorObject);
+        }
+    }
+    methodSetLocalStorage()
+    {
+        try {
+            localStorage.setItem(ConfigTranscriptionModel.LocalStorage, ConfigTranscriptionModel.Id);
+        }
+        catch(errorObject)
+        {
+            console.error(errorObject);
+        }
+    }
+    // #endregion localStorage
 
     // #region methods
     methodStartRecording()
@@ -828,7 +886,8 @@ export class VoiceTranscriberCloud
 
             //
             console.log(trimmedText);
-            this.#handlerOnTranscript(trimmedText);
+            // do we not have a timespan this point?
+            this.#handlerOnTranscript(trimmedText, null);
         }
     }
     methodHandleOnEnd()
@@ -915,7 +974,7 @@ export class EntityComponentVoiceTranscriber extends EntityComponent
             // or do the arrow syntax
             this.#swappableTranscriber = new VoiceTranscriberCloud(
                 this.#language,
-                (text) => this.methodHandleOnTranscript(text),
+                (text, timespan) => this.methodHandleOnTranscript(text, timespan),
                 () => this.methodHandleOnEnd(),
                 (codeError) => this.methodHandleOnError(codeError),
             );
@@ -936,7 +995,7 @@ export class EntityComponentVoiceTranscriber extends EntityComponent
             // or do the arrow syntax
             this.#swappableTranscriber = new VoiceTranscriberLocal(
                 this.#language,
-                (text) => this.methodHandleOnTranscript(text),
+                (text, timespan) => this.methodHandleOnTranscript(text, timespan),
                 () => this.methodHandleOnEnd(),
                 (codeInfo) => this.methodHandleOnInfo(codeInfo),
                 (codeError) => this.methodHandleOnError(codeError),
@@ -956,12 +1015,23 @@ export class EntityComponentVoiceTranscriber extends EntityComponent
     // #endregion setters
 
     // #region invokable callbacks
-    methodHandleOnTranscript(text)
+    methodHandleOnTranscript(text, timespan)
     {
         //
         const textLowerCase = text.toLowerCase();
         //
-        this.methodSendMessageToChatWithLifespan(textLowerCase, 10);
+        this.methodSendMessageToEntitiesWithComponent("EntityComponentChatList",
+            {
+                "invokableHandlerName": "chat.message",
+                "invokableHandlerValue":
+                {
+                    "username": null,
+                    "text": textLowerCase,
+                    "timeLife": 10,
+                    "timeSpan": timespan,
+                }
+            }
+        );
     }
     methodHandleOnEnd(){this.#isRecording = false;}
     methodHandleOnInfo(codeInfo)
@@ -969,6 +1039,29 @@ export class EntityComponentVoiceTranscriber extends EntityComponent
         //
         switch(codeInfo)
         {
+            case "load-model-begin":
+                this.methodSendMessageToChatWithLifespan("Begin loading model (" + ConfigTranscriptionModel.Size + ")...", 3);
+                break;
+            case "load-model-finished-first-time":
+                this.methodSendMessageToChatWithLifespan("Finished loading model (" + ConfigTranscriptionModel.Size + ")!", 3);
+                break;
+            case "load-model-finished-any-time":
+                // this should perhaps be its own callback function, instead of inside methodHandleOnInfo()
+                this.methodSendMessageToEntitiesWithComponent
+                (
+                    "EntityComponentMainMenu",
+                    {
+                        "invokableHandlerName": "mainmenu.update",
+                        "invokableHandlerValue":
+                        {
+                            
+                        }
+                    }
+                );
+                break;
+            case "transcribe-progress":
+                this.methodSendMessageToChatWithLifespan("Progress?", 3);
+                break;
             case "too-long":
                 this.methodSendMessageToChatWithLifespan("Voice clips longer than 10 seconds will be clipped.", 3);
                 break;
