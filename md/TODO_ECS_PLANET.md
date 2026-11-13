@@ -1027,37 +1027,41 @@ the reliable check.
 - A cached load is silent for about 1.4 s (worker start, library import, runtime and session setup). Acceptable; revisit if
   slow devices make V seem unresponsive.
 
-## 27. Local radio label: hide the size once the model is cached
+## 27. Local radio label: show the model's state (size / downloading / cached) — done, wording not final
 
 Idea: the Main Menu label reads "Local (40 MB)" so the player sees the download size before choosing it. Once the model is in the
-browser cache there is nothing left to download, so the label could drop the size and read just "Local".
+browser cache there is nothing left to download, so the label says so instead.
 
-**Why it is not trivial:** the cached answer (`isCached`, from `ModelRegistry.is_pipeline_cached`) only exists inside the worker,
+**Why it was not trivial:** the cached answer (`isCached`, from `ModelRegistry.is_pipeline_cached`) only exists inside the worker,
 after `Local` has been selected. The label is drawn before that. Importing the library on the main thread just to ask would defeat
-the lazy loading, so that is not an option.
+the lazy loading, so that was not an option.
 
-**Decision (not implemented yet): remember it in `localStorage`.**
-1. When the worker's `ready` message arrives with the model loaded, the main side stores a "speech model cached" flag.
-2. The Main Menu reads the flag when it builds the Local label. Cached: no size. Not cached: size from
-   `ConfigTranscriptionModel.Size` (the single source, see item 24).
-3. Wrap every `localStorage` read and write in `try/catch` (it can throw or be empty in private windows); no flag means "not
-   cached", i.e. the size stays visible.
+**Implemented: remember it in `localStorage`.**
+1. The key is `ConfigTranscriptionModel.LocalStorage`, and the stored value is the model id (`ConfigTranscriptionModel.Id`), so a
+   different model id reads as "not cached". It is written when the worker posts `ready`, and cleared when it posts `download`
+   (a real download is needed, so whatever was stored is stale). Every read and write is wrapped in `try/catch`.
+2. `EntityComponentMainMenu` keeps its label elements and rebuilds the Local label in `methodUpdateLabels()`, from the flag and
+   from a transient `#isDownloading` field (never stored: a reload mid-download means the cache is incomplete):
+   - not cached: "Local (40 MB)" (size from `ConfigTranscriptionModel.Size`, the single source)
+   - downloading: "Local (downloading)"
+   - cached: "Local (cached)"
+3. The wrapper sends `mainmenu.update` (with `isDownloading`) on download begin (`true`), on finished (`false`), when the mode
+   changes (`false`, so an abandoned download does not leave the label stuck) and on a worker `load-fail` (`false`).
+4. `EnumLabelVoiceTranscriber` was removed: two of its three entries equalled the enum value, and the Local entry is computed
+   now. Bring a lookup back only when a mode's display text really needs to differ from its name.
 
-**Known weakness:** the flag can go stale. If the browser evicts the Cache API entries but keeps `localStorage`, the label drops
-the size while a download is still needed. The worker's own `isCached` check stays authoritative, so the "Begin loading model
-(40 MB)" notice still appears. Only the label's advance warning is lost.
+**Not set in stone:** the exact wording and the number of states are easy to change, in one place (`methodUpdateLabels`). For
+example, plain "Local" instead of "Local (cached)" once cached, or no "(downloading)" state. The first-download label
+"Local (downloading)" covers the whole load, including runtime setup after the file transfer, which is short next to 40 MB.
 
-**Things to handle:**
-- `EnumLabelVoiceTranscriber` is a static lookup. The Local entry has to be computed (a function, or a lookup that checks the
-  flag).
-- The label must refresh when the flag changes. A label built once when the menu is created will not update after the first
-  download in the same session.
-- The size in the label doubles as the misclick warning (see item 24). Hiding it only once cached keeps that intact.
-- If the model id changes (`ConfigTranscriptionModel.Id`), the stored flag must not carry over. Store it per model id.
+**Known weakness:** the flag can go stale. If the browser evicts the Cache API entries but keeps `localStorage`, the label says
+"(cached)" while a download is still needed. The worker's own `isCached` check stays authoritative, and the `download` message
+clears the flag and switches the label to "(downloading)", so it corrects itself at the next load.
 
-Alternative, if the weakness matters: check the Cache API directly from the main thread (cache name `transformers-cache`, the
+**Alternative, if the weakness matters:** check the Cache API directly from the main thread (cache name `transformers-cache`, the
 library default). Accurate and eviction-proof, but it ties us to the library's internal file names.
 
+Related: item 28 (how the transcriber reports `ready` to the menu) and item 29 (one helper for the `mainmenu.update` message).
 ## 28. Optional / debatable: how the Local transcriber tells the Main Menu that the model is ready
 
 Context: item 27 needs the Main Menu to refresh its "Local (40 MB)" label when the model finishes loading and becomes cached.
