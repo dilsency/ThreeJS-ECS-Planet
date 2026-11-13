@@ -44,11 +44,6 @@ export const ConfigTranscriptionModel = Object.freeze({
     Size: "40 MB",
     LocalStorage: "cachedTranscriptionModelId",
 });
-export const EnumLabelVoiceTranscriber = Object.freeze({
-    None: "None",
-    Local: "Local (" + ConfigTranscriptionModel.Size + ")",
-    Cloud: "Cloud",
-});
 export const EnumStateVoiceRecording = Object.freeze({
     Idle: "Idle",
     Opening: "Opening",

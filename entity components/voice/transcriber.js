@@ -447,7 +447,7 @@ export class VoiceTranscriberLocal
                     this.#handlerOnTranscript(message.text, message.timespan);
                     break;
                 case "error":
-                    console.log("error");
+                    this.#handlerOnError(message.code);
                     break;
                 default:
                     console.warn("unknown message type : " + message.type + " : " + message.id);
@@ -964,6 +964,19 @@ export class EntityComponentVoiceTranscriber extends EntityComponent
         this.#swappableTranscriber?.methodStopRecording();
         this.#swappableTranscriber?.methodDispose();
 
+        // reset main menu labels
+        this.methodSendMessageToEntitiesWithComponent
+        (
+            "EntityComponentMainMenu",
+            {
+                "invokableHandlerName": "mainmenu.update",
+                "invokableHandlerValue":
+                {
+                    isDownloading: false,
+                }
+            }
+        );
+
         //
         this.#isRecording = false;
 
@@ -1041,6 +1054,18 @@ export class EntityComponentVoiceTranscriber extends EntityComponent
         {
             case "load-model-begin":
                 this.methodSendMessageToChatWithLifespan("Begin loading model (" + ConfigTranscriptionModel.Size + ")...", 3);
+                // this should perhaps be its own callback function, instead of inside methodHandleOnInfo()
+                this.methodSendMessageToEntitiesWithComponent
+                (
+                    "EntityComponentMainMenu",
+                    {
+                        "invokableHandlerName": "mainmenu.update",
+                        "invokableHandlerValue":
+                        {
+                            isDownloading: true,
+                        }
+                    }
+                );
                 break;
             case "load-model-finished-first-time":
                 this.methodSendMessageToChatWithLifespan("Finished loading model (" + ConfigTranscriptionModel.Size + ")!", 3);
@@ -1054,7 +1079,7 @@ export class EntityComponentVoiceTranscriber extends EntityComponent
                         "invokableHandlerName": "mainmenu.update",
                         "invokableHandlerValue":
                         {
-                            
+                            isDownloading: false,
                         }
                     }
                 );
@@ -1080,6 +1105,20 @@ export class EntityComponentVoiceTranscriber extends EntityComponent
                 break;
             case "audio-capture":
                 this.methodSendMessageToChatWithLifespan("error: faulty audio capture", 15);
+                break;
+            case "load-fail":
+                // reset main menu labels
+                this.methodSendMessageToEntitiesWithComponent
+                (
+                    "EntityComponentMainMenu",
+                    {
+                        "invokableHandlerName": "mainmenu.update",
+                        "invokableHandlerValue":
+                        {
+                            isDownloading: false,
+                        }
+                    }
+                );
                 break;
         }
     }

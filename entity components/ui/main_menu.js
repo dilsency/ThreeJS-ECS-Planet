@@ -3,7 +3,7 @@
 import * as THREE from "three";
 // ECS
 import {EntityComponent} from "../../classes/ECS/entity_component.js";
-import { EnumModeVoiceTranscriber, EnumLabelVoiceTranscriber, ConfigTranscriptionModel } from "../../classes/enums.js";
+import { EnumModeVoiceTranscriber, ConfigTranscriptionModel } from "../../classes/enums.js";
 
 export class EntityComponentMainMenu extends EntityComponent
 {
@@ -19,6 +19,9 @@ export class EntityComponentMainMenu extends EntityComponent
     #elementRadioButtonContainer = null;
     #elementRadioButtonContainer2 = null;
     #listElementRadioButtons = [];
+    #listElementLabels = [];
+    //
+    #isLocalTranscriptionModelDownloading = false;
     // #endregion privates
 
     // #region construct
@@ -125,6 +128,9 @@ export class EntityComponentMainMenu extends EntityComponent
 
         //
         this.#elementRadioButtonContainer2 = document.createElement("fieldset");
+        this.#elementRadioButtonContainer2.style.display = "grid";
+        this.#elementRadioButtonContainer2.style.width = "100%";
+        this.#elementRadioButtonContainer2.style.gridTemplateColumns = "20px 1fr";
         this.#elementRadioButtonContainer.appendChild(this.#elementRadioButtonContainer2);
 
         //
@@ -140,47 +146,9 @@ export class EntityComponentMainMenu extends EntityComponent
         const lenEnumModeVoiceTranscriber = arrayEnumModeVoiceTranscriber.length;
 
         //
-        var isCached = false;
-        try
-        {
-            const temp = localStorage.getItem(ConfigTranscriptionModel.LocalStorage);
-            if(temp != null && temp == ConfigTranscriptionModel.Id)
-            {
-                isCached = true;
-            }
-        }
-        catch(errorObject)
-        {
-            console.error(errorObject);
-        }
-
-        //
         for(var i = 0; i < lenEnumModeVoiceTranscriber; i++)
         {
-            //
-            const elementIterationLabel = document.createElement("label");
-            // might be slightly confusing
-            // basically, we use the EnumMode value...
-            // ...such as "Cloud", or "Local"
-            // as the key in the EnumLabel lookup value
-            // so "Local" gives us "Local (40 MB)"
-            const enumModeValue = arrayEnumModeVoiceTranscriber[i];
-            var label = "";
-            if(isCached)
-            {
-                label = enumModeValue;
-            }
-            else
-            {
-                label = EnumLabelVoiceTranscriber[enumModeValue];
-            }
-            elementIterationLabel.innerText = label;
-                
-            elementIterationLabel.htmlFor = "voice-mode-" + enumModeValue;
-            elementIterationLabel.style.whiteSpace = "nowrap";
-
-            //
-            this.#elementRadioButtonContainer2.appendChild(elementIterationLabel);
+            // #region radio button
 
             //
             const elementIterationRadioButton = document.createElement("input");
@@ -198,7 +166,33 @@ export class EntityComponentMainMenu extends EntityComponent
             //
             this.#elementRadioButtonContainer2.appendChild(elementIterationRadioButton);
             this.#listElementRadioButtons.push(elementIterationRadioButton);
+
+            // #endregion radio button
+            
+            // #region label
+            
+            //
+            const elementIterationLabel = document.createElement("label");
+            // might be slightly confusing
+            // basically, we use the EnumMode value...
+            // ...such as "Cloud", or "Local"
+            // as the key in the EnumLabel lookup value
+            // so "Local" gives us "Local (40 MB)"
+            const enumModeValue = arrayEnumModeVoiceTranscriber[i];
+            elementIterationLabel.innerText = enumModeValue;
+                
+            elementIterationLabel.htmlFor = "voice-mode-" + enumModeValue;
+            elementIterationLabel.style.whiteSpace = "nowrap";
+
+            //
+            this.#elementRadioButtonContainer2.appendChild(elementIterationLabel);
+            this.#listElementLabels.push(elementIterationLabel);
+
+            // #endregion label
         }
+
+        //
+        this.methodUpdateLabels();
         // #endregion voice input
 
         // #region message system handler registration
@@ -263,7 +257,17 @@ export class EntityComponentMainMenu extends EntityComponent
     // #region broadcast handlers
     methodHandleMainMenuUpdate(paramMessage)
     {
-        
+        //
+        this.#isLocalTranscriptionModelDownloading = paramMessage?.invokableHandlerValue?.isDownloading;
+
+        //
+        this.methodUpdateLabels();
+    }
+    // #endregion broadcast handlers
+
+    // #region renamethis
+    methodUpdateLabels()
+    {
         //
         var isCached = false;
         try
@@ -279,39 +283,28 @@ export class EntityComponentMainMenu extends EntityComponent
             console.error(errorObject);
         }
 
-        // early-return
-        //if(!isCached){return;}
-
         //
-        const arrayEnumModeVoiceTranscriber = Object.values(EnumModeVoiceTranscriber);
-
-        //
-        const childCount = this.#elementRadioButtonContainer2.children.length;
-        
-        //
-        var j = 0;
-        for(var i = 0; i < childCount; i++)
+        for(var i = 0; i < this.#listElementLabels.length; i++)
         {
             //
-            const iterationElement = this.#elementRadioButtonContainer2.children[i];
-            if(iterationElement.tagName != "LABEL"){continue;}
-            console.log(j);
-            const enumModeValue = arrayEnumModeVoiceTranscriber[j];
-            var label = "";
+            const iterationElement = this.#listElementLabels[i];
+            const stringFor = iterationElement.htmlFor.split("voice-mode-")[1];
+            if(stringFor != "Local"){continue;}
+            
             if(isCached)
             {
-                label = enumModeValue;
+                iterationElement.innerText = EnumModeVoiceTranscriber[stringFor] + " (cached)";
             }
-            else
+            else if (this.#isLocalTranscriptionModelDownloading)
             {
-                label = EnumLabelVoiceTranscriber[enumModeValue];
+                iterationElement.innerText = EnumModeVoiceTranscriber[stringFor] + " (downloading)";
             }
-            console.log(label);
-            iterationElement.innerText = label;
-            j++;
+            else {
+                iterationElement.innerText = EnumModeVoiceTranscriber[stringFor] + " ("+ ConfigTranscriptionModel.Size +")";
+            }
         }
     }
-    // #endregion broadcast handlers
+    // #endregion renamethis
 
     // #region methods
     methodShow()

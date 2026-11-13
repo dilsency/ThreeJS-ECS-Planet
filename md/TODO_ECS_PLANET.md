@@ -1082,3 +1082,17 @@ make a UI refresh is a different kind of event, so it feels like it does not bel
    events appear; premature for just one.
 
 Decide when a second "not for the player" event shows up, or when the info callback starts to feel crowded.
+
+## 29. Cleanup: one helper for the `mainmenu.update` message in `EntityComponentVoiceTranscriber`
+
+The same `methodSendMessageToEntitiesWithComponent("EntityComponentMainMenu", { invokableHandlerName: "mainmenu.update",
+invokableHandlerValue: { isDownloading: ... } })` block is written out four times in `transcriber.js`: in `methodSetTranscriber`
+(reset after disposing the old transcriber), and in `methodHandleOnInfo` for `"load-model-begin"` (`true`) and
+`"load-model-finished-any-time"` (`false`), and in `methodHandleOnError` for `"load-fail"` (`false`).
+
+**Why:** the copies already caused one bug (the `"load-fail"` case was first written with `true` instead of `false`), and a
+fifth state or an extra field would have to be added in four places.
+
+**Fix (not implemented yet):** a small method on the wrapper, for example `methodSendMainMenuUpdate(isDownloading)`, that builds
+and sends the message, and replace the four blocks with a call. Related: the "this should perhaps be its own callback function,
+instead of inside `methodHandleOnInfo()`" comments belong to item 28 and can be settled together with it.
