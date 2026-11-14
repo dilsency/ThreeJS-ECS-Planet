@@ -41,9 +41,6 @@ export class VoiceRecordingLocal
         this.#handlerOnSampled = handlerOnSampled;
         this.#handlerOnFinished = handlerOnFinished;
         this.#handlerOnError = handlerOnError;
-
-        //
-        console.log("Local voice recorder created!");
     }
     // #endregion constructor
 
@@ -328,6 +325,8 @@ export class VoiceTranscriberLocal
 {
     // #region privates
     //
+    #isSupported = null;
+    //
     #counter = 0;
     //
     #language = null;
@@ -368,6 +367,15 @@ export class VoiceTranscriberLocal
         //super(params);
 
         //
+        this.#isSupported = this.methodGetIsSupported();
+        if(this.#isSupported == false)
+        {
+            handlerOnError("not-supported");
+            console.error("capabilities unsupported");
+            return;
+        }
+
+        //
         this.#language = stringLanguage;
         //
         this.#handlerOnTranscript = handlerOnTranscript;
@@ -392,18 +400,42 @@ export class VoiceTranscriberLocal
                 this.#handlerRecorderOnError
             );
 
+        // #region worker
+        this.methodInitializeWorker();
+        // #endregion worker
+    }
+    // #endregion constructor
+
+    // #region initialize
+    methodInitializeWorker()
+    {
         // #region worker : init
-        // this exact URL pattern is for Vite to be able to bundle it correctly
-        this.#instanceWorker
-        = new Worker
-        (
-            new URL
+        try
+        {
+            // this exact URL pattern is for Vite to be able to bundle it correctly
+            this.#instanceWorker
+            = new Worker
             (
-                "./transcriber_worker.js",
-                import.meta.url
-            ),
-            { type: "module" }
-        );
+                new URL
+                (
+                    "./transcriber_worker.js",
+                    import.meta.url
+                ),
+                { type: "module" }
+            );
+        }
+        catch(errorObject)
+        {
+            this.#isSupported = false;
+            console.error(errorObject);
+            this.#handlerOnError("not-supported");
+        }
+        // early-return
+        if(this.#instanceWorker == null){console.error("no Worker");return;}
+        // #endregion worker : init
+
+        // #region worker : register event listeners
+        
         // event listener
         this.#instanceWorker.onmessage = (eventObject) =>
         {
@@ -444,6 +476,7 @@ export class VoiceTranscriberLocal
                     break;
                 case "result":
                     //console.log(message.text);
+                    message.text = this.#methodFormatMessageText(message.text);
                     this.#handlerOnTranscript(message.text, message.timespan);
                     break;
                 case "error":
@@ -454,7 +487,12 @@ export class VoiceTranscriberLocal
                     break;
             }
         };
-        // #endregion worker : init
+
+        this.#instanceWorker.onerror = (eventObject) => {
+            console.error(eventObject);
+            this.#handlerOnError("worker-error");
+        }
+        // #endregion worker : register event listeners
 
         // #region worker : start
         // this will just send an informative message
@@ -471,11 +509,88 @@ export class VoiceTranscriberLocal
             }
         );
         // #endregion worker : start
+    }
+    // #endregion initialize
+
+    // #region formatting
+    #methodFormatMessageText(textUnformatted)
+    {
+        // we need to remove trailing punctuation
+        // by "punctuation", I mean the following characters
+        // . , ! ? ; :
+        // sentence-ending punctuation includes
+        // . ? !
+        const arrayPunctuation = ['.', ',', '!', '?', ';', ':'];
+        const arrayPunctuationSentenceEnders = ['.', '!', '?'];
 
         //
-        console.log("Local voice transcriber created!");
+        var isAnyIncluded = false;
+        var isLastCharacterPunctuation = false;
+        for(var i = 0; i < arrayPunctuation.length; i++)
+        {
+            if(textUnformatted.includes(arrayPunctuation[i]))
+            {
+                isAnyIncluded = true;
+            }
+            if(textUnformatted.charAt(textUnformatted.length - 1) == arrayPunctuation[i])
+            {
+                isLastCharacterPunctuation = true;
+            }
+        }
+        
+        // early-return
+        if(!isAnyIncluded)
+        {
+            return textUnformatted;
+        }
+
+        // we do have some type of punctuation in our text
+        // and we know if the last character we have is punctuation
+
+        // what we could do is, if the punctuation WITHIN the text is not sentence-ending (".", "!", "?")
+        // only then we remove the trailing punctuation
+        // if the punctuation within the text IS sentence-ending
+        // then we return the unformatted string
+
+        // but that would require another loop : do we bother?
+        
+        //var isAnySentenceEndersIncluded = false;
+
+        //
+        if(isLastCharacterPunctuation)
+        {
+            // the last character is sentence-ending punctuation
+            // we get the index of where we would not have that
+            // and then splice accordingly
+            console.log("last character is INDEED punctuation: ["+ textUnformatted.charAt(textUnformatted.length - 1) +"]");
+            var indexOfLastNonSentenceEndingPunctuation = -1;
+            for(var j = (textUnformatted.length - 1); j > 0; j--)
+            {
+                var iterationIsSentenceEndingPunctuation = false;
+                for(var i = 0; i < arrayPunctuationSentenceEnders.length; i++)
+                {
+                    if(textUnformatted.charAt(j) == arrayPunctuationSentenceEnders[i])
+                    {
+                        iterationIsSentenceEndingPunctuation = true;
+                        break;
+                    }
+                }
+                if(!iterationIsSentenceEndingPunctuation)
+                {
+                    indexOfLastNonSentenceEndingPunctuation = (j + 1);
+                    break;
+                }
+            }
+            if(indexOfLastNonSentenceEndingPunctuation >= 0)
+            {
+                const textFormatted = textUnformatted.slice(0, indexOfLastNonSentenceEndingPunctuation);
+                return textFormatted;
+            }
+        }
+
+        return textUnformatted;
     }
-    // #endregion constructor
+    // #endregion formatting
 
     // #region localStorage
     methodRemoveLocalStorage()
@@ -723,12 +838,26 @@ export class VoiceTranscriberLocal
     // #region getters
     methodGetIsSupported()
     {
-        // temporary re-flagging
-        // when this class has been fully implemented...
-        // ...we remove the upper return
+        // we cache the result of this, so that we do not need to check it again needlessly
+        if(this.#isSupported != null){return this.#isSupported;}
+
+        // the following capabilities all need to be supported, or else we return false
+        // • Worker
+        // • navigator.mediaDevices?.getUserMedia
+        // • MediaRecorder
+        // • AudioContext
+        // • WebAssembly
+
+        // globalThis. is used to check our global capabilities
+        // globalThis. is more or less implied every time we use, for example, new Worker(...)
+        // we could also write: new globalThis.Worker(...)
+        // but it is more verbose, it is implied, and is thus unnessecary
+        if(globalThis.Worker == null){return false;}
+        if(navigator.mediaDevices?.getUserMedia == null){return false;}
+        if(globalThis.MediaRecorder == null){return false;}
+        if(globalThis.AudioContext == null){return false;}
+        if(globalThis.WebAssembly == null){return false;}
         return true;
-        //return !(this.#instanceVoiceRecognizer == null);
-        return !(this.#instanceVoiceRecordingManager == null);
     }
     // #endregion getters
 }
@@ -1100,13 +1229,23 @@ export class EntityComponentVoiceTranscriber extends EntityComponent
         //
         switch(codeError)
         {
+            case "not-supported":
+                this.methodSendMessageToChatWithLifespan("error: capabilities required for local transcription are not supported", 15);
+                break;
+            case "worker-error":
+                this.methodSendMessageToChatWithLifespan("error: the worker that handles local transcription failed unexpectedly", 15);
+                break;
             case "not-allowed":
                 this.methodSendMessageToChatWithLifespan("error: microphone not allowed", 15);
                 break;
             case "audio-capture":
                 this.methodSendMessageToChatWithLifespan("error: faulty audio capture", 15);
                 break;
+            case "transcribe-fail":
+                this.methodSendMessageToChatWithLifespan("error: transcription failed unexpectedly", 15);
+                break;
             case "load-fail":
+                this.methodSendMessageToChatWithLifespan("error: loading of local transcription model failed", 15);
                 // reset main menu labels
                 this.methodSendMessageToEntitiesWithComponent
                 (
