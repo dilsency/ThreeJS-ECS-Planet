@@ -476,7 +476,7 @@ export class VoiceTranscriberLocal
                     break;
                 case "result":
                     message.text = this.#methodFormatMessageText(message.text);
-                    if(message.text = ""){break;}
+                    if(message.text == ""){break;}
                     this.#handlerOnTranscript(message.text, message.timespan);
                     break;
                 case "error":
