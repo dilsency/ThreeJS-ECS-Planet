@@ -21,6 +21,8 @@ export class EntityComponentMainMenu extends EntityComponent
     #listElementRadioButtons = [];
     #listElementLabels = [];
     //
+    #elementButtonMicrophone = null;
+    //
     #isLocalTranscriptionModelDownloading = false;
     // #endregion privates
 
@@ -195,6 +197,37 @@ export class EntityComponentMainMenu extends EntityComponent
         this.methodUpdateLabels();
         // #endregion voice input
 
+        // #region voice input : held button
+        this.#elementButtonMicrophone = document.createElement("button");
+        this.#elementButtonMicrophone.id = "button-microphone";
+        this.#elementButtonMicrophone.innerText = "mic";
+        this.#elementButtonMicrophone.style.position = "fixed";
+        this.#elementButtonMicrophone.style.right = "4px";
+        this.#elementButtonMicrophone.style.bottom = "4px";
+        this.#elementButtonMicrophone.style.width = "48px";
+        this.#elementButtonMicrophone.style.height = "48px";
+        this.#elementButtonMicrophone.style.fontSize = "11px";
+        this.#elementButtonMicrophone.style.touchAction = "none";
+        this.#elementButtonMicrophone.style.userSelect = "none";
+        this.#elementButtonMicrophone.style.webkitUserSelect = "none";
+        document.body.appendChild(this.#elementButtonMicrophone);
+        // event listeners
+        this.#elementButtonMicrophone.oncontextmenu = (e) => e.preventDefault();
+        this.#elementButtonMicrophone.onpointerdown = (e) => {
+            this.#componentInstanceVoice?.methodSetIsHeld(true);
+            e.target.setPointerCapture(e.pointerId);
+        };
+        this.#elementButtonMicrophone.onpointerup = (e) => {
+            this.#componentInstanceVoice?.methodSetIsHeld(false);
+        };
+        this.#elementButtonMicrophone.onpointerleave = (e) => {
+            this.#componentInstanceVoice?.methodSetIsHeld(false);
+        };
+        this.#elementButtonMicrophone.onpointercancel = (e) => {
+            this.#componentInstanceVoice?.methodSetIsHeld(false);
+        };
+        // #endregion voice input : held button
+
         // #region message system handler registration
         this.methodRegisterMessageHandlerWithinEntity("initialization.confirmed",
             (paramMessage) => this.methodHide()
@@ -216,6 +249,9 @@ export class EntityComponentMainMenu extends EntityComponent
 
         //
         document.body.removeChild(this.#elementRadioButtonContainer);
+
+        //
+        document.body.removeChild(this.#elementButtonMicrophone);
     }
     // #endregion lifecycle
 
@@ -313,6 +349,8 @@ export class EntityComponentMainMenu extends EntityComponent
         this.#elementButtonContainer.style.display = "flex";
 
         this.#elementRadioButtonContainer.style.display = "flex";
+        
+        this.#elementButtonMicrophone.style.display = "block";
     }
     methodHide()
     {
@@ -320,6 +358,10 @@ export class EntityComponentMainMenu extends EntityComponent
         this.#elementButtonContainer.style.display = "none";
         
         this.#elementRadioButtonContainer.style.display = "none";
+        
+        this.#elementButtonMicrophone.style.display = "none";
+
+        this.#componentInstanceVoice?.methodSetIsHeld(false);
     }
     // #endregion methods
 }

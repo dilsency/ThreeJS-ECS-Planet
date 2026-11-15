@@ -475,8 +475,8 @@ export class VoiceTranscriberLocal
                     this.#handlerOnInfo("transcribe-progress");
                     break;
                 case "result":
-                    //console.log(message.text);
                     message.text = this.#methodFormatMessageText(message.text);
+                    if(message.text = ""){break;}
                     this.#handlerOnTranscript(message.text, message.timespan);
                     break;
                 case "error":
@@ -491,7 +491,7 @@ export class VoiceTranscriberLocal
         this.#instanceWorker.onerror = (eventObject) => {
             console.error(eventObject);
             this.#handlerOnError("worker-error");
-        }
+        };
         // #endregion worker : register event listeners
 
         // #region worker : start
@@ -513,8 +513,55 @@ export class VoiceTranscriberLocal
     // #endregion initialize
 
     // #region formatting
+    
     #methodFormatMessageText(textUnformatted)
     {
+        // we can easily get rid of trailing whitespace, before anything
+        textUnformatted = textUnformatted.trim();
+
+        //
+        const arrayNonCommaPunctuation = ['.', '!', '?', ';', ':'];
+
+        // regex : this will match all of the characters in our array, as well as special regex characters
+        const regex = new RegExp(`[${arrayNonCommaPunctuation.map(c => c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('')}]`, 'g');
+
+        // we then replace all non-comma characters with commas
+        var res = textUnformatted.replace(regex, ',');
+
+        // then, we check if our last character is a comma
+        // if it is NOT, we can return our res
+        if(res.charAt(res.length - 1) != ","){return res;}
+
+        // if it is, we need to replace all of the trailing commas
+        // we do that by going backwards, and finding the index of the non-punctuation character furthest back
+        var indexOfLastNonPunctuation = -1;
+        for(var j = (res.length - 1); j >= 0; j--)
+        {
+            if(res.charAt(j) != ",")
+            {
+                indexOfLastNonPunctuation = j;
+                break;
+            }
+        }
+        if(indexOfLastNonPunctuation >= 0)
+        {
+            // we have the index of the last non-punctuation
+            res = res.slice(0, indexOfLastNonPunctuation + 1);
+        }
+        else if (indexOfLastNonPunctuation == -1) {
+            // the entire thing was punctuation, for some reason
+            // we return an empty string, or null (we shouldn't send this message at all)
+            res = "";
+        }
+
+        //
+        return res;
+    }
+    #methodFormatMessageTextOLD(textUnformatted)
+    {
+        // we can easily get rid of trailing whitespace, before anything
+        textUnformatted = textUnformatted.trim();
+
         // we need to remove trailing punctuation
         // by "punctuation", I mean the following characters
         // . , ! ? ; :
@@ -526,23 +573,26 @@ export class VoiceTranscriberLocal
         //
         var isAnyIncluded = false;
         var isLastCharacterPunctuation = false;
-        for(var i = 0; i < arrayPunctuation.length; i++)
+        var isAnySentenceEndersIncluded = false;
+        for(var i = 0; i < arrayPunctuationSentenceEnders.length; i++)
         {
-            if(textUnformatted.includes(arrayPunctuation[i]))
+            if(textUnformatted.includes(arrayPunctuationSentenceEnders[i]))
             {
-                isAnyIncluded = true;
+                isAnySentenceEndersIncluded = true;
             }
-            if(textUnformatted.charAt(textUnformatted.length - 1) == arrayPunctuation[i])
+            if(textUnformatted.charAt(textUnformatted.length - 1) == arrayPunctuationSentenceEnders[i])
             {
                 isLastCharacterPunctuation = true;
             }
         }
         
         // early-return
+        /*
         if(!isAnyIncluded)
         {
             return textUnformatted;
         }
+        */
 
         // we do have some type of punctuation in our text
         // and we know if the last character we have is punctuation
@@ -554,7 +604,7 @@ export class VoiceTranscriberLocal
 
         // but that would require another loop : do we bother?
         
-        //var isAnySentenceEndersIncluded = false;
+        //
 
         //
         if(isLastCharacterPunctuation)
@@ -564,7 +614,7 @@ export class VoiceTranscriberLocal
             // and then splice accordingly
             console.log("last character is INDEED punctuation: ["+ textUnformatted.charAt(textUnformatted.length - 1) +"]");
             var indexOfLastNonSentenceEndingPunctuation = -1;
-            for(var j = (textUnformatted.length - 1); j > 0; j--)
+            for(var j = (textUnformatted.length - 1); j >= 0; j--)
             {
                 var iterationIsSentenceEndingPunctuation = false;
                 for(var i = 0; i < arrayPunctuationSentenceEnders.length; i++)

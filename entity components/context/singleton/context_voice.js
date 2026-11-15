@@ -10,7 +10,7 @@ export class EntityComponentSingletonContextVoice extends EntityComponent
 {
     // #region privates
     #mode = EnumModeVoiceTranscriber.None;
-    //
+    // optional : rename #isKeyHeld to #isHeld
     #isKeyHeld = false;
     #isKeyHeldPrevious = null;
     //
@@ -110,6 +110,12 @@ export class EntityComponentSingletonContextVoice extends EntityComponent
         //
         this.#componentInstanceTranscriber.methodSetTranscriber(mode);
     }
+    methodSetIsHeld(statusHeld)
+    {
+        if(statusHeld == true && this.#mode === EnumModeVoiceTranscriber.None){return;}
+
+        this.#isKeyHeld = statusHeld;
+    }
     // #endregion setters
 
     // #region getters
@@ -121,6 +127,10 @@ export class EntityComponentSingletonContextVoice extends EntityComponent
     methodGetMode()
     {
         return this.#mode;
+    }
+    methodGetIsHeld()
+    {
+        return this.#isKeyHeld;
     }
     // #endregion getters
 }
