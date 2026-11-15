@@ -1100,3 +1100,20 @@ fifth state or an extra field would have to be added in four places.
 **Fix (not implemented yet):** a small method on the wrapper, for example `methodSendMainMenuUpdate(isDownloading)`, that builds
 and sends the message, and replace the four blocks with a call. Related: the "this should perhaps be its own callback function,
 instead of inside `methodHandleOnInfo()`" comments belong to item 28 and can be settled together with it.
+
+## 30. Local voice: small leftovers (error details, label reset, dead code, Android test, formatting rule)
+
+Not urgent, collected so they are not forgotten:
+
+1. **Log the worker's `error.text`.** The worker posts `{ name, message, stack }` with every `error` message, but the main side only
+   forwards `message.code`. A `console.error` of `message.text` in the `error` case would make `load-fail` / `transcribe-fail` debuggable.
+2. **`"worker-error"` should reset the "downloading" label**, like `"load-fail"` does (`isDownloading: false`). Otherwise a worker
+   that dies mid-download leaves "Local (downloading)" on the menu. Settle together with item 29.
+3. **Remove dead code in `transcriber.js`:** `#methodFormatMessageTextOLD`, the old main-thread model loader, the debug playback, and
+   the stale `EnumLabel` lookup comment in `main_menu.js`.
+4. **Test the hold-to-talk microphone button on a real Android device** (GitHub Pages, HTTPS). The button is on the main menu only,
+   on purpose, as a test mechanism; a different mechanism may replace it. Check: it records while held, releasing stops it, a long
+   press opens no context menu, and the page does not scroll or select text.
+5. **Local transcript formatting (a behaviour choice, not a bug):** `#methodFormatMessageText` trims, replaces `. ! ? ; :` with
+   commas, then strips trailing commas. Whisper's punctuation therefore looks like Cloud's. A text that ends up empty is not sent.
+   Side effect: "Hi. How are you?" becomes "Hi, How are you". Revisit if multi-sentence results look wrong.
