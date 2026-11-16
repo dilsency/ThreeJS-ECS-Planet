@@ -4,75 +4,6 @@ import * as THREE from "three";
 // ECS
 import {EntityComponent} from "../classes/ECS/entity_component.js";
 
-// shaders
-import { createFractalMaterialFromSources, loadFractalShaderSources } from "../shaders/Simple_FractalDithering.js";
-
-// Shader source and texture caching (see SHADER_SOURCE_AND_TEXTURE_CACHING.md):
-// every EntityComponentTestCube instance - world cubes, ground, cubeHUD, and
-// remote-player cubes spawned mid-session over PeerJS - needs the same shader
-// source text and (at most two) texture files, regardless of its own
-// shape/color1/color2, which are runtime uniforms, not baked into that text.
-// Memoizing the in-flight Promise (not just the resolved value) means
-// several cubes initializing around the same time share one fetch/decode
-// instead of each kicking off their own.
-
-
-let cachedShaderSourcesPromise = null;
-function getCachedShaderSources()
-{
-    if(cachedShaderSourcesPromise == null)
-    {
-        cachedShaderSourcesPromise = loadFractalShaderSources().catch((errorObject) =>
-        {
-            // undo caching, since we failed
-            cachedShaderSourcesPromise = null;
-            // "bubble up" the error into the try/catch that called this function
-            throw errorObject;
-        });
-    }
-    return cachedShaderSourcesPromise;
-}
-    
-
-
-const cachedTexturePromises = new Map(); // textureFile -> Promise<THREE.Texture>
-function getCachedTexture(textureFile)
-{
-    if(!cachedTexturePromises.has(textureFile))
-    {
-        const loader = new THREE.TextureLoader();
-        // Resolve texture URL via import.meta.url so Vite will include the asset
-        // in the build output. This works in dev and in the production build.
-        // Vite only statically bundles `new URL(literal, import.meta.url)` asset
-        // references for production builds, so each known texture file needs its
-        // own literal branch here rather than a dynamically-built path.
-        let texUrl;
-        try {
-            texUrl = textureFile === 'texture_checkerboard_alphamask.png'
-                ? new URL('../assets/textures/texture_checkerboard_alphamask.png', import.meta.url).href
-                : new URL('../assets/textures/texture_checkerboard.png', import.meta.url).href;
-        } catch (e) {
-            // Fallback: use path relative to server root
-            texUrl = 'assets/textures/' + textureFile;
-        }
-
-        //
-        const texturePromise =
-        new Promise((res, rej) =>
-            loader.load(texUrl, res, undefined, rej))
-        .catch((errorObject) =>
-        {
-            // delete texture from cache, since we failed
-            cachedTexturePromises.delete(textureFile);
-            // "bubble up" the error into the try/catch that called this function
-            throw errorObject;
-        });
-        cachedTexturePromises.set(textureFile, texturePromise);
-    }
-    return cachedTexturePromises.get(textureFile);
-}
-    
-
 //
 export class EntityComponentTestCube extends EntityComponent
 {
@@ -81,8 +12,11 @@ export class EntityComponentTestCube extends EntityComponent
 
     //
     #cube = null;
+    #material = null;
+    //
     #position = { x: 0, y: 0, z: 0 };
     #size = { x: 1, y: 1, z: 1 };
+    //
     #spin = true;
     #lighting = false;
     #debugNormals = false;
@@ -95,6 +29,9 @@ export class EntityComponentTestCube extends EntityComponent
 
     //
     #nameLastLetterAsInt = null;
+
+    //
+    #componentInstanceContextDitherMaterialCache = null;
 
     // needed because we are in async territory
     #isDisposed = false;
@@ -162,57 +99,27 @@ export class EntityComponentTestCube extends EntityComponent
         const nameLastLetter = name.charAt(name.length - 1);
         this.#nameLastLetterAsInt = nameLastLetter.charCodeAt(0);
             
-            // Shared across every EntityComponentTestCube instance requesting
-            // the same texture file / the shader source - see
-            // SHADER_SOURCE_AND_TEXTURE_CACHING.md for why this doesn't cost
-            // this cube any of its own shape/color1/color2 customization: the
-            // material below is still built fresh, per instance, from these
-            // shared inputs.
-            var texture;
-            try
-            {
-                texture = await getCachedTexture(this.#textureFile);
-            }
-            catch(errorObject)
-            {
-                console.error(errorObject);
-                return;
-            }
-            var vertexShader, fragmentShader;
-            try
-            {
-                ({ vertexShader, fragmentShader } = await getCachedShaderSources());
-            }
-            catch(errorObject)
-            {
-                console.error(errorObject);
-                return;
-            }
+            // create material from texture
+            await this.methodInitializeMaterial();
+            //
+            if(this.#material == null){return;}
 
             // it is actually possible that we need to dispose() of this object
             // in the time it took us to resolve the above awaits / asyncs
             // and if that is the case
             // we do none of the below
-            if(this.#isDisposed){return;}
+            if(this.#isDisposed)
+            {
+                this.#material.dispose();
+                this.#material = null;
+                return;
+            }
             
             //
             const geometry = new THREE.BoxGeometry( this.#size.x, this.#size.y, this.#size.z );
 
             //
-            var material = createFractalMaterialFromSources(vertexShader, fragmentShader, { map: texture, level: 3, shape: this.methodGetShape(), lighting: this.#lighting, debugNormals: this.#debugNormals, color1: this.methodGetColor1(), color2: this.methodGetColor2(), color1Texture: this.#color1Texture, color2BlendTexture: this.#color2BlendTexture });
-            
-            /*
-            var material;
-            if(this.#lighting)
-            {
-                material = new THREE.MeshStandardMaterial({ color: this.methodGetColor1() });
-            }
-            else {
-                material = new THREE.MeshBasicMaterial({ color: this.methodGetColor1() });
-            }
-            */
-
-            this.#cube = new THREE.Mesh(geometry, material);
+            this.#cube = new THREE.Mesh(geometry, this.#material);
 
             // we only cast and receive shadows if we are lit
             // the sun is never lit, it should never cast shadows
@@ -259,6 +166,54 @@ export class EntityComponentTestCube extends EntityComponent
         this.#cube = null;
     }
     // #endregion lifecycle
+
+    // #region initialize
+    async methodInitializeMaterial()
+    {
+        //
+        if(this.#material != null){return;}
+
+        //
+        this.#componentInstanceContextDitherMaterialCache =
+            this.methodGetEntityByName("SingletonContextDitherMaterialCache")
+            ?.methodGetComponent("EntityComponentSingletonContextDitherMaterialCache");
+
+        //
+        if(this.#componentInstanceContextDitherMaterialCache == null)
+        {
+            console.error("no entity SingletonContextDitherMaterialCache");
+            return;
+        }
+
+        const paramObjectMaterial = 
+        {
+            level: 3,
+            shape: this.methodGetShape(),
+            lighting: this.#lighting,
+            debugNormals: this.#debugNormals,
+            color1: this.methodGetColor1(),
+            color2: this.methodGetColor2(),
+            color1Texture: this.#color1Texture,
+            color2BlendTexture: this.#color2BlendTexture,
+        };
+
+        //
+        try
+        {
+            this.#material =
+            await this.#componentInstanceContextDitherMaterialCache
+            ?.methodCreateMaterial
+            (
+                this.#textureFile,
+                paramObjectMaterial,
+            );
+        }
+        catch(errorObject)
+        {
+            console.error(errorObject);
+        }
+    }
+    // #endregion initialize
 
     // #region getters
 

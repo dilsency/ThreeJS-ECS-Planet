@@ -21,6 +21,7 @@ import {EntityComponentMainMenu, EntityComponentLoadingScreen} from "./entity co
 import {EntityComponentWorldGenerator} from "./entity components/generation/world_generator.js";
 // context components , less important
 import {EntityComponentSingletonContextModelCache} from "./entity components/context/singleton/context_model_cache.js";
+import {EntityComponentSingletonContextDitherMaterialCache} from "./entity components/context/singleton/context_dither_material_cache.js";
 import {EntityComponentSingletonContextHUDLayout} from "./entity components/context/singleton/context_hud_layout.js";
 import {EntityComponentSingletonContextLocalPlayerIdentity} from "./entity components/context/singleton/context_local_player_identity.js";
 import {EntityComponentSingletonContextWorldLayout} from "./entity components/context/singleton/context_world_layout.js";
@@ -265,6 +266,21 @@ function init()
             (
                 "EntityComponentSingletonContextModelCache",
                 new EntityComponentSingletonContextModelCache(null)
+            );
+
+        //
+        const entityMaterialCache = new Entity(null);
+        entityManager
+            .methodAddEntity
+            (
+                entityMaterialCache,
+                "SingletonContextDitherMaterialCache"
+            );
+        entityMaterialCache
+            .methodAddComponentWithName
+            (
+                "EntityComponentSingletonContextDitherMaterialCache",
+                new EntityComponentSingletonContextDitherMaterialCache(null)
             );
 
         //
