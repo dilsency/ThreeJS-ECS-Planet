@@ -124,6 +124,25 @@ Reserve `SingletonContext` / `MultiContext` / `Manager` / `Controller` for those
 don't use them as generic filler. Rationale and the "single-consumer Context is fine,
 conditionally" nuance live in the shared doc.
 
+### Non-component logic classes
+
+A class that is **not** an ECS component (it is never added to an entity, has no
+`methodInitialize` / `methodUpdate` / `methodDispose`, and is created with a plain `new`) gets a
+**plain domain name, with no `EntityComponent` prefix**, and lives under `classes/`:
+`StateMachine` (`classes/state-machine/`), `DitherDistanceBand` and `DitherDistanceLadder`
+(`classes/dither/`). Its methods still follow §1 (`method` prefix, `#private` fields).
+
+- **A collection of items** is named for its shape, not `Manager` (that word is reserved for
+  sync/spawn lifecycles, above). The dither bands are `DitherDistanceBand` (one row) held in a
+  `DitherDistanceLadder` (the ordered collection).
+- **Enums** live in `classes/enums.js` as frozen objects named `Enum<Domain>` (§10). The one exception
+  today is `EnumDistanceRegion`, which sits next to the only class that uses it
+  (`classes/dither/dither_distance_band.js`).
+- **Constructors take one `params` object**, like the components do (`{ blendRatio, paramsBands }`),
+  not positional arguments. Omitted values fall back to the class's own defaults.
+- **Container fields** put the container type first: `#arrayBands`, `#mapDistanceLadders`,
+  `#cacheTextures`.
+
 ### Entity topology — co-locate a facet, isolate ambient state
 
 Whether a component **shares an entity** with another or gets its **own** entity comes down to
@@ -190,8 +209,12 @@ speculatively — lift the hook up only when a genuine second consumer appears.
 
 - **Files** are `snake_case.js` — `entity_component.js`,
   `camera_controller_first_person.js`, `world_generator.js`, `main_menu.js`.
-- **Folders** group by concern: `classes/ECS/`, `classes/loading-from-json/`,
-  `entity components/context/`, `entity components/generation/`, `entity components/ui/`.
+- **Folders** group by concern: `classes/ECS/`, `classes/dither/`, `classes/loading-from-json/`,
+  `classes/state-machine/`, `entity components/context/`, `entity components/generation/`,
+  `entity components/ui/`.
+- **Several related classes may share one file** (`planet.js`, `lighting.js`, `test_objects.js`,
+  `classes/dither/dither_distance_band.js`). There is no one-class-per-file rule; name the file after
+  the main class or the family.
   (Reorganizing the looser `entity components/*.js` into more concern-folders — e.g. an
   `environment/` for lighting + skybox, a `manager/` for cross-cutting sync components —
   is an open intent; decide the role-vs-domain axis before moving files.)
@@ -203,3 +226,5 @@ speculatively — lift the hook up only when a genuine second consumer appears.
 - Created 2026-09-10. Documents the conventions in force at that point, plus the
   "default to `#private`" visibility rule (§2), whose cross-project form was added the
   same day to the shared `ECS_DESIGN_PATTERNS_THREEJS.md`.
+- Updated 2026-11-18: added "Non-component logic classes" (§6), the multiple-classes-per-file note and the
+  `classes/dither/` and `classes/state-machine/` folders (§10), for the dither band classes.

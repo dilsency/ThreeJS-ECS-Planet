@@ -186,8 +186,7 @@ With limits 2 and 10 and a ratio of 0.5:
    then off, to see the dither.
 3. **The two classes and the blending are written** (sections 5.2 to 5.5). What remains: register the planet's ladder with the dither
    context, and apply it from the planet's `methodUpdate`. Add a debug log of the effective `level` and the distance whenever the
-   `level` changes. Update `NAMING_CONVENTIONS.md` in the same commit, and go through the tail-region check together with the user
-   (it was not intuitive to them) before committing the classes.
+   `level` changes. Update `NAMING_CONVENTIONS.md` in the same commit.
 4. **Fly and tune.** Compare ratio 0 (hard switch) and a blend, and change one parameter at a time.
 5. **Decide the UV strategy if the seams are the cause** (section 8).
 6. **Clean up and commit:** the commented-out `MeshStandardMaterial` block and the unused `#methodCreateColor` in `planet.js`.
