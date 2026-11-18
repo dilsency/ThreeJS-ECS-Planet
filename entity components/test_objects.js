@@ -12,7 +12,9 @@ export class EntityComponentTestCube extends EntityComponent
 
     //
     #cube = null;
+    //
     #material = null;
+    #componentInstanceContextDitherMaterialCache = null;
     //
     #position = { x: 0, y: 0, z: 0 };
     #size = { x: 1, y: 1, z: 1 };
@@ -29,9 +31,6 @@ export class EntityComponentTestCube extends EntityComponent
 
     //
     #nameLastLetterAsInt = null;
-
-    //
-    #componentInstanceContextDitherMaterialCache = null;
 
     // needed because we are in async territory
     #isDisposed = false;
@@ -100,7 +99,7 @@ export class EntityComponentTestCube extends EntityComponent
         this.#nameLastLetterAsInt = nameLastLetter.charCodeAt(0);
             
             // create material from texture
-            await this.methodInitializeMaterial();
+            await this.#methodInitializeMaterial();
             //
             if(this.#material == null){return;}
 
@@ -168,7 +167,7 @@ export class EntityComponentTestCube extends EntityComponent
     // #endregion lifecycle
 
     // #region initialize
-    async methodInitializeMaterial()
+    async #methodInitializeMaterial()
     {
         //
         if(this.#material != null){return;}
@@ -185,6 +184,7 @@ export class EntityComponentTestCube extends EntityComponent
             return;
         }
 
+        //
         const paramObjectMaterial = 
         {
             level: 3,

@@ -10,6 +10,8 @@ export class EntityComponentSingletonContextDitherMaterialCache extends EntityCo
     // #region privates
     #promiseShaderSources = null;
     #cacheTextures = new Map();
+    //
+    #mapDistanceLadders = new Map();
     // #endregion privates
 
     // #region construct
@@ -36,6 +38,8 @@ export class EntityComponentSingletonContextDitherMaterialCache extends EntityCo
         }
         //
         this.#cacheTextures.clear();
+        //
+        this.#mapDistanceLadders.clear();
     }
     // #endregion lifecycle
 
@@ -109,4 +113,42 @@ export class EntityComponentSingletonContextDitherMaterialCache extends EntityCo
         return this.#cacheTextures.get(fileTexture);
     }
     // #endregion b
+    
+    // #region ladder
+    methodRegisterDistanceLadder(stringNameAsKey, instanceLadder)
+    {
+        this.#mapDistanceLadders.set(stringNameAsKey, instanceLadder);
+    }
+    methodGetDistanceLadder(stringNameAsKey)
+    {
+        return this.#mapDistanceLadders.get(stringNameAsKey);
+    }
+    methodApplyDistanceLadder(material, stringNameAsKey, distance)
+    {
+        //
+        if(material == null){return;}
+        if(material.uniforms == null){return;}
+
+        //
+        if(distance == null){return;}
+
+        //
+        const ladder = this.methodGetDistanceLadder(stringNameAsKey);
+        if(ladder == null){return;}
+
+        // we use the band inside the ladder
+        // * that most closely aligns with the current distance
+        // * or that is a blend of two
+        // to write to the material uniforms
+        const paramsObject = ladder.methodGetDitherParamsAtDistance(distance);
+        if(paramsObject == null){return;}
+
+        //
+        material.uniforms.uLevel.value          = paramsObject.level;
+        material.uniforms.uScale.value          = paramsObject.scale;
+        material.uniforms.uAASmoothness.value   = paramsObject.aaSmoothness;
+        material.uniforms.uAAStretch.value      = paramsObject.aaStretch;
+        material.uniforms.uDotRadius.value      = paramsObject.dotRadius;
+    }
+    // #endregion ladder
 }

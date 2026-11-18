@@ -1117,3 +1117,24 @@ Not urgent, collected so they are not forgotten:
 5. **Local transcript formatting (a behaviour choice, not a bug):** `#methodFormatMessageText` trims, replaces `. ! ? ; :` with
    commas, then strips trailing commas. Whisper's punctuation therefore looks like Cloud's. A text that ends up empty is not sent.
    Side effect: "Hi. How are you?" becomes "Hi, How are you". Revisit if multi-sentence results look wrong.
+
+## 31. Pending: shared "distance from the camera to a point" shorthand (only when a second consumer needs it)
+
+Today `EntityComponentPlanetModel` in `planet.js` computes the camera's distance to the planet surface itself, in a private
+method (camera world position into a scratch vector, `distanceTo` the planet centre, minus the radius, divided by the radius).
+It drives the distance bands for the dither shader parameters (level, scale, AA smoothness).
+
+**Idea (not implemented):** a shorthand for "the distance from the camera to a given world point".
+
+**Where it would live, if we ever add it:** either in `EntityComponentSingletonContextEngine` (it owns the camera, and could own
+the scratch vector), with a one-line forwarding shorthand on the base `EntityComponent` next to `methodGetCamera()` (the
+"getters : shorthand : SingletonContextEngine" region), or directly in the base `EntityComponent`. The camera itself cannot hold
+it: it is a plain Three.js `PerspectiveCamera`, and we do not patch library objects.
+
+**Why it is pending, not done:**
+- Only one consumer exists. The planet-specific parts (centre, radius, normalizing by the radius) would stay in the planet anyway.
+- `lighting.js` (`EntityComponentLightManager`) looks similar but is not: it needs the camera's world position and rotation, not a
+  distance. The only shared piece is one `getWorldPosition` call.
+
+**Trigger:** a second object that wants distance bands (the test cubes, the planet faces, the HUD). Then the planet's private
+method becomes a one-line call to the shared one.

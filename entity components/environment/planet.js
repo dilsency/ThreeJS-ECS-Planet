@@ -7,6 +7,7 @@ import {EntityComponent} from "../../classes/ECS/entity_component.js";
 import { StateMachine } from "../../classes/state-machine/state_machine.js";
 //
 import { EnumStateGravity } from "../../classes/enums.js";
+import { DitherDistanceLadder } from "../../classes/dither/dither_distance_band.js";
 
 //
 export class EntityComponentPlanetModel extends EntityComponent
@@ -14,13 +15,63 @@ export class EntityComponentPlanetModel extends EntityComponent
     // #region privates
     #params = null;
     //
+    #material = null;
+    #componentInstanceContextDitherMaterialCache = null;
+    //
+    #componentInstanceCamera = null;
+    #componentInstanceCameraPosition = null;
+    #componentInstanceCameraDistance = null;
+    #componentInstanceCameraDistanceNormalized = null;
+    //
+    #color1 = "#006000";
+    #color2 = "#00A000";
+    #color1Texture = false;
+    #color2BlendTexture = false;
+    #textureFile = 'texture_checkerboard.png';
+    //
     #mesh = null;
     #geometry = null;
     // params.model is string, representing the name of the model to load
     #model = null;
     #position = null;
     #radius = 1.0;
-    #color = "#FFFFFF";
+    //
+    #nameDitherDistanceLadder = "PlanetDitherDistanceLadder";
+    #componentInstanceDitherDistanceLadder = null;
+    #arrayDitherDistanceBands = [
+        {
+            distanceMax:    0.2,
+            level:          3,
+            scale:          3.5,
+            aaSmoothness:   1.5,
+            aaStretch:      0.125,
+            dotRadius:      0.8,
+        },
+        {
+            distanceMax:    0.5,
+            level:          3,
+            scale:          3.0,
+            aaSmoothness:   1.5,
+            aaStretch:      0.125,
+            dotRadius:      0.8,
+        },
+        {
+            distanceMax:    1.0,
+            level:          3,
+            scale:          2.5, 
+            aaSmoothness:   1.5,
+            aaStretch:      0.125,
+            dotRadius:      0.8,
+        },
+        {
+            distanceMax:    Infinity,
+            level:          3,
+            scale:          2.0, 
+            aaSmoothness:   1.5,
+            aaStretch:      0.125,
+            dotRadius:      0.8,
+        },
+    ];
     // #endregion privates
 
     // #region construct
@@ -33,7 +84,8 @@ export class EntityComponentPlanetModel extends EntityComponent
         if(params.model != null){ this.#model = params.model; }
         if(params.position != null){ this.#position = params.position; }
         if(params.radius != null){ this.#radius = params.radius; }
-        if(params.color != null){ this.#color = params.color; }
+        if(params.color1 != null){ this.#color1 = params.color1; }
+        if(params.color2 != null){ this.#color2 = params.color2; }
     }
     // #endregion construct
 
@@ -52,9 +104,13 @@ export class EntityComponentPlanetModel extends EntityComponent
         if(entityComponentModelCache == null){console.error("no entity component");return;}
         // #endregion early return
 
-        // #region body
+        // #region await
+        //
         this.#geometry = await entityComponentModelCache.methodGetModelGeometry(this.#model);
-        // #endregion body
+
+        // create material from texture
+        await this.#methodInitializeMaterial();
+        // #endregion await
 
         // #region early return
         // since we have used "await"
@@ -62,21 +118,19 @@ export class EntityComponentPlanetModel extends EntityComponent
         // due to "teardown" or disposal
         // so what we do is check if this is flagged for disposal / deletion / teardown
         // and if so, we nope out
-        if(this.methodGetIsThisOrParentFlaggedForDeletion()){return;}
+        if(this.methodGetIsThisOrParentFlaggedForDeletion())
+        {
+            this.#material?.dispose();
+            this.#material = null;
+            return;
+        }
         // #endregion early return
 
         // #region body
         //
-        const material = new THREE.MeshStandardMaterial(
-            {
-                color: new THREE.Color("#99FF99"),
-                flatShading: true,
-                metalness: 0.05,
-                roughness: 1.0,
-            }
-        );
+        if(this.#material == null){return;}
         //
-        this.#mesh = new THREE.Mesh(this.#geometry, material);
+        this.#mesh = new THREE.Mesh(this.#geometry, this.#material);
         this.#mesh.scale.setScalar(this.#radius);
         this.#mesh.castShadow = true;
         this.#mesh.receiveShadow = true;
@@ -88,8 +142,25 @@ export class EntityComponentPlanetModel extends EntityComponent
         //
         this.methodGetScene().add(this.#mesh);
         // #endregion body
+
+        // should we get a component instance of time as well?
+        //this.#componentInstanceTime = this.methodGetTime();
+
+        // #region camera
+        // init
+        this.#componentInstanceCamera = this.methodGetCamera();
+        this.#componentInstanceCameraPosition = new THREE.Vector3();
+        // update (not sure if we actually need to do this here, it is done every frame in methodUpdate())
+        this.#methodUpdateCameraDistance();
+        // #endregion camera
     }
-    methodUpdate(timeElapsed, timeDelta) { }
+    methodUpdate()
+    {
+        // #region throttle this
+        //
+        this.#methodUpdateCameraDistance();
+        // #endregion throttle this
+    }
     methodDispose()
     {
         // #region early return
@@ -101,7 +172,7 @@ export class EntityComponentPlanetModel extends EntityComponent
         //
         this.methodGetScene().remove(this.#mesh);
         //
-        this.#mesh.material.dispose();
+        this.#mesh.material?.dispose();
         // remove pointer as well
         this.#mesh = null;
         // we do NOT dispose of geometry
@@ -109,6 +180,122 @@ export class EntityComponentPlanetModel extends EntityComponent
         // #endregion body
     }
     // #endregion lifecycle
+
+    // #region initialize
+    async #methodInitializeMaterial()
+    {
+        //
+        if(this.#material != null){return;}
+
+        //
+        this.#componentInstanceContextDitherMaterialCache =
+            this.methodGetEntityByName("SingletonContextDitherMaterialCache")
+            ?.methodGetComponent("EntityComponentSingletonContextDitherMaterialCache");
+
+        //
+        if(this.#componentInstanceContextDitherMaterialCache == null)
+        {
+            console.error("no entity SingletonContextDitherMaterialCache");
+            return;
+        }
+
+        //
+        const paramObjectMaterial = 
+        {
+            level: 3,
+            shape: 0,
+            lighting: true,
+            debugNormals: false,
+            color1: this.#color1,
+            color2: this.#color2,
+            color1Texture: this.#color1Texture,
+            color2BlendTexture: this.#color2BlendTexture,
+        };
+
+        //
+        try
+        {
+            this.#material =
+            await this.#componentInstanceContextDitherMaterialCache
+            ?.methodCreateMaterial
+            (
+                this.#textureFile,
+                paramObjectMaterial,
+            );
+        }
+        catch(errorObject)
+        {
+            console.error(errorObject);
+        }
+
+        /*
+        const material = new THREE.MeshStandardMaterial(
+            {
+                color: new THREE.Color("#99FF99"),
+                flatShading: true,
+                metalness: 0.05,
+                roughness: 1.0,
+            }
+        );
+        */
+
+        // #region dither distance ladder
+        this.#componentInstanceDitherDistanceLadder =
+        new DitherDistanceLadder
+        (
+            {
+                blendRatio: 0.5,
+                paramsBands: this.#arrayDitherDistanceBands,
+            }
+        );
+        this.#componentInstanceContextDitherMaterialCache.methodRegisterDistanceLadder
+        (
+            this.#nameDitherDistanceLadder,
+            this.#componentInstanceDitherDistanceLadder
+        );
+        // #endregion dither distance ladder
+    }
+    // #endregion initialize
+
+    // #region update : camera
+    #methodUpdateCameraDistance()
+    {
+        if(this.#componentInstanceCamera == null){return;}
+        const planetCenter = this.methodGetPlanetCenter();
+        if(planetCenter == null){return;}
+
+        // this updates #componentInstanceCameraPosition , to use world-space coordinates
+        this.#componentInstanceCamera
+            .getWorldPosition
+            (
+                this.#componentInstanceCameraPosition
+            );
+
+        //
+        this.#componentInstanceCameraDistance =
+            this.#componentInstanceCameraPosition
+            .distanceTo
+            (
+                planetCenter
+            )
+            - this.methodGetPlanetRadius();
+            
+        //
+        this.#componentInstanceCameraDistanceNormalized =
+            this.#componentInstanceCameraDistance / this.methodGetPlanetRadius();
+
+        // use the distance we calculated...
+        // ...to change our surface-stable-dithering materials uniforms...
+        // ...based on distance to camera
+        this.#componentInstanceContextDitherMaterialCache
+        .methodApplyDistanceLadder
+        (
+            this.#material,
+            this.#nameDitherDistanceLadder,
+            this.#componentInstanceCameraDistanceNormalized,
+        );
+    }
+    // #endregion update : camera
 
     //
     #methodCreateColor(multiplicationFactor)
@@ -122,7 +309,7 @@ export class EntityComponentPlanetModel extends EntityComponent
         // so let's darken it
         
         //return null;
-        return new THREE.Color(this.#color).multiplyScalar(multiplicationFactor);
+        return new THREE.Color(this.#color1).multiplyScalar(multiplicationFactor);
     }
 
     // #region getters
