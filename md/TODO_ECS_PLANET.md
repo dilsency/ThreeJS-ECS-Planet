@@ -1138,3 +1138,28 @@ it: it is a plain Three.js `PerspectiveCamera`, and we do not patch library obje
 
 **Trigger:** a second object that wants distance bands (the test cubes, the planet faces, the HUD). Then the planet's private
 method becomes a one-line call to the shared one.
+
+## 32. Audit: objects allocated every frame (replace with scratch objects)
+
+Go through the code and find the places that **allocate a new object on every frame** (`new THREE.Vector3()`, `.clone()`, an object
+literal built in a per-frame path), and replace them with **scratch objects** where it is worth it.
+
+**The replacement style, a "scratch object":** one reusable object, owned by the class, created once (constructor or
+`methodInitialize`) and overwritten on every call, instead of a new one each time. Examples already in the code: the camera world
+position vector in `EntityComponentPlanetModel` (`#componentInstanceCameraPosition`), and the scratch vectors in `lighting.js`. The
+alternative is an **out-parameter**: the caller passes the object to fill, so the caller owns it and nothing is shared.
+
+**The one hazard:** a caller must not keep a scratch result across another call, because the next call overwrites it. See
+`md/SSD_PLANET_AND_DISTANCE_BANDS.md`, section 11.2.
+
+**Known candidates (verify that each is really on a per-frame path before touching it):**
+- `DitherDistanceLadder.#methodGetBlendedParamsObject` returns a new object on every call inside a tail region (a decided
+  starting point, section 11.1 of the plan).
+- `EntityComponentPlanetFaces`: `methodGetFaceCenter` (a new vector per call) and `methodGetDirectionToPlanetCenter` (two clones).
+
+**How to audit:** search `entity components/` and `classes/` for `new THREE.` and `.clone()` (about 130 hits for the vector, quaternion,
+euler, matrix and `.clone()` forms at the time of writing), then keep only the ones reached from a `methodUpdate` (or from something
+it calls each frame). Setup-time and one-off allocations are fine.
+
+**Not urgent:** the engine copes well with a few tiny short-lived objects per frame. Measure first (garbage-collection spikes in
+the browser profiler), and fix the hottest paths rather than all of them.
