@@ -17,8 +17,13 @@ export class EntityComponentVelocity extends EntityComponent
     //
     #velocityCap = 15.0;
     #velocityCapChase = 15.0;
+    #velocityCapChaseRate = 50.0;
     #velocityCapMin = 15.0;
     #velocityCapMax = 115.0;
+    // the special state approach has a special velocity cap, super slow
+    #velocityCapApproach = 0.5;
+    // used in the special state approach
+    #isDecaySuspended = false;
     //
     #zeroEpsilon = 0.001;
     // lazy
@@ -141,13 +146,10 @@ export class EntityComponentVelocity extends EntityComponent
         const diff = Math.abs(this.#velocityCap - this.#velocityCapChase);
 
         //
-        var stepSpeed = 50.0;
-
-        //
         var stepSize =
             Math.min(
                 diff,
-                stepSpeed * timeDelta
+                this.#velocityCapChaseRate * timeDelta
             );
 
         if(this.#velocityCap > this.#velocityCapChase){stepSize *= -1;}
@@ -168,6 +170,9 @@ export class EntityComponentVelocity extends EntityComponent
     //
     methodDecayVelocity()
     {
+        // early-return: flag
+        if(this.#isDecaySuspended){return;}
+
         // delegate/extraction functions
         // one when the entity is affected by gravity, and one where they are not
         if(this.#componentInstanceGravity == null || !this.#componentInstanceGravity.methodGetIsReady())
@@ -248,12 +253,31 @@ export class EntityComponentVelocity extends EntityComponent
             case EnumStateGravity.Falling:
                 this.#velocityCapChase = this.#velocityCapMin;
                 break;
+            case EnumStateGravity.Approach:
+                // possibly we could scale this based on velocity amount/magnitude
+                // at very high velocity magnitudes, we need to chase it much faster
+                // alternatively...
+                // the chase phase itself...
+                // could just take fixed steps, for example 6 frames to chase every time
+                this.#velocityCapChaseRate = 800;
+                this.#isDecaySuspended = true;
+                this.#velocityCapChase = this.#velocityCapApproach;
+                break;
             case EnumStateGravity.Stratosphere:
                 this.#velocityCapChase = this.#velocityCapMin;
                 break;
             case EnumStateGravity.Orbit:
                 this.#velocityCapChase = this.#velocityCapMax;
                 break;
+        }
+
+        // we could write these inline, but eh
+        if(nameOfState != EnumStateGravity.Approach)
+        {
+            // reset chase rate if we are NOT in state approach
+            this.#velocityCapChaseRate = 50;
+            // reset the suspended decay if we are NOT in state approach
+            this.#isDecaySuspended = false;
         }
         
         /*
@@ -292,6 +316,7 @@ export class EntityComponentVelocity extends EntityComponent
     methodAddToVelocityVector3(velocityAddend)
     {
         this.#velocity.add(velocityAddend);
+        console.log(this.#velocity);
         // clamp
         //this.methodClampVelocity();
     }

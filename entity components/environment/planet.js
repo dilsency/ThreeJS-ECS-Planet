@@ -363,6 +363,7 @@ export class EntityComponentPlanetFaces extends EntityComponent
     //
     #componentInstancePlanetModel = null;
     //
+    #distanceState2 = null;
     #distanceState1 = null;
     #distanceState0 = null;
 
@@ -520,6 +521,9 @@ export class EntityComponentPlanetFaces extends EntityComponent
     {
         switch(index)
         {
+            case "Approach":
+                return this.#distanceState2;
+                break;
             case 1:
                 return this.#distanceState1;
                 break;
@@ -802,6 +806,7 @@ export class EntityComponentPlanetFaces extends EntityComponent
         this.#planetRadius = this.methodGetPlanetRadius();
 
         // set distances, for later
+        this.#distanceState2 = this.#planetRadius * 0.6;// aka distanceStateApproach
         this.#distanceState1 = this.#planetRadius * 5;
         this.#distanceState0 = this.#planetRadius * 2.5;
 
@@ -1409,6 +1414,7 @@ export class EntityComponentPlanetFaces extends EntityComponent
 
 export class EntityComponentGravity extends EntityComponent
 {
+    // #region privates
     // lazy
     #hasOnLazyLoadInit = false;
     // reminder that this.#planet is just a $ref
@@ -1442,6 +1448,15 @@ export class EntityComponentGravity extends EntityComponent
     #distanceFromFloorIdeal = 2.0;
     #distanceFromFloorIdealLeeway = 0.5;
 
+    // #region privates : approach
+    #timeLimitApproach = null;
+    #timeEnteredApproach = null;
+    //#directionApproach = null;
+    #hasBeenInOrbit = false;
+    // #endregion privates : approach
+
+    // #endregion privates
+
     //
     constructor(params)
     {
@@ -1456,12 +1471,15 @@ export class EntityComponentGravity extends EntityComponent
 
         // generic handler callback : will be invoked on any change
         // allows the componentInstance to handle it as they see fit
-        this.#stateMachine.methodRegisterHandlerOnAny(
+        this.#stateMachine.methodRegisterHandlerOnAny
+        (
             (timeElapsed, timeDelta, prevState, newState) =>
             {
                 this.#componentInstanceOptionalCameraControllerFirstPerson
                     ?.methodOnStateGravityChanged(prevState, newState)
                 ;
+
+                this.methodSendMessageToChatWithLifespan(prevState + " → " + newState, 1);
 
                 if(prevState == EnumStateGravity.Orbit && newState == EnumStateGravity.Stratosphere)
                 {
@@ -1475,6 +1493,15 @@ export class EntityComponentGravity extends EntityComponent
         this.#stateMachine.methodRegisterHandler(EnumStateGravity.Falling, EnumStateGravity.Landed, (timeElapsed, timeDelta) => {
             console.log("landed from falling!");
             this.methodNullifyGravity(timeElapsed, timeDelta);
+        });
+        this.#stateMachine.methodRegisterHandler(EnumStateGravity.Approach, EnumStateGravity.Landed, (timeElapsed, timeDelta) => {
+            console.log("landed from approach!");
+            this.methodNullifyGravity(timeElapsed, timeDelta);
+            this.methodOnFallingDistanceChanged(timeElapsed, timeDelta, EnumStateGravity.Landed);
+        });
+        this.#stateMachine.methodRegisterHandler(EnumStateGravity.Approach, EnumStateGravity.Falling, (timeElapsed, timeDelta) => {
+            console.log("approach -> falling!");
+            this.methodOnFallingDistanceChanged(timeElapsed, timeDelta, EnumStateGravity.Falling);
         });
         this.#stateMachine.methodRegisterHandler(EnumStateGravity.Landed, EnumStateGravity.CrossingOver, (timeElapsed, timeDelta) => {
             console.log("cross!");
@@ -1494,6 +1521,11 @@ export class EntityComponentGravity extends EntityComponent
         // test
         this.#stateMachine.methodRegisterHandler(EnumStateGravity.Falling, EnumStateGravity.Stratosphere, (timeElapsed, timeDelta) => {
             this.methodOnFallingDistanceChanged(timeElapsed, timeDelta, EnumStateGravity.Stratosphere);
+        });
+        this.#stateMachine.methodRegisterHandler(EnumStateGravity.Falling, EnumStateGravity.Approach, (timeElapsed, timeDelta) => {
+            console.log("entered approach mode :)");
+            this.methodSendMessageToChat("entered approach mode :)");
+            this.methodOnFallingDistanceChanged(timeElapsed, timeDelta, EnumStateGravity.Approach);
         });
         this.#stateMachine.methodRegisterHandler(EnumStateGravity.Stratosphere, EnumStateGravity.Falling, (timeElapsed, timeDelta) => {
             this.methodOnFallingDistanceChanged(timeElapsed, timeDelta, EnumStateGravity.Falling);
@@ -1569,6 +1601,9 @@ export class EntityComponentGravity extends EntityComponent
                 break;
             case EnumStateGravity.Falling:
                 this.methodUpdateByStateFalling(timeElapsed, timeDelta, prevPosition);
+                break;
+            case EnumStateGravity.Approach:
+                this.methodUpdateByStateApproach(timeElapsed, timeDelta, prevPosition);
                 break;
             case EnumStateGravity.Landed:
                 this.methodUpdateByStateLanded(timeElapsed, timeDelta, prevPosition);
@@ -1659,6 +1694,9 @@ export class EntityComponentGravity extends EntityComponent
         switch(substate)
         {
             case "AboveRange":
+                // we need to check that we have entered orbit at some point
+                this.#hasBeenInOrbit = true;
+                this.#timeEnteredApproach = timeElapsed;
                 this.#stateMachine.methodTransitionTo(timeElapsed, timeDelta, EnumStateGravity.Orbit);
                 break;
             case "BelowRange":
@@ -1717,11 +1755,50 @@ export class EntityComponentGravity extends EntityComponent
 
         */
     }
+    methodGetSubstateApproach(timeElapsed)
+    {
+        // return a string of the "substate" we are in
+        if(timeElapsed >= (this.#timeEnteredApproach + 9)){return "TimeOut";}
+        if(this.#distanceToFloor < 0.0){return "BelowFloor";}
+        if(this.#distanceToFloor < 0.5){return "BelowRange";}
+        if(this.#distanceToFloor <= 2.0){return "WithinRange";}
+        return "Default";
+    }
+    methodUpdateByStateApproach(timeElapsed, timeDelta, prevPosition)
+    {
+        //
+        const substate = this.methodGetSubstateApproach(timeElapsed);
+
+        //
+        switch(substate)
+        {
+            case "TimeOut":
+                console.log("transition to falling!");
+                this.methodSendMessageToChat("time out on approach mode!");
+                this.#stateMachine.methodTransitionTo(timeElapsed, timeDelta, EnumStateGravity.Falling);
+                break;
+            case "BelowRange":
+                console.log("transition to landed!");
+                this.#stateMachine.methodTransitionTo(timeElapsed, timeDelta, EnumStateGravity.Landed);
+                break;
+            case "WithinRange":
+                console.log("transition to landed!");
+                this.#stateMachine.methodTransitionTo(timeElapsed, timeDelta, EnumStateGravity.Landed);
+                break;
+            case "Default":
+                console.log("["+this.#distanceToFloor.toFixed(2)+"]\tdistanceToFloor");
+                break;
+            default:
+                console.error("() methodUpdateByStateApproach\n\tunknown substate\t["+substate+"]");
+                break;
+        }
+    }
     methodGetSubstateFalling()
     {
         // return a string of the "substate" we are in
         if(this.#distanceToPlanetCenter < this.#componentInstancePlanetFaces.methodGetPlanetInradius()){return "WithinPlanetRadius";}
         if(this.#distanceToFloor >= this.#componentInstancePlanetFaces.methodGetDistanceState(0)){return "AboveRange";}
+        if(this.#hasBeenInOrbit && (this.#distanceToFloor <= this.#componentInstancePlanetFaces.methodGetDistanceState("Approach"))){return "Approach";}
         if(!this.#isWithinFaceWallsWithoutLeeway){return "OutsideWalls";}
         if(this.#distanceToFloor < 0.0){return "BelowFloor";}
         if(this.#distanceToFloor < 0.5){return "BelowRange";}
@@ -1734,6 +1811,10 @@ export class EntityComponentGravity extends EntityComponent
 
         switch(substate)
         {
+            case "Approach":
+                this.#hasBeenInOrbit = false;
+                this.#stateMachine.methodTransitionTo(timeElapsed, timeDelta, EnumStateGravity.Approach);
+                break;
             case "WithinPlanetRadius":
                 this.methodApplyUpwardForceIfBelowFloorPeak();
                 break;
@@ -1754,6 +1835,7 @@ export class EntityComponentGravity extends EntityComponent
                 this.#stateMachine.methodTransitionTo(timeElapsed, timeDelta, EnumStateGravity.Landed);
                 break;
             case "Default":
+                console.log("gain speed... but are we?");
                 this.#methodApplyDownwardGravity(this.#gravitySpeed);
                 break;
             default:
@@ -2200,10 +2282,12 @@ export class EntityComponentGravity extends EntityComponent
         // we use dist to set our initial gravity state
         if(distanceToPlanetCenter >= this.#componentInstancePlanetFaces.methodGetDistanceState(1))
         {
+            this.#hasBeenInOrbit = true;
             this.methodSetState(null, null, EnumStateGravity.Orbit);
         }
         else if (distanceToPlanetFace >= this.#componentInstancePlanetFaces.methodGetDistanceState(0))
         {
+            this.#hasBeenInOrbit = true;
             this.methodSetState(null, null, EnumStateGravity.Stratosphere);
         }
         else if (distanceToPlanetFace >= this.#distanceFromFloorIdeal)

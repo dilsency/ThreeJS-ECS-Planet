@@ -13,6 +13,7 @@ export const EnumStateGravity = Object.freeze({
     None: "None",
     Orbit: "Orbit",
     Stratosphere: "Stratosphere",
+    Approach: "Approach",
     Falling: "Falling",
     Jumping: "Jumping",
     CrossingOver: "CrossingOver",
