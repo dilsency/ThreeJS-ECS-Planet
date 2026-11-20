@@ -1163,3 +1163,26 @@ it calls each frame). Setup-time and one-off allocations are fine.
 
 **Not urgent:** the engine copes well with a few tiny short-lived objects per frame. Measure first (garbage-collection spikes in
 the browser profiler), and fix the hottest paths rather than all of them.
+
+## 33. Potential: split the velocity into two vectors (gravity and user input)
+
+**This is a potential item, not a decision.** It may be iterated on, changed or dropped later, depending on how the Approach state
+(`md/FEATURE_DASH_TO_SURFACE_POINT.md`) turns out and on what other states need.
+
+**The idea:** in `EntityComponentVelocity`, replace the single `#velocity` with two vectors, for example `#velocityFromGravity` and
+`#velocityFromUserInput`.
+
+**What it could make easier:**
+- **Approach (suspend and restore):** freeze the gravity vector (no decay, no changes), clamp only the input vector to the slow cap,
+  and return both on a timeout or cancel. Nothing piles up, and no saved copy is needed.
+- **Landing and the dash:** landing would zero only the gravity vector (no projection along the face normal), and the dash could reset
+  only the vector it needs.
+- **Friction and caps** could differ per vector (for example horizontal friction only on the input vector while `Landed`).
+
+**What it would cost:**
+- `velocity.js` is central. Add, clamp, decay, nullify and the along-axis queries all touch the single vector and would all change.
+- Jump, the push-up to the floor and the crossing-over forces would each need a "which vector?" decision.
+- Clamping two vectors separately instead of their sum changes how the speed cap feels.
+
+**Decision (2026-11-20):** not done for the Approach state. That state suspends the velocity by skipping the decay instead (see 6.2 in the
+feature doc). Revisit if more states need to treat the gravity part and the input part differently.

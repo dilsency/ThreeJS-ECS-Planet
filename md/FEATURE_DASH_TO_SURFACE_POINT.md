@@ -135,7 +135,18 @@ general one, but it touches everything on the player entity and needs the shared
   fixed in advance. The player may have drifted down into another distance region before pressing confirm.
 - **Normal gravity and unslowed movement return immediately** when the dash starts. If the game feel suffers from the abrupt change,
   the change can be lerped instead of set. The same goes for entering the state (lerp instead of hard-setting).
-- **No maximum dash distance and no cancel input.** The only exits are the dash, the drift-down and the time limit.
+- **No maximum dash distance.**
+- **REVISED (2026-11-20): the player can cancel.** The earlier "no cancel input" is dropped. The cancel input is any of: the
+  **right mouse button**, the **control key** or the **escape key**.
+- **REVISED (2026-11-20): the state suspends the velocity, it does not change it.** The game-feel idea is that the state
+  temporarily slows down "time". The exits fall into two groups:
+  - **Restore the full old velocity:** the time limit runs out, or the player cancels. The velocity the player had on entry
+    returns.
+  - **Handle the velocity independently:** touching the surface (the normal landing handling) or the dash (reset, then the
+    impulse). The saved velocity is not used.
+- **The state is named `Approach`** (see 6.2, item 4). The time limit exit and the cancel exit both lead back to `Falling` (a
+  distance check at that moment, as for the other exits). Because `#hasBeenInOrbit` is reset on entry, a cancelled or timed-out
+  state does not re-enter: one per descent.
 - **Slowdown: one fixed maximum allowed velocity** (a speed cap while in the state), not a factor and not distance-dependent.
 - **Time limit:** start with **6 seconds** and iterate later by feel (needs fiddling and testing).
 - **No spacebar conflict.** The player can only jump while `Landed` (`methodExecuteActionJump` returns early in any other state),
@@ -149,12 +160,29 @@ general one, but it touches everything on the player entity and needs the shared
    must not fire the dash, and the confirm should only react while the state is active.
 2. ~~Is the 6 second limit measured in real time?~~ **Decided (2026-11-19): yes, 6 seconds real time**, not slowed by the state.
 3. ~~The cap value.~~ **Decided (2026-11-19): something slow, a placeholder to start with**, to be found by testing and fiddling.
-4. **Names:** the state, the input option and the component(s), per `NAMING_CONVENTIONS.md`. Needs brainstorming. Candidates so
-   far: state `Drift` (or `Targeting`); action `Dash` (`methodExecuteActionDash`); confirm input as an `EnumModeDash…` enum;
-   components `EntityComponentDash` and possibly `EntityComponentDashMarker`.
+4. **Names:** the state, the input option and the component(s), per `NAMING_CONVENTIONS.md`.
+   - **State (2026-11-19): `Approach`, picked for now.** Other acceptable candidates: `Inbound` and `Nearing`. (`Drift` was
+     dropped because it suggests a value slowly going out of sync; `Targeting` and `Float` were considered and set aside.)
+     If it is renamed later, it is one `EnumStateGravity` member plus the `...Approach` method and field names.
+   - Still open: action `Dash` (`methodExecuteActionDash`); confirm input as an `EnumModeDash…` enum; components
+     `EntityComponentDash` and possibly `EntityComponentDashMarker`.
 5. **Cap consequence (2026-11-19):** the velocity can be capped each frame, and it can also be reset on leaving the state, whichever
    state follows. What matters is keeping the **direction** the player had on entering the state and moving along it, slowly.
    The velocity **amount** could be ignored entirely in this state (set `direction × cap` each frame), if that is easier.
+   **Superseded in part (2026-11-20):** on a timeout or cancel the full old velocity returns (see 6.1), so it has to be saved or
+   protected, not discarded.
+6. **How to suspend the velocity (2026-11-20).** `EntityComponentVelocity.methodUpdate` applies friction to the stored velocity
+   every call (0.995, not scaled by time), so over 6 seconds at 60 fps it would shrink to roughly 17%. Options:
+   (a) **save a copy of the velocity on entry and restore it on a timeout or cancel** (recommended: robust, one `Vector3` field
+   allocated once, see TODO item 32); (b) skip the decay (and any clamping) while in the state. Not decided yet.
+7. **What "return" means for the cap.** After a timeout or cancel, either let the normal cap chase run (the `Falling` cap of 15
+   bounds the restored velocity) or restore the cap that was in effect on entry. The normal chase is simpler.
+8. **Cancel input details.** Right mouse button: the `contextmenu` event needs preventing so the menu does not open. Escape: in
+   a browser it also releases the pointer lock, so it may clash with the pause or menu behaviour. Control: check it does not clash
+   with other keys in `player_controller.js`. The cancel should only react while the state is active, as for the confirm.
+9. **A full velocity reset method.** `velocity.js` has only `methodNullifyGravity` (removes the component along an axis), nothing
+   that zeroes the whole velocity. The dash needs one (`methodResetVelocity`, or `methodNullifyVelocity` to match the other
+   name), and `EntityComponentGravity` would get a thin wrapper like its existing `methodNullifyGravity`.
 
 ### 6.3 Notes from the decisions
 
@@ -181,6 +209,12 @@ general one, but it touches everything on the player entity and needs the shared
   drift-down and time-limit exits (nothing is reset) the whole stored amount would be released at once as soon as the cap rises.
   `methodClampVelocity()` already exists to scale the stored velocity down to the cap; calling it each frame while in the state
   (it uses the current, chased cap) keeps the stored velocity in step with the cap, so nothing is hoarded.
+  **Superseded (2026-11-20):** the state now suspends the velocity and restores it on a timeout or cancel (6.1), so the stored
+  velocity must **not** be clamped or scaled down in the state. Do not call `methodClampVelocity()` there.
+- **Transition handlers cannot tell the exits to `Falling` apart.** The timeout, the cancel and the dash all lead to `Falling`,
+  and handlers are registered per pair of states. Restoring the saved velocity in the `Approach → Falling` handler is fine,
+  because the dash runs its own reset and impulse right after the transition and overwrites the restored velocity. Landing has
+  its own pair (`Approach → Landed`) and is unaffected.
 - **The next-state check can reuse the existing region logic** (`methodGetSubstateStratosphere` and the `Falling` substates in
   `EntityComponentGravity`). A slightly wrong choice corrects itself, because the normal per-frame transitions between
   `Stratosphere` and `Falling` keep running after the dash.
@@ -198,8 +232,9 @@ general one, but it touches everything on the player entity and needs the shared
 The feature is built in four stages, each playable and testable before the next one starts.
 
 1. **The slowed-down state.** The player enters the state near the planet (see 6.1) and is held to the fixed maximum velocity,
-   keeping the direction they had on entry. The state only ends by touching the planet (the drift-down exit) or when the time
-   limit runs out (6 seconds, real time). There is no dash yet.
+   keeping the direction they had on entry. The state ends by touching the planet (velocity handled independently), when the
+   time limit runs out (6 seconds, real time) or when the player cancels (right mouse button, control or escape). On a timeout
+   or cancel the full old velocity returns. There is no dash yet.
 2. **The dash.** The player can press the confirm input to dash, which ends the state early. The direction is a **placeholder**:
    the first-person camera's forward direction (the aimed direction, not yet the DashPoint direction).
 3. **Picking the direction properly.**
