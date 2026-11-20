@@ -316,7 +316,6 @@ export class EntityComponentVelocity extends EntityComponent
     methodAddToVelocityVector3(velocityAddend)
     {
         this.#velocity.add(velocityAddend);
-        console.log(this.#velocity);
         // clamp
         //this.methodClampVelocity();
     }

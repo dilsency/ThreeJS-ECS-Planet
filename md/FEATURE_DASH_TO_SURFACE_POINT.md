@@ -148,7 +148,7 @@ general one, but it touches everything on the player entity and needs the shared
   distance check at that moment, as for the other exits). Because `#hasBeenInOrbit` is reset on entry, a cancelled or timed-out
   state does not re-enter: one per descent.
 - **Slowdown: one fixed maximum allowed velocity** (a speed cap while in the state), not a factor and not distance-dependent.
-- **Time limit:** start with **6 seconds** and iterate later by feel (needs fiddling and testing).
+- **Time limit:** started at 6 seconds; **changed to 3 seconds on 2026-11-20** (`#timeLimitApproach`), to be iterated by feel.
 - **No spacebar conflict.** The player can only jump while `Landed` (`methodExecuteActionJump` returns early in any other state),
   and this state only exists in the air. Verified in `player_controller.js` on 2026-11-19.
 
@@ -158,7 +158,7 @@ general one, but it touches everything on the player entity and needs the shared
    `mousemove` (in `camera_controller_first_person.js`); the only `click` listeners are on UI buttons (`buttons.js`,
    `main_menu.js`). So the left button is free in gameplay. Still to check when building it: the pointer-lock button's `click`
    must not fire the dash, and the confirm should only react while the state is active.
-2. ~~Is the 6 second limit measured in real time?~~ **Decided (2026-11-19): yes, 6 seconds real time**, not slowed by the state.
+2. ~~Is the time limit measured in real time?~~ **Decided (2026-11-19): yes, real time** (now 3 seconds, see 6.1), not slowed by the state.
 3. ~~The cap value.~~ **Decided (2026-11-19): something slow, a placeholder to start with**, to be found by testing and fiddling.
 4. **Names:** the state, the input option and the component(s), per `NAMING_CONVENTIONS.md`.
    - **State (2026-11-19): `Approach`, picked for now.** Other acceptable candidates: `Inbound` and `Nearing`. (`Drift` was
@@ -172,7 +172,7 @@ general one, but it touches everything on the player entity and needs the shared
    **Superseded in part (2026-11-20):** on a timeout or cancel the full old velocity returns (see 6.1), so it has to be saved or
    protected, not discarded.
 6. **How to suspend the velocity (2026-11-20).** `EntityComponentVelocity.methodUpdate` applies friction to the stored velocity
-   every call (0.995, not scaled by time), so over 6 seconds at 60 fps it would shrink to roughly 17%. Options:
+   every call (0.995, not scaled by time), so over 3 seconds at 60 fps it would shrink to roughly 40%. Options:
    (a) **save a copy of the velocity on entry and restore it on a timeout or cancel** (recommended: robust, one `Vector3` field
    allocated once, see TODO item 32); (b) skip the decay (and any clamping) while in the state. Not decided yet.
 7. **What "return" means for the cap.** After a timeout or cancel, either let the normal cap chase run (the `Falling` cap of 15
@@ -233,7 +233,7 @@ The feature is built in four stages, each playable and testable before the next 
 
 1. **The slowed-down state.** The player enters the state near the planet (see 6.1) and is held to the fixed maximum velocity,
    keeping the direction they had on entry. The state ends by touching the planet (velocity handled independently), when the
-   time limit runs out (6 seconds, real time) or when the player cancels (right mouse button, control or escape). On a timeout
+   time limit runs out (3 seconds, real time) or when the player cancels (right mouse button, control or escape). On a timeout
    or cancel the full old velocity returns. There is no dash yet.
 2. **The dash.** The player can press the confirm input to dash, which ends the state early. The direction is a **placeholder**:
    the first-person camera's forward direction (the aimed direction, not yet the DashPoint direction).

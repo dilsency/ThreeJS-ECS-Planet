@@ -1186,3 +1186,11 @@ the browser profiler), and fix the hottest paths rather than all of them.
 
 **Decision (2026-11-20):** not done for the Approach state. That state suspends the velocity by skipping the decay instead (see 6.2 in the
 feature doc). Revisit if more states need to treat the gravity part and the input part differently.
+
+## 34. Approach state: `BelowFloor` is not handled (yet)
+
+In `EntityComponentGravity`, `methodGetSubstateApproach` can return `"BelowFloor"` (when `#distanceToFloor < 0.0`), but the `switch` in
+`methodUpdateByStateApproach` has **no case for it**. It falls through to `default`, which logs an error on every frame, and the player
+does not land. Give it a case, most likely the same transition to `Landed` as `"BelowRange"` (stack the cases).
+
+Related, still open for the same state (see `md/FEATURE_DASH_TO_SURFACE_POINT.md`): the cancel input, and removing the per-frame debug logs.

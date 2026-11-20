@@ -1449,7 +1449,7 @@ export class EntityComponentGravity extends EntityComponent
     #distanceFromFloorIdealLeeway = 0.5;
 
     // #region privates : approach
-    #timeLimitApproach = null;
+    #timeLimitApproach = 3.0;
     #timeEnteredApproach = null;
     //#directionApproach = null;
     #hasBeenInOrbit = false;
@@ -1525,6 +1525,7 @@ export class EntityComponentGravity extends EntityComponent
         this.#stateMachine.methodRegisterHandler(EnumStateGravity.Falling, EnumStateGravity.Approach, (timeElapsed, timeDelta) => {
             console.log("entered approach mode :)");
             this.methodSendMessageToChat("entered approach mode :)");
+            this.#timeEnteredApproach = timeElapsed;
             this.methodOnFallingDistanceChanged(timeElapsed, timeDelta, EnumStateGravity.Approach);
         });
         this.#stateMachine.methodRegisterHandler(EnumStateGravity.Stratosphere, EnumStateGravity.Falling, (timeElapsed, timeDelta) => {
@@ -1696,7 +1697,6 @@ export class EntityComponentGravity extends EntityComponent
             case "AboveRange":
                 // we need to check that we have entered orbit at some point
                 this.#hasBeenInOrbit = true;
-                this.#timeEnteredApproach = timeElapsed;
                 this.#stateMachine.methodTransitionTo(timeElapsed, timeDelta, EnumStateGravity.Orbit);
                 break;
             case "BelowRange":
@@ -1758,7 +1758,7 @@ export class EntityComponentGravity extends EntityComponent
     methodGetSubstateApproach(timeElapsed)
     {
         // return a string of the "substate" we are in
-        if(timeElapsed >= (this.#timeEnteredApproach + 9)){return "TimeOut";}
+        if(timeElapsed >= (this.#timeEnteredApproach + this.#timeLimitApproach)){return "TimeOut";}
         if(this.#distanceToFloor < 0.0){return "BelowFloor";}
         if(this.#distanceToFloor < 0.5){return "BelowRange";}
         if(this.#distanceToFloor <= 2.0){return "WithinRange";}
@@ -1835,7 +1835,6 @@ export class EntityComponentGravity extends EntityComponent
                 this.#stateMachine.methodTransitionTo(timeElapsed, timeDelta, EnumStateGravity.Landed);
                 break;
             case "Default":
-                console.log("gain speed... but are we?");
                 this.#methodApplyDownwardGravity(this.#gravitySpeed);
                 break;
             default:
