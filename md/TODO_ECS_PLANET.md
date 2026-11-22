@@ -1193,4 +1193,31 @@ In `EntityComponentGravity`, `methodGetSubstateApproach` can return `"BelowFloor
 `methodUpdateByStateApproach` has **no case for it**. It falls through to `default`, which logs an error on every frame, and the player
 does not land. Give it a case, most likely the same transition to `Landed` as `"BelowRange"` (stack the cases).
 
-Related, still open for the same state (see `md/FEATURE_DASH_TO_SURFACE_POINT.md`): the cancel input, and removing the per-frame debug logs.
+Related, still open for the same state (see `md/FEATURE_DASH_TO_SURFACE_POINT.md`): removing the per-frame debug logs (the cancel input exists now, see item 35).
+
+## 35. Approach cancel and dash input: known concerns (2026-11-22)
+
+The cancel and dash inputs are in (`EntityComponentPlayerControllerInput`: `keys.cancel` and `keys.dash`, read in `methodGetSubstateApproach`).
+They work, but these concerns were noted when they were committed:
+
+1. **A key already held when Approach starts counts as a press.** The flags are "held" flags (set on `keydown`/`mousedown`, cleared on
+   `keyup`/`mouseup`). If left mouse, space, shift, control or the right button is held at the moment the state begins, the first frame
+   dashes or cancels at once. Fix: a rising-edge check (react only to a fresh press), for example by clearing or "consuming" the flags
+   on entry, or by recording the press time.
+2. **Stuck flags after losing focus.** If the window loses focus while a key is down (alt-tab, Ctrl+Tab), the `keyup` never arrives and
+   the flag stays `true`. A stuck `cancel` would cancel Approach immediately every time. Fix: a `blur` handler on the window that clears
+   all the flags. (This also affects the existing movement keys.)
+3. **Control as a cancel key.** The browser reserves some Ctrl combinations that the page cannot block: `Ctrl+W` closes the tab, and
+   `Ctrl+S`, `Ctrl+D` and `Ctrl+A` open dialogs. A player holding W to move who presses Control to cancel would close the game. Consider
+   removing `ControlLeft` and `ControlRight` (right mouse button, escape and shift remain).
+4. **Escape may never reach the page.** Escape exits pointer lock in the browser, and the `keydown` may be swallowed. Test it; do not rely
+   on it as the only cancel.
+5. **`contextmenu` is blocked on the whole document.** Right-click also stops working in the chat or any text input. Consider limiting
+   the `preventDefault` to while pointer lock is active.
+6. **Space sets `dash` as well as `jump`.** Harmless (jump needs `Landed`, dash needs `Approach`), but the feature doc says left mouse
+   button for now, spacebar maybe later. Keep it or remove it until the dash is final.
+7. **`BelowFloor` in the Approach state is an empty case** (TODO item 34).
+8. **The dash is a placeholder:** the direction is the camera's forward direction, and the strength is a fixed `10.0` (stage 2 in the
+   feature doc). The cap chase from 0.5 up to the `Falling` cap holds the impulse back for roughly the first fifth of a second.
+9. **Touch:** `EntityComponentPlayerControllerInputTouch` has no `cancel` or `dash` fields. This is safe for now, because Gravity reads
+   them through the optional `EntityComponentPlayerControllerInput` (null on touch), but touch players cannot cancel or dash.

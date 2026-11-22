@@ -28,6 +28,10 @@ export class EntityComponentPlayerControllerInput extends EntityComponent
     //
     #eventListenerHandlerOnKeyDown = null;
     #eventListenerHandlerOnKeyUp = null;
+    //
+    #eventListenerHandlerOnMouseDown = null;
+    #eventListenerHandlerOnMouseUp = null;
+    #eventListenerHandlerOnContextMenu = null;
     // #endregion privates
     constructor(params)
     {
@@ -49,16 +53,27 @@ export class EntityComponentPlayerControllerInput extends EntityComponent
             down: false,
             jump: false,
             teleportout: false,
+
+            cancel: false,
+            dash: false,
         };
 
         // #region event listeners
         //
         this.#eventListenerHandlerOnKeyDown = (e) => this.methodEventOnKeyDown(e);
         this.#eventListenerHandlerOnKeyUp = (e) => this.methodEventOnKeyUp(e);
+        //
+        this.#eventListenerHandlerOnMouseDown = (e) => this.methodEventOnMouseDown(e);
+        this.#eventListenerHandlerOnMouseUp = (e) => this.methodEventOnMouseUp(e);
+        this.#eventListenerHandlerOnContextMenu = (e) => e.preventDefault();
 
         //
         document.addEventListener('keydown', this.#eventListenerHandlerOnKeyDown, false);
         document.addEventListener('keyup', this.#eventListenerHandlerOnKeyUp, false);
+        //
+        document.addEventListener('mousedown', this.#eventListenerHandlerOnMouseDown, false);
+        document.addEventListener('mouseup', this.#eventListenerHandlerOnMouseUp, false);
+        document.addEventListener('contextmenu', this.#eventListenerHandlerOnContextMenu, false);
         // #endregion event listeners
     }
     methodDispose()
@@ -68,68 +83,134 @@ export class EntityComponentPlayerControllerInput extends EntityComponent
         // ...whereas => or .bind(this) will erroneously create a NEW function instance
         document.removeEventListener('keydown', this.#eventListenerHandlerOnKeyDown, false);
         document.removeEventListener('keyup', this.#eventListenerHandlerOnKeyUp, false);
+        //
+        document.removeEventListener('mousedown', this.#eventListenerHandlerOnMouseDown, false);
+        document.removeEventListener('mouseup', this.#eventListenerHandlerOnMouseUp, false);
+        document.removeEventListener('contextmenu', this.#eventListenerHandlerOnContextMenu, false);
     }
     // #endregion lifecycle
+
+    // #region key event handlers
     methodEventOnKeyDown(e)
     {
-        switch (e.keyCode)
+        switch (e.code)
         {
-            case 81: // letter q
+            case "KeyQ":
                 this.#keys.up = true;
                 break;
-            case 87: // letter w
+            case "KeyW":
                 this.#keys.forward = true;
                 break;
-            case 65: // letter a
+            case "KeyA":
                 this.#keys.left = true;
                 break;
-            case 69: // letter e
+            case "KeyE":
                 this.#keys.down = true;
                 break;
-            case 83: // letter s
+            case "KeyS":
                 this.#keys.backward = true;
                 break;
-            case 68: // letter d
+            case "KeyD":
                 this.#keys.right = true;
                 break;
-            case 32: // spacebar
+            case "Space":
                 this.#keys.jump = true;
+                this.#keys.dash = true;
                 break;
-            case 48: // number 0
+            case "Digit0":
                 this.#keys.teleportout = true;
+                break;
+            case "Escape":
+                this.#keys.cancel = true;
+                break;
+            case "ControlLeft":
+                this.#keys.cancel = true;
+                break;
+            case "ControlRight":
+                this.#keys.cancel = true;
+                break;
+            case "ShiftLeft":
+                this.#keys.cancel = true;
+                break;
+            case "ShiftRight":
+                this.#keys.cancel = true;
                 break;
         }
     }
     methodEventOnKeyUp(e)
     {
-        switch (e.keyCode)
+        switch (e.code)
         {
-            case 81: // letter q
+            case "KeyQ":
                 this.#keys.up = false;
                 break;
-            case 87: // letter w
+            case "KeyW":
                 this.#keys.forward = false;
                 break;
-            case 69: // letter e
-                this.#keys.down = false;
-                break;
-            case 65: // letter a
+            case "KeyA":
                 this.#keys.left = false;
                 break;
-            case 83: // letter s
+            case "KeyE":
+                this.#keys.down = false;
+                break;
+            case "KeyS":
                 this.#keys.backward = false;
                 break;
-            case 68: // letter d
+            case "KeyD":
                 this.#keys.right = false;
                 break;
-            case 32: // spacebar
+            case "Space":
                 this.#keys.jump = false;
+                this.#keys.dash = false;
                 break;
-            case 48: // number 0
+            case "Digit0":
                 this.#keys.teleportout = false;
+                break;
+            case "Escape":
+                this.#keys.cancel = false;
+                break;
+            case "ControlLeft":
+                this.#keys.cancel = false;
+                break;
+            case "ControlRight":
+                this.#keys.cancel = false;
+                break;
+            case "ShiftLeft":
+                this.#keys.cancel = false;
+                break;
+            case "ShiftRight":
+                this.#keys.cancel = false;
                 break;
         }
     }
+    // #endregion key event handlers
+
+    // #region mouse event handlers
+    methodEventOnMouseDown(e)
+    {
+        switch(e.button)
+        {
+            case 0:
+                this.#keys.dash = true;
+                break;
+            case 2:
+                this.#keys.cancel = true;
+                break;
+        }
+    }
+    methodEventOnMouseUp(e)
+    {
+        switch(e.button)
+        {
+            case 0:
+                this.#keys.dash = false;
+                break;
+            case 2:
+                this.#keys.cancel = false;
+                break;
+        }
+    }
+    // #endregion mouse event handlers
 }
 
 // Touch equivalent of EntityComponentPlayerControllerInput - only forward

@@ -781,6 +781,11 @@ export class EntityComponentCameraControllerFirstPerson extends EntityComponent
     methodGetCameraPivotQuaternion(){return this.#cameraPivot.quaternion;}
     methodGetCameraQuaternion(){return this.#camera.quaternion;}
 
+    methodGetDirForward()
+    {
+        return this.#directionForward;
+    }
+
     // #endregion getters
 
     // #region getters that calculate

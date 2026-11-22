@@ -1425,6 +1425,7 @@ export class EntityComponentGravity extends EntityComponent
     #componentInstanceSpawnOnPlanetFace = null;
     #componentInstanceVelocity = null;
     //
+    #componentInstanceOptionalPlayerControllerInput = null;
     #componentInstanceOptionalPlayerController = null;
     #componentInstanceOptionalCameraControllerFirstPerson = null;
     //
@@ -1758,9 +1759,11 @@ export class EntityComponentGravity extends EntityComponent
     methodGetSubstateApproach(timeElapsed)
     {
         // return a string of the "substate" we are in
+        if(this.#componentInstanceOptionalPlayerControllerInput?.keys["cancel"]){return "Cancel";}
         if(timeElapsed >= (this.#timeEnteredApproach + this.#timeLimitApproach)){return "TimeOut";}
         if(this.#distanceToFloor < 0.0){return "BelowFloor";}
         if(this.#distanceToFloor < 0.5){return "BelowRange";}
+        if(this.#componentInstanceOptionalPlayerControllerInput?.keys["dash"]){return "Dash";}
         if(this.#distanceToFloor <= 2.0){return "WithinRange";}
         return "Default";
     }
@@ -1772,14 +1775,30 @@ export class EntityComponentGravity extends EntityComponent
         //
         switch(substate)
         {
+            case "Cancel":
+                console.log("cencel! transition to falling!");
+                this.methodSendMessageToChat("cancel approach mode!");
+                this.#stateMachine.methodTransitionTo(timeElapsed, timeDelta, EnumStateGravity.Falling);
+                break;
             case "TimeOut":
                 console.log("transition to falling!");
                 this.methodSendMessageToChat("time out on approach mode!");
                 this.#stateMachine.methodTransitionTo(timeElapsed, timeDelta, EnumStateGravity.Falling);
                 break;
+            case "BelowFloor":
+                break;
             case "BelowRange":
                 console.log("transition to landed!");
                 this.#stateMachine.methodTransitionTo(timeElapsed, timeDelta, EnumStateGravity.Landed);
+                break;
+            case "Dash":
+                console.log("dash!");
+                this.methodSendMessageToChat("dash!");
+                this.#componentInstanceVelocity.methodResetVelocity();
+                const dir = this.#componentInstanceOptionalCameraControllerFirstPerson.methodGetDirForward().clone();
+                dir.multiplyScalar(10.0);
+                this.#componentInstanceVelocity.methodAddToVelocityVector3(dir);
+                this.#stateMachine.methodTransitionTo(timeElapsed, timeDelta, EnumStateGravity.Falling);
                 break;
             case "WithinRange":
                 console.log("transition to landed!");
@@ -2248,6 +2267,7 @@ export class EntityComponentGravity extends EntityComponent
         // #region independent
         // (reminder : we don't early-return for these)
         // (we are fine with a null/false result)
+        this.#componentInstanceOptionalPlayerControllerInput = this.methodGetComponent("EntityComponentPlayerControllerInput");
         this.#componentInstanceOptionalPlayerController = this.methodGetComponent("EntityComponentPlayerController");
         this.#componentInstanceOptionalCameraControllerFirstPerson = this.methodGetComponent("EntityComponentCameraControllerFirstPerson");
         // #endregion independent

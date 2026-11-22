@@ -384,6 +384,10 @@ export class EntityComponentVelocity extends EntityComponent
 
         this.#velocity.sub(this.methodGetVelocityAlongAxis(gravityDir));
     }
+    methodResetVelocity()
+    {
+        this.#velocity.set(0,0,0);
+    }
 
     // #region getters : basic
     methodGetVelocity(){return this.#velocity;}
