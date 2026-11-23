@@ -71,7 +71,7 @@
             "overrideParams": {
                 "EntityComponentSpawnOnPlanetFace":
                 {
-                    "faceDistance": 300.0
+                    "faceDistance": 1.5
                 }
             },
             "components": [

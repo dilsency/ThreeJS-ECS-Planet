@@ -1533,6 +1533,7 @@ export class EntityComponentGravity extends EntityComponent
             this.methodOnFallingDistanceChanged(timeElapsed, timeDelta, EnumStateGravity.Falling);
         });
         this.#stateMachine.methodRegisterHandler(EnumStateGravity.Stratosphere, EnumStateGravity.Orbit, (timeElapsed, timeDelta) => {
+            this.#hasBeenInOrbit = true;
             this.methodOnFallingDistanceChanged(timeElapsed, timeDelta, EnumStateGravity.Orbit);
         });
         this.#stateMachine.methodRegisterHandler(EnumStateGravity.None, EnumStateGravity.Orbit, (timeElapsed, timeDelta) => {
@@ -2194,6 +2195,50 @@ export class EntityComponentGravity extends EntityComponent
     methodSetState(timeElapsed, timeDelta, newState){this.methodTransitionTo(timeElapsed, timeDelta, newState);}
     // #endregion setters aliases
 
+    // #region setters : look at / along
+    methodLookAlongFace(faceIndex)
+    {
+        //
+        const normal =
+            this.#componentInstancePlanetFaces
+                .methodGetFaceNormal
+                (
+                    faceIndex
+                );
+        
+        // reference vector
+        const tangent = new THREE.Vector3(0,0,-1);
+        // rotate (more like remove the part of the vector that goes along the normal)
+        tangent.addScaledVector(normal, -tangent.dot(normal));
+        // if the tangent is parallel, we need to try again from the start
+        if(tangent.lengthSq() < 0.0001)
+        {
+            tangent.set(1,0,0);
+            // rotate (more like remove the part of the vector that goes along the normal)
+            tangent.addScaledVector(normal, -tangent.dot(normal));
+        }
+
+        // now we know that it is not parallel, and we can normalize
+        tangent.normalize();
+        
+        // we look at a fake point, projected out from our position + the perpendicular direction
+        this.methodLookAt
+        (
+            this.methodGetPosition()
+            .clone()
+            .add(tangent)
+        );
+    }
+    methodLookAt(targetPosition)
+    {
+        this.#componentInstanceOptionalCameraControllerFirstPerson
+            ?.methodLookAt
+            (
+                targetPosition
+            );
+    }
+    // #endregion setters : look at / along
+
     // #region private methods : gravity
     #methodApplyMixedGravity(alpha, gravitySpeed)
     {
@@ -2298,6 +2343,7 @@ export class EntityComponentGravity extends EntityComponent
             );
         console.log("\t[" + this.#currentFaceIndex + "]\t" + distanceToPlanetFace.toFixed(2));
 
+        // #region initial gravity state
         // we use dist to set our initial gravity state
         if(distanceToPlanetCenter >= this.#componentInstancePlanetFaces.methodGetDistanceState(1))
         {
@@ -2317,6 +2363,30 @@ export class EntityComponentGravity extends EntityComponent
         {
             this.methodSetState(null, null, EnumStateGravity.Landed);
         }
+
+        // #endregion initial gravity state
+
+        // #region initial aim direction
+        if(this.#stateMachine.methodGetState() == EnumStateGravity.Landed)
+        {
+            this.methodLookAlongFace
+            (
+                this.#currentFaceIndex
+            );
+        }
+        else
+        {
+            this.methodLookAt
+            (
+                this.#componentInstancePlanetFaces
+                    .methodGetFaceCenter
+                    (
+                        this.#currentFaceIndex
+                    ).clone()
+            );
+        }
+        // #endregion initial aim direction
+
         // #endregion spawn
 
         // #region lazy end
@@ -2424,6 +2494,7 @@ export class EntityComponentSpawnOnPlanetFace extends EntityComponent
                 paramDebug
             );
     }
+    // unused currently
     methodLookAt(targetPosition)
     {
         // if the entity doesn't have that camera component
@@ -2519,10 +2590,12 @@ export class EntityComponentSpawnOnPlanetFace extends EntityComponent
         //this.methodSetDirUp(false);
         this.methodSetDirUpWithoutTransition(false);
 
+        /*
         // test : look at planet after spawning
         // will skip entities without a camera :)
         this.methodLookAt(this.#componentInstancePlanetFaces.methodGetFaceCenter(this.#faceIndex).clone());
-        
+        */
+
         // #region broadcast
         this.methodGetEntityByName("SingletonContextInitialization")
             ?.methodGetComponent("EntityComponentSingletonContextInitialization")
